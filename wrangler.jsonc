@@ -19,6 +19,7 @@
   },
   "vars": {
     "DISCOVERY_DAILY_SEARCH_LIMIT": "20",
-    "MEMBER_EMAIL_ALLOWLIST": "meltcom@gmail.com"
+    "MEMBER_EMAIL_ALLOWLIST": "meltcom@gmail.com",
+    "SUPABASE_URL": "https://ovmvnfcbwirocsmtvaxd.supabase.co"
   }
 }
