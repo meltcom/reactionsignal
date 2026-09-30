@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1790332295048,
+      "tag": "0000_solid_old_lace",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790424625574,
+      "tag": "0001_mature_expediter",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790507368812,
+      "tag": "0002_powerful_captain_midlands",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790743291768,
+      "tag": "0003_smart_the_phantom",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790744148597,
+      "tag": "0004_breezy_vindicator",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790747872947,
+      "tag": "0005_tranquil_solo",
+      "breakpoints": true
+    }
+  ]
+}

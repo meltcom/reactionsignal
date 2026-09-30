@@ -1,0 +1,79 @@
+let managedPerformers=[],selectedDiscoveryPerformer=null,managerLoading=false;
+const performerApi=async(path,body)=>{const response=await reactionAuth.fetch('/api/performers'+path,{cache:'no-store',...(body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Please try again.');return data;};
+async function reloadMemberCatalog(){const response=await reactionAuth.fetch('/data.json',{cache:'no-store'});if(!response.ok)throw new Error('Catalog refresh failed. Please reload.');catalog=await response.json();$('performerCount').textContent=catalog.performers.length;if(state.performer!=='all'&&!catalog.performers.some(p=>p.id===state.performer))state.performer=catalog.performers[0]?.id||'all';renderAll();await refreshRooms();}
+async function loadPerformerManager(){
+ if(!communityState?.moderator||managerLoading)return;managerLoading=true;
+ try{
+  const result=await performerApi('/list');managedPerformers=result.items;
+  $('performerServiceStatus').textContent=result.discovery.message+' Searches share a daily budget and continue in batches.';
+  $('managedPerformers').innerHTML=managedPerformers.map(p=>`<article class="managed-performer"><div><strong>${escapeHtml(p.name)}</strong><p class="subtle">${p.status==='active'?'Published':'Draft'} · ${p.discovery_enabled?'Discovery enabled':'Discovery paused'} · ${p.approved} approved · ${p.pending} awaiting review</p><p class="subtle">${p.progress?'Search in progress; more batches queued.':p.last_search?'Last search: '+prettyDate(p.last_search):'First search queued.'}${p.search_error?' · '+escapeHtml(p.search_error):''}</p></div><div class="managed-actions"><button class="outline-button" data-edit-performer="${p.id}">Settings${p.status==='draft'?' & publish':''}</button><button class="outline-button" data-find-performer="${p.id}" ${!p.discovery_enabled||!result.discovery.apiConfigured?'disabled':''}>Find reactions</button><button class="outline-button" data-review-performer="${p.id}">Review results</button></div></article>`).join('');
+  $('managedPerformers').querySelectorAll('[data-edit-performer]').forEach(b=>b.onclick=()=>openPerformerEditor(managedPerformers.find(p=>p.id===b.dataset.editPerformer)));
+  $('managedPerformers').querySelectorAll('[data-find-performer]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await performerApi('/discover',{id:b.dataset.findPerformer});$('performerManagerStatus').textContent=r.message;await loadDiscoveryResults(b.dataset.findPerformer);await reloadMemberCatalog();}catch(e){$('performerManagerStatus').textContent=e.message;}finally{b.disabled=false;loadPerformerManager();}});
+  $('managedPerformers').querySelectorAll('[data-review-performer]').forEach(b=>b.onclick=()=>loadDiscoveryResults(b.dataset.reviewPerformer).catch(e=>$('performerManagerStatus').textContent=e.message));
+ }catch(e){$('performerManagerStatus').textContent=e.message;}finally{managerLoading=false;}
+}
+function openPerformerEditor(performer=null,recommendation=null){
+ const form=$('performerForm');form.reset();
+ form.elements.id.value=performer?.id||'';form.elements.requestId.value=recommendation?.id||'';
+ form.elements.name.value=performer?.name||recommendation?.name||'';
+ form.elements.officialUrl.value=performer?.official_url||recommendation?.url||'';
+ form.elements.aliases.value=performer?.aliases.filter(a=>a!==performer.name).join('\n')||'';
+ form.elements.lookbackDays.value=String(performer?.lookback_days??30);
+ form.elements.reviewMode.value=performer?.review_mode||'auto';
+ form.elements.status.value=performer?.status||'draft';
+ form.elements.discoveryEnabled.checked=performer?!!performer.discovery_enabled:true;
+ form.elements.chatEnabled.checked=performer?!!performer.chat_enabled:true;
+ $('performerDialogTitle').textContent=performer?'Manage '+performer.name:'Add a band or performer';
+ $('performerFormStatus').textContent='';$('performerDialog').showModal();
+}
+$('addPerformer').onclick=()=>openPerformerEditor();$('closePerformer').onclick=()=>$('performerDialog').close();
+$('performerForm').onsubmit=async event=>{
+ event.preventDefault();const form=event.currentTarget,buttons=[...form.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);
+ const payload={id:form.elements.id.value||undefined,requestId:form.elements.requestId.value||undefined,name:form.elements.name.value,officialUrl:form.elements.officialUrl.value,aliases:form.elements.aliases.value.split('\n').map(a=>a.trim()).filter(Boolean),lookbackDays:Number(form.elements.lookbackDays.value),reviewMode:form.elements.reviewMode.value,status:form.elements.status.value,discoveryEnabled:form.elements.discoveryEnabled.checked,chatEnabled:form.elements.chatEnabled.checked};
+ let saved=false;
+ try{
+  $('performerFormStatus').textContent='Saving coverage profile…';const result=await performerApi('/save',payload);saved=true;form.elements.id.value=result.id;form.elements.requestId.value='';
+  let message=result.message;
+  if(event.submitter?.value==='discover'&&payload.discoveryEnabled){$('performerFormStatus').textContent='Profile saved. Finding reaction videos…';try{const scan=await performerApi('/discover',{id:result.id});message+=' '+scan.message;}catch(error){message+=' Discovery could not start: '+error.message;}}
+  $('performerManagerStatus').textContent=message;$('performerDialog').close();await reloadMemberCatalog();await loadCoverageQueue();await loadPerformerManager();await loadDiscoveryResults(result.id);
+ }catch(error){$('performerFormStatus').textContent=(saved?'Profile saved. ':'')+error.message;$('performerManagerStatus').textContent=error.message;}finally{buttons.forEach(b=>b.disabled=false);}
+};
+async function loadDiscoveryResults(id){
+ selectedDiscoveryPerformer=id;const result=await performerApi('/results?id='+encodeURIComponent(id));
+ if(selectedDiscoveryPerformer!==id)return;
+ $('performerResults').hidden=false;$('selectDiscoveryResults').checked=false;
+ $('performerResultsTitle').textContent='Discovery results · '+(managedPerformers.find(p=>p.id===id)?.name||'Performer');
+ $('discoveryResultsList').innerHTML=result.items.length?result.items.map(v=>`<article class="discovery-result"><label class="check-label">${escapeHtml(v.title)}<input type="checkbox" data-discovery-video="${escapeHtml(v.video_id)}" data-pending="${v.status==='PENDING'}" ${v.status==='REJECTED'?'disabled':''}></label><p class="subtle">${escapeHtml(v.channel_name||'Unknown reactor')} · ${prettyDate(v.published_at)} · ${{PENDING:'Awaiting review',CONFIRMED:'Approved',PROBABLE:'Probable',REJECTED:'Excluded'}[v.status]||escapeHtml(v.status)}${v.format!=='FULL_LENGTH'?' · Check length / Shorts':''}${!v.available?' · Video unavailable':''}</p><a href="https://www.youtube.com/watch?v=${escapeHtml(v.video_id)}" target="_blank" rel="noopener noreferrer">Open video on YouTube</a></article>`).join(''):'<p class="empty-state">No matches yet. Use Find reactions, or wait for the next scheduled batch.</p>';
+}
+$('selectDiscoveryResults').onchange=event=>[...$('discoveryResultsList').querySelectorAll('input[data-pending="true"]')].forEach((input,index)=>input.checked=event.target.checked&&index<50);
+async function reviewDiscovery(decision){
+ const videos=[...$('discoveryResultsList').querySelectorAll('input:checked[data-discovery-video]')].map(e=>e.dataset.discoveryVideo);
+ if(!videos.length){$('performerManagerStatus').textContent='Select at least one result to review.';return;}
+ if(videos.length>50){$('performerManagerStatus').textContent='Review up to 50 results at a time.';return;}
+ $('approveDiscovery').disabled=$('excludeDiscovery').disabled=true;
+ try{const result=await performerApi('/review',{id:selectedDiscoveryPerformer,videos,decision});$('performerManagerStatus').textContent=result.message;await loadPerformerManager();await loadDiscoveryResults(selectedDiscoveryPerformer);await reloadMemberCatalog();}catch(e){$('performerManagerStatus').textContent=e.message;}finally{$('approveDiscovery').disabled=$('excludeDiscovery').disabled=false;}
+}
+$('approveDiscovery').onclick=()=>reviewDiscovery('approve');$('excludeDiscovery').onclick=()=>reviewDiscovery('exclude');
+setInterval(()=>{if(!document.hidden&&page==='review'&&reactionAuth.account?.moderator)loadPerformerManager();},15000);
+
+let additionsLoading=false;
+async function loadAutomaticAdditions(){
+ if(!reactionAuth.account?.moderator||additionsLoading)return;additionsLoading=true;
+ try{
+  const data=await performerApi('/notifications');
+  $('discoveryNoticeBadge').textContent=data.count+data.reports||'';
+  const push=data.push;
+  $('pushServiceStatus').textContent=!push.configured?'Upload notifications need a public endpoint before they can connect.':!push.apiConfigured?'Upload notifications need YouTube API access before videos can be checked.':`${push.active} of ${push.total} channel notifications connected · ${push.queued} uploads queued${push.errors?' · '+push.errors+' connection errors':''}${push.lastReceivedAt?' · Last notification '+new Date(push.lastReceivedAt).toLocaleString():''}`;
+  $('connectPush').disabled=!push.configured||!push.apiConfigured;
+  if(document.activeElement?.closest('#automaticAdditions'))return;
+  $('automaticAdditions').innerHTML=data.items.length?data.items.map(v=>`<article class="panel"><h3>${escapeHtml(v.title)}</h3><p class="subtle">${escapeHtml(v.performer_name)} · ${escapeHtml(v.channel_name||'Unknown reactor')} · Added ${new Date(v.created_at).toLocaleString()}</p><p>${v.excluded||v.match_status==='REJECTED'?'Already removed':!v.available?'Video unavailable':'Published automatically'}</p><a href="https://www.youtube.com/watch?v=${escapeHtml(v.video_id)}" target="_blank" rel="noopener noreferrer">Check video on YouTube</a><form data-addition-performer="${escapeHtml(v.performer_id)}" data-addition-video="${escapeHtml(v.video_id)}"><label>Reason if removing<input name="note" minlength="5" maxlength="500" placeholder="Wrong performer, excerpt, or another issue"></label><button class="outline-button" type="submit" name="action" value="keep">Keep / mark checked</button> <button class="outline-button" type="submit" name="action" value="remove">Remove video</button><p class="review-result" role="status"></p></form></article>`).join(''):'<p class="subtle">No unchecked automatic additions.</p>';
+  $('automaticAdditions').querySelectorAll('form').forEach(form=>form.onsubmit=async event=>{
+   event.preventDefault();const action=event.submitter?.value;if(!action)return;
+   if(action==='remove'&&form.elements.note.value.trim().length<5){form.querySelector('.review-result').textContent='Enter a reason with at least 5 characters.';form.elements.note.focus();return;}
+   form.querySelectorAll('button').forEach(b=>b.disabled=true);
+   try{const result=await performerApi('/notifications/review',{performerId:form.dataset.additionPerformer,videoId:form.dataset.additionVideo,action,note:form.elements.note.value});$('additionStatus').textContent=result.message;await reloadMemberCatalog();await loadAutomaticAdditions();await loadReviewQueue();}catch(error){form.querySelector('.review-result').textContent=error.message;}finally{form.querySelectorAll('button').forEach(b=>b.disabled=false);}
+  });
+ }catch(error){$('additionStatus').textContent=error.message;}finally{additionsLoading=false;}
+}
+$('connectPush').onclick=async()=>{const button=$('connectPush');button.disabled=true;try{const result=await performerApi('/push/connect',{});$('additionStatus').textContent=result.message;await loadAutomaticAdditions();}catch(error){$('additionStatus').textContent=error.message;}finally{button.disabled=false;}};
+setInterval(()=>{if(!document.hidden&&reactionAuth.account?.moderator)loadAutomaticAdditions();},30000);

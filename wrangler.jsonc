@@ -1,0 +1,24 @@
+{
+  "name": "reaction-signal",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-09-30",
+  "workers_dev": true,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "reaction-signal-catalog",
+      "database_id": "331e0607-6cf1-4e5c-864e-8b2179e750df",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "*/15 * * * *"
+    ]
+  },
+  "vars": {
+    "DISCOVERY_DAILY_SEARCH_LIMIT": "20",
+    "MEMBER_EMAIL_ALLOWLIST": "meltcom@gmail.com"
+  }
+}

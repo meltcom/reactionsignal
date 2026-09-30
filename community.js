@@ -1,0 +1,67 @@
+let communityState=null, scoreMap=new Map(), activeCommunityVideo=null, dialogRequest=0;
+async function communityApi(path,body){
+  const response=await reactionAuth.fetch(`/api/community${path}`,{cache:'no-store',...(body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});
+  const result=await response.json();if(!response.ok)throw new Error(result.error||'Please try again.');return result;
+}
+function communityScore(id){const s=scoreMap.get(id);return s?`${Number(s.average).toFixed(1)} / 5 · ${s.count} rating${s.count===1?'':'s'}`:'Not rated yet';}
+function communityRank(id){const s=scoreMap.get(id);return s&&s.count>=3?s.ranking:-1;}
+function communityMessage(id,message){$(id).textContent=message;}
+async function loadCommunity(){
+  try{
+    communityState=await communityApi('/summary');scoreMap=new Map(communityState.scores.map(s=>[s.video_id,s]));
+    $('displayName').value=communityState.name;
+    $('pointsBadge').textContent=`${communityState.points} points · ${communityState.tier}`;
+    $('communityStatus').textContent=communityState.name?'Ready to contribute.':'Save a display name to start participating.';
+    $('suggestPerformer').innerHTML=catalog.performers.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+    $('leaderboard').innerHTML=communityState.leaders.length?communityState.leaders.map(p=>`<li>${escapeHtml(p.name)} <strong>${p.points} points</strong></li>`).join(''):'<li>No points awarded yet. Help start the community.</li>';
+    $('myContributions').innerHTML=communityState.mine.length?communityState.mine.map(c=>`<article class="contribution"><strong>${escapeHtml(c.kind)} · ${escapeHtml(c.status)}</strong> <a target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=${escapeHtml(c.video_id)}">Open video ↗</a><p>${escapeHtml(c.body)}</p>${c.review_note?`<p>Review: ${escapeHtml(c.review_note)}</p>`:''}</article>`).join(''):'<p>No contributions submitted yet.</p>';
+    $('pointsHistory').innerHTML=communityState.ledger.length?communityState.ledger.map(p=>`<p>${prettyDate(p.created_at)} · ${escapeHtml(p.kind)} · ${p.amount>0?'+':''}${p.amount} points</p>`).join(''):'<p>Your points history will appear here.</p>';
+    $('moderation').hidden=!communityState.moderator;
+    await loadCoverage();
+    if(communityState.moderator)await loadReviewQueue();
+  }catch(e){communityMessage('communityStatus',e.message);}
+}
+async function formAction(form,statusId,work){
+  const button=form.querySelector('button[type="submit"],button:not([type])');if(button)button.disabled=true;
+  communityMessage(statusId,'Saving…');
+  try{const result=await work();await loadCommunity();if(catalog)renderVideos();communityMessage(statusId,result?.message||'Saved.');}
+  catch(e){communityMessage(statusId,e.message);}finally{if(button)button.disabled=false;}
+}
+$('profileForm').addEventListener('submit',e=>{e.preventDefault();formAction(e.currentTarget,'communityStatus',()=>communityApi('/profile',{name:$('displayName').value}));});
+$('suggestForm').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;formAction(form,'communityStatus',async()=>{const r=await communityApi('/contribute',{kind:'submission',...Object.fromEntries(new FormData(form))});form.reset();return r;});});
+$('coverageForm').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;formAction(form,'coverageStatus',async()=>{const result=await communityApi('/coverage',Object.fromEntries(new FormData(form)));form.reset();return result;});});
+$('coverageOpen').onclick=()=>{navigate('community');$('coverageForm').scrollIntoView({block:'start',behavior:'smooth'});$('coverageForm').elements.name.focus({preventScroll:true});};
+const coverageLabel=status=>({pending:'Awaiting review',shortlisted:'Shortlisted for future coverage',declined:'Not selected',covered:'Coverage available'}[status]||status);
+async function loadCoverage(){
+  const result=await communityApi('/coverage');
+  $('myCoverage').innerHTML=result.items.length?result.items.map(c=>`<article class="contribution"><strong>${escapeHtml(c.name)} · ${escapeHtml(coverageLabel(c.status))}</strong><p>${escapeHtml(c.body)}</p><a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">Official channel or website</a>${c.review_note?`<p>Moderator note: ${escapeHtml(c.review_note)}</p>`:''}</article>`).join(''):'<p class="subtle">Your recommendations and moderator decisions will appear here.</p>';
+}
+async function loadCoverageQueue(){
+  const result=await communityApi('/coverage/queue');
+  $('coverageQueue').innerHTML=result.items.length?result.items.map(c=>`<article class="panel"><h3>${escapeHtml(c.name)}</h3><p class="subtle">Suggested by ${escapeHtml(c.member_name)} · ${escapeHtml(coverageLabel(c.status))}</p><a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">Official channel or website</a><p class="submitted-text">${escapeHtml(c.body)}</p>${!c.performer_id&&['pending','shortlisted'].includes(c.status)?`<button type="button" class="primary-button" data-setup-coverage="${escapeHtml(c.id)}">Set up coverage</button>`:''}${c.status==='pending'?`<form data-coverage-review="${escapeHtml(c.id)}"><label>Decision<select name="decision"><option value="shortlisted">Shortlist for future coverage</option><option value="declined">Decline</option></select></label><label>Note to the member<textarea name="note" minlength="5" maxlength="500" required></textarea></label><button class="outline-button">Save decision</button></form>`:`<p>Moderator note: ${escapeHtml(c.review_note||'')}</p>`}</article>`).join(''):'<p class="subtle">No coverage recommendations yet.</p>';
+  $('coverageQueue').querySelectorAll('[data-setup-coverage]').forEach(button=>button.onclick=()=>openPerformerEditor(null,result.items.find(c=>c.id===button.dataset.setupCoverage)));
+  $('coverageQueue').querySelectorAll('[data-coverage-review]').forEach(form=>form.onsubmit=e=>{e.preventDefault();formAction(form,'notice',()=>communityApi('/coverage/review',{id:form.dataset.coverageReview,...Object.fromEntries(new FormData(form))}));});
+}
+async function openCommunityVideo(id){
+  activeCommunityVideo=catalog.videos.find(v=>v.id===id&&v.performerId===state.performer);if(!activeCommunityVideo)return;
+  const request=++dialogRequest;
+  $('dialogTitle').textContent=activeCommunityVideo.title;$('dialogMeta').textContent=communityScore(id);
+  $('commentForm').reset();$('flagForm').reset();$('myRating').value='';$('videoComments').textContent='Loading comments…';
+  communityMessage('videoStatus',communityState?.name?'':'Save a display name in Community before contributing.');
+  if(!$('videoDialog').open)$('videoDialog').showModal();
+  try{const r=await communityApi(`/video?id=${encodeURIComponent(id)}`);if(request!==dialogRequest)return;
+    $('myRating').value=r.rating||'';
+    $('videoComments').innerHTML=r.comments.length?r.comments.map(c=>`<article class="contribution"><strong>${escapeHtml(c.name)}</strong><span> · ${prettyDate(c.created_at)}</span><p>${escapeHtml(c.body)}</p></article>`).join(''):'<p>No approved comments yet.</p>';
+  }catch(e){if(request===dialogRequest){$('videoComments').textContent='Comments could not be loaded.';communityMessage('videoStatus',e.message);}}
+}
+$('closeVideo').addEventListener('click',()=>$('videoDialog').close());
+$('videoDialog').addEventListener('close',()=>{dialogRequest++;activeCommunityVideo=null;});
+$('ratingForm').addEventListener('submit',e=>{e.preventDefault();if(!activeCommunityVideo)return;const v=activeCommunityVideo;formAction(e.currentTarget,'videoStatus',async()=>{const r=await communityApi('/rating',{videoId:v.id,performerId:v.performerId,score:Number($('myRating').value)});return r;}).then(()=>{if(activeCommunityVideo?.id===v.id)$('dialogMeta').textContent=communityScore(v.id);});});
+for(const [formId,kind] of [['commentForm','comment'],['flagForm','flag']])$(formId).addEventListener('submit',e=>{e.preventDefault();if(!activeCommunityVideo)return;const form=e.currentTarget,v=activeCommunityVideo;formAction(form,'videoStatus',async()=>{const r=await communityApi('/contribute',{kind,videoId:v.id,performerId:v.performerId,...Object.fromEntries(new FormData(form))});form.reset();return r;});});
+async function loadReviewQueue(){
+  try{await loadCoverageQueue();const r=await communityApi('/queue');
+    $('reviewQueue').innerHTML=r.items.length?r.items.map(c=>`<form class="review-item" data-review-id="${escapeHtml(c.id)}"><h4>${c.kind==='flag'?'Removal request':escapeHtml(c.kind)} · ${escapeHtml(c.name)} · ${escapeHtml(c.status)}</h4><p>${escapeHtml(c.performer_id)}${c.reason?` · ${escapeHtml(c.reason)}`:''}</p><a target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=${escapeHtml(c.video_id)}">Verify on YouTube ↗</a><p class="submitted-text">${escapeHtml(c.body)}</p>${c.kind==='submission'?'<details><summary>Verified video details (required to accept)</summary><label>Video title<input name="title" maxlength="250"></label><label>Channel name<input name="channelName" maxlength="100"></label><label>Channel ID<input name="channelId" placeholder="UC…"></label><label>Upload date (optional)<input name="publishedAt" type="date"></label></details>':''}<label>Review note<textarea name="note" minlength="5" maxlength="500" required></textarea></label><label>Decision<select name="decision">${c.status==='accepted'?'<option value="hide">Hide comment and reverse its points</option>':c.kind==='flag'?'<option value="reject">Keep video · dismiss request</option><option value="accept">Remove video · uphold request</option>':'<option value="reject">Reject</option><option value="accept">Accept</option>'}</select></label><button class="outline-button">Save review</button><p class="review-result" role="status"></p></form>`).join(''):'<p>No contributions awaiting review.</p>';
+    document.querySelectorAll('[data-review-id]').forEach(form=>form.addEventListener('submit',async e=>{e.preventDefault();const button=form.querySelector('button');button.disabled=true;const result=form.querySelector('.review-result');result.textContent='Saving…';try{const r=await communityApi('/moderate',{id:form.dataset.reviewId,...Object.fromEntries(new FormData(form))});const response=await reactionAuth.fetch('/data.json',{cache:'no-store'});if(response.ok)catalog=await response.json();await loadCommunity();renderAll();communityMessage('communityStatus',r.message);}catch(e){result.textContent=e.message;}finally{button.disabled=false;}}));
+  }catch(e){$('reviewQueue').textContent=e.message;}
+}
+$('refreshQueue').addEventListener('click',loadReviewQueue);
