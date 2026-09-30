@@ -4,8 +4,8 @@ A member-gated reaction catalog with YouTube discovery, upload notifications, co
 
 ## Your configuration
 
-- GitHub repository: https://github.com/meltcom/RSScript
-- Worker name: `reaction-signal`
+- GitHub repository: https://github.com/meltcom/reactionsignal
+- Worker name: `reactionsignal`
 - D1 database name: `reaction-signal-catalog`
 - D1 database ID: `331e0607-6cf1-4e5c-864e-8b2179e750df`
 - Database binding: `DB`
