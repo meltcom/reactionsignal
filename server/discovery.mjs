@@ -9,7 +9,7 @@ export function classify(title,aliases,duration) {
 }
 export function seconds(s) { const m=/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(s||''); return m?Number(m[1]||0)*3600+Number(m[2]||0)*60+Number(m[3]||0):null; }
 export class YouTube {
-  constructor(key,fetcher=fetch){this.key=key;this.fetcher=fetcher;this.calls=0;this.deadline=Date.now()+20000;}
+  constructor(key,fetcher=fetch){this.key=key;this.fetcher=fetcher.bind(globalThis);this.calls=0;this.deadline=Date.now()+20000;}
   async get(endpoint,params){
     for(let attempt=0;attempt<3;attempt++){
       if(this.calls>=28||Date.now()>this.deadline) throw new Error('Batch budget reached; continuation retained');
