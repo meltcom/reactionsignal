@@ -31,7 +31,7 @@ export async function renewSubscriptions(env,seed,fetcher=fetch){
    const callback=new URL(base);callback.searchParams.set('channel',c.id);callback.searchParams.set('token',token);
    await db.prepare('INSERT INTO push_subscriptions(channel_id,secret,token,callback,requested_at,pending_until) VALUES(?,?,?,?,?,?) ON CONFLICT(channel_id) DO UPDATE SET callback=excluded.callback,requested_at=excluded.requested_at,pending_until=excluded.pending_until,error=NULL').bind(c.id,secret,token,base,new Date().toISOString(),now+600000).run();
    try{
-    const response=await fetcher('https://pubsubhubbub.appspot.com/subscribe',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({'hub.mode':'subscribe','hub.callback':callback.href,'hub.topic':topic(c.id),'hub.verify':'async','hub.verify_token':token,'hub.secret':secret,'hub.lease_seconds':'432000'}),signal:AbortSignal.timeout(3000),redirect:'error'});
+    const response=await fetcher('https://pubsubhubbub.appspot.com/subscribe',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({'hub.mode':'subscribe','hub.callback':callback.href,'hub.topic':topic(c.id),'hub.verify':'async','hub.verify_token':token,'hub.secret':secret,'hub.lease_seconds':'432000'}),signal:AbortSignal.timeout(3000),redirect:'manual'});
     if(response.status!==202)throw new Error('Hub rejected subscription');requested++;
    }catch{failed++;await db.prepare("UPDATE push_subscriptions SET error='Subscription request failed; retry queued' WHERE channel_id=?").bind(c.id).run();}
   }
