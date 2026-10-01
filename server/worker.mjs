@@ -45,7 +45,12 @@ export default {
         const result=await authenticate(request,env);
         if(result.error)return result.error;
         const db=database(env);await seedDatabase(db,seed);
-        return json(path==='/data.json'?await catalog(db,seed,env):await status(db,env));
+        if(path==='/api/status')return json(await status(db,env));
+        const revision=await db.prepare("SELECT value FROM state WHERE key='catalog-revision'").first();
+        const etag=revision?`"catalog-${revision.value}"`:null;
+        // Always authenticate before checking the tag; no member response is publicly cached.
+        if(etag&&request.headers.get('If-None-Match')===etag)return new Response(null,{status:304,headers:{ETag:etag,'Cache-Control':'private, no-store'}});
+        const response=json(await catalog(db,seed,env));if(etag)response.headers.set('ETag',etag);return response;
       }
       const asset=assets[path==='/'?'/index.html':path];if(!asset)return new Response('Not found',{status:404});
       return new Response(request.method==='HEAD'?null:asset.body,{headers:{'Content-Type':asset.type,'Cache-Control':'private, no-cache','X-Content-Type-Options':'nosniff','Referrer-Policy':'strict-origin-when-cross-origin'}});

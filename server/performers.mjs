@@ -15,6 +15,7 @@ export async function managePerformers(request,env,seed,user){try{
   if(path==='/notifications'){
    const counts=await first("SELECT COUNT(*) n FROM matches m JOIN videos v ON v.id=m.video_id JOIN performers p ON p.id=m.performer_id WHERE m.status='PENDING' AND p.status='active' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id)");
    const reports=await first("SELECT COUNT(*) n FROM contributions WHERE kind='flag' AND status='pending'");
+   if(url.searchParams.get('summary')==='1')return json({count:counts.n,reports:reports.n});
    return json({count:counts.n,reports:reports.n,push:await pushStatus(db,env),items:await all(`SELECT m.performer_id,m.video_id,m.source,COALESCE(v.discovered_at,v.published_at) created_at,v.title,v.published_at,v.available,c.name channel_name,p.name performer_name,m.status match_status,0 excluded
      FROM matches m JOIN videos v ON v.id=m.video_id JOIN performers p ON p.id=m.performer_id
      LEFT JOIN channels c ON c.id=v.channel_id WHERE m.status='PENDING' AND p.status='active' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id) ORDER BY COALESCE(v.discovered_at,v.published_at) DESC,m.video_id LIMIT 100`)});
