@@ -54,11 +54,15 @@ export async function catalog(db,seed,env) {
   const performers=(await db.prepare("SELECT id,name,official_url FROM performers WHERE status='active' ORDER BY name").all()).results;
   const activeIds=new Set(performers.map(p=>p.id));
   const snapshots=new Map(seed.videos.map(v=>[v.id,v]));
+  const importedSnapshots=(await db.prepare("SELECT value FROM state WHERE key LIKE 'master-video-snapshot:%'").all()).results;
+  for(const row of importedSnapshots){const v=JSON.parse(row.value);snapshots.set(v.id,{...snapshots.get(v.id),...v});}
   const videos=rows.results.map(v=>({...snapshots.get(v.id),source:v.source,id:v.id,performerId:v.performer_id,channelId:v.channel_id,channelName:v.channel_name||'Unknown reactor',title:v.title,publishedAt:v.published_at,discoveredAt:v.discovered_at,format:v.format,confidence:v.status,videoUrl:`https://www.youtube.com/watch?v=${v.id}`,isNew:Boolean(v.discovered_at&&Date.now()-Date.parse(v.discovered_at)<7*86400000)}));
   const known=new Map(seed.channels.filter(c=>activeIds.has(c.performerId)&&/^UC[\w-]{22}$/.test(c.id)).map(c=>[`${c.performerId}:${c.id}`,{...c}]));
   for(const v of seed.importRun?.videos||[]) { const key=`missioned-souls:${v.channelId}`; if(known.has(key)) known.set(key,{...known.get(key),name:v.channelName}); }
   const imported=seed.importRun?.channels||[];
   for(const c of imported) if(activeIds.has('missioned-souls')) known.set(`missioned-souls:${c.id}`,{...known.get(`missioned-souls:${c.id}`),performerId:'missioned-souls',id:c.id,name:c.name,url:`https://www.youtube.com/channel/${c.id}`,status:c.currentDiscovery?'NEW REACTOR':'CATALOGED',reactions:c.reactions,discoveredAt:seed.importRun.startedAt,currentDiscovery:c.currentDiscovery});
+  const masterChannels=(await db.prepare("SELECT value FROM state WHERE key LIKE 'master-channel-snapshot:%'").all()).results;
+  for(const row of masterChannels)if(activeIds.has('missioned-souls')){const c=JSON.parse(row.value);const key=`missioned-souls:${c.id}`;known.set(key,{...known.get(key),...c,performerId:'missioned-souls',url:`https://www.youtube.com/channel/${c.id}`,currentDiscovery:false});}
   for(const v of videos) if(!known.has(`${v.performerId}:${v.channelId}`)) known.set(`${v.performerId}:${v.channelId}`,{performerId:v.performerId,id:v.channelId,name:v.channelName,url:`https://www.youtube.com/channel/${v.channelId}`,status:'CATALOGED',reactions:videos.filter(x=>x.channelId===v.channelId&&x.performerId===v.performerId).length});
   return {performers,channels:[...known.values()],videos,stats:{channels:new Set([...known.values()].map(c=>c.id)).size,videos:videos.length,performers:performers.length},discovery:await status(db,env)};
 }
