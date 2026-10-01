@@ -18,6 +18,7 @@
     ]
   },
   "vars": {
+    "COMMUNITY_MODERATOR_EMAILS": "meltcom@gmail.com",    
     "DISCOVERY_DAILY_SEARCH_LIMIT": "20",
     "MEMBER_EMAIL_ALLOWLIST": "meltcom@gmail.com",
     "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_o6oNRLzJf_2d33qHjG9suQ_3GLk5g1Q",
