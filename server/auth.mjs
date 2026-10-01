@@ -15,7 +15,7 @@ export async function authenticate(request,env,fetchUser=fetch){
   const match=/^Bearer ([A-Za-z0-9._~-]+)$/.exec(header);
   if(!match)return {error:json({error:'Sign in to participate.'},401)};
   let response;
-  try{response=await fetchUser(`${config.url}/auth/v1/user`,{headers:{apikey:config.key,Authorization:`Bearer ${match[1]}`},redirect:'error'});}
+  try{response=await fetchUser(`${config.url}/auth/v1/user`,{headers:{apikey:config.key,Authorization:`Bearer ${match[1]}`},redirect:'manual'});}
   catch{return {error:json({error:'Sign-in verification is temporarily unavailable.'},503)};}
   if(!response.ok)return {error:json({error:'Your sign-in has expired. Please sign in again.'},401)};
   let profile;try{profile=await response.json();}catch{return {error:json({error:'Sign-in verification failed.'},503)};}
