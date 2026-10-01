@@ -26,7 +26,6 @@
     "YOUTUBE_PUSH_CALLBACK_URL": "https://reactionsignal.kk6mes.workers.dev/api/youtube/push"
   }
 }
-{
   // ...
   "observability": {
     "logs": {
