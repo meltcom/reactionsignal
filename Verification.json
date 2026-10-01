@@ -1,0 +1,80 @@
+{
+  "counts_preserved": {
+    "channels": 406,
+    "videos": 2541,
+    "matches": 2541,
+    "exclusions": 5
+  },
+  "queries": [
+    {
+      "query": "Pending match count",
+      "before": {
+        "vm_instructions": 7806,
+        "result_rows": 1,
+        "plan": [
+          "SCAN matches"
+        ]
+      },
+      "after": {
+        "vm_instructions": 527,
+        "result_rows": 1,
+        "plan": [
+          "SEARCH matches USING COVERING INDEX rs_matches_status_performer_video (status=?)"
+        ]
+      }
+    },
+    {
+      "query": "Room presence",
+      "before": {
+        "vm_instructions": 4964,
+        "result_rows": 1,
+        "plan": [
+          "SCAN room_members"
+        ]
+      },
+      "after": {
+        "vm_instructions": 468,
+        "result_rows": 1,
+        "plan": [
+          "SEARCH room_members USING COVERING INDEX rs_room_members_room_seen (room=? AND seen_at>?)"
+        ]
+      }
+    },
+    {
+      "query": "Channel snapshot lookup",
+      "before": {
+        "vm_instructions": 12612,
+        "result_rows": 406,
+        "plan": [
+          "SCAN state"
+        ]
+      },
+      "after": {
+        "vm_instructions": 2044,
+        "result_rows": 406,
+        "plan": [
+          "SEARCH state USING INDEX sqlite_autoindex_state_1 (key>? AND key<?)"
+        ]
+      }
+    },
+    {
+      "query": "Last complete discovery run",
+      "before": {
+        "vm_instructions": 11,
+        "result_rows": 0,
+        "plan": [
+          "SCAN runs",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      "after": {
+        "vm_instructions": 11,
+        "result_rows": 0,
+        "plan": [
+          "SEARCH runs USING COVERING INDEX rs_runs_status_finished (status=?)"
+        ]
+      }
+    }
+  ],
+  "note": "SQLite VM instruction counts are local work measurements, not Cloudflare billed rows_read. Presence fixture adds 1500 room membership rows."
+}

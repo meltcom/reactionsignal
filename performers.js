@@ -1,6 +1,8 @@
 let managedPerformers=[],selectedDiscoveryPerformer=null,managerLoading=false;
 const performerApi=async(path,body)=>{const response=await reactionAuth.fetch('/api/performers'+path,{cache:'no-store',...(body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Please try again.');return data;};
-async function reloadMemberCatalog(){const response=await reactionAuth.fetch('/data.json',{cache:'no-store'});if(!response.ok)throw new Error('Catalog refresh failed. Please reload.');catalog=await response.json();$('performerCount').textContent=catalog.performers.length;if(state.performer!=='all'&&!catalog.performers.some(p=>p.id===state.performer))state.performer=catalog.performers[0]?.id||'all';renderAll();await refreshRooms();}
+let catalogEtag=null;
+window.addEventListener('reaction-auth-change',()=>{catalogEtag=null;});
+async function reloadMemberCatalog(){const response=await reactionAuth.fetch('/data.json',{cache:'no-store',headers:catalogEtag?{'If-None-Match':catalogEtag}:{}});if(response.status===304)return;if(!response.ok)throw new Error('Catalog refresh failed. Please reload.');const nextCatalog=await response.json();catalogEtag=response.headers.get('ETag');catalog=nextCatalog;$('performerCount').textContent=catalog.performers.length;if(state.performer!=='all'&&!catalog.performers.some(p=>p.id===state.performer))state.performer=catalog.performers[0]?.id||'all';renderAll();await refreshRooms();}
 async function loadPerformerManager(){
  if(!communityState?.moderator||managerLoading)return;managerLoading=true;
  try{
@@ -54,14 +56,15 @@ async function reviewDiscovery(decision){
  try{const result=await performerApi(decision==='short'?'/mark-short':'/review',{id:selectedDiscoveryPerformer,videos,decision});$('performerManagerStatus').textContent=result.message;await loadPerformerManager();await loadDiscoveryResults(selectedDiscoveryPerformer);await reloadMemberCatalog();}catch(e){$('performerManagerStatus').textContent=e.message;}finally{$('approveDiscovery').disabled=$('excludeDiscovery').disabled=$('markShortDiscovery').disabled=false;}
 }
 $('approveDiscovery').onclick=()=>reviewDiscovery('approve');$('excludeDiscovery').onclick=()=>reviewDiscovery('exclude');
-setInterval(()=>{if(!document.hidden&&page==='review'&&reactionAuth.account?.moderator)loadPerformerManager();},15000);
+setInterval(()=>{if(!document.hidden&&page==='review'&&reactionAuth.account?.moderator)loadPerformerManager();},60000);
 
 let additionsLoading=false;
-async function loadAutomaticAdditions(){
+async function loadAutomaticAdditions(summaryOnly=false){
  if(!reactionAuth.account?.moderator||additionsLoading)return;additionsLoading=true;
  try{
-  const data=await performerApi('/notifications');
+  const data=await performerApi('/notifications'+(summaryOnly?'?summary=1':''));
   $('discoveryNoticeBadge').textContent=data.count+data.reports||'';
+  if(summaryOnly)return;
   const push=data.push;
   $('pushServiceStatus').textContent=!push.configured?'Upload notifications need a public endpoint before they can connect.':!push.apiConfigured?'Upload notifications need YouTube API access before videos can be checked.':`${push.active} of ${push.total} channel notifications connected · ${push.queued} uploads queued${push.errors?' · '+push.errors+' connection errors':''}${push.lastReceivedAt?' · Last notification '+new Date(push.lastReceivedAt).toLocaleString():''}`;
   $('connectPush').disabled=!push.configured||!push.apiConfigured;
@@ -76,6 +79,6 @@ async function loadAutomaticAdditions(){
  }catch(error){$('additionStatus').textContent=error.message;}finally{additionsLoading=false;}
 }
 $('connectPush').onclick=async()=>{const button=$('connectPush');button.disabled=true;try{const result=await performerApi('/push/connect',{});$('additionStatus').textContent=result.message;await loadAutomaticAdditions();}catch(error){$('additionStatus').textContent=error.message;}finally{button.disabled=false;}};
-setInterval(()=>{if(!document.hidden&&reactionAuth.account?.moderator)loadAutomaticAdditions();},30000);
+setInterval(()=>{if(!document.hidden&&reactionAuth.account?.moderator)loadAutomaticAdditions(page!=='review');},60000);
 
 $('markShortDiscovery').onclick=()=>reviewDiscovery('short');
