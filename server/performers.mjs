@@ -89,6 +89,21 @@ export async function managePerformers(request,env,seed,user){try{
   const result=await runDiscovery(env,seed,fetch,{performerId:id});
   return json({result,message:result.status==='blocked'?result.reason:result.status==='busy'?'Another discovery batch is running. Try again in two minutes.':result.detail||'Discovery batch finished. Review the results below.'});
  }
+ if(path==='/mark-short'){
+  const id=text(b.id,1,100,'Performer');
+  if(!Array.isArray(b.videos)||!b.videos.length||b.videos.length>50||b.videos.some(v=>typeof v!=='string'||!/^[-\w]{11}$/.test(v)))fail('Select 1–50 valid videos.');
+  if(!await first('SELECT 1 FROM performers WHERE id=?',id))fail('Performer not found.',404);
+  const ops=[];
+  for(const video of [...new Set(b.videos)]){
+   ops.push(db.prepare("UPDATE videos SET format='SHORT' WHERE id=? AND EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?)").bind(video,id,video));
+   ops.push(db.prepare("INSERT OR IGNORE INTO exclusions(performer_id,video_id,reason) SELECT ?,?,'Moderator marked as Short/excerpt' WHERE EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?)").bind(id,video,id,video));
+   ops.push(db.prepare("UPDATE matches SET status='REJECTED' WHERE performer_id=? AND video_id=? AND status<>'REJECTED'").bind(id,video));
+   ops.push(db.prepare("UPDATE discovery_notifications SET status='removed',reviewed_at=?,reviewed_by=?,note='Moderator marked as Short/excerpt' WHERE performer_id=? AND video_id=?").bind(now,user.id,id,video));
+  }
+  ops.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('performer-audit:'+crypto.randomUUID(),JSON.stringify({performerId:id,actor:user.id,at:now,action:'mark-short',videos:[...new Set(b.videos)]})));
+  const results=await db.batch(ops);const changed=results.slice(0,-1).reduce((n,r,i)=>n+(i%4===2?Number(r.meta?.changes||0):0),0);
+  return json({ok:true,message:`${changed} video${changed===1?'':'s'} marked as Short and excluded for this performer. Future discovery respects the exclusion.`});
+ }
  if(path==='/review'){
   const id=text(b.id,1,100,'Performer');if(!Array.isArray(b.videos)||!b.videos.length||b.videos.length>50||b.videos.some(v=>typeof v!=='string'||!/^[-\w]{11}$/.test(v)))fail('Select 1–50 valid videos.');
   if(!['approve','exclude'].includes(b.decision))fail('Choose approve or exclude.');
