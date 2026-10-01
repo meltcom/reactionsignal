@@ -13,12 +13,11 @@ export async function managePerformers(request,env,seed,user){try{
  const first=async(q,...v)=>db.prepare(q).bind(...v).first();
  if(request.method==='GET'){
   if(path==='/notifications'){
-   const counts=await first("SELECT COUNT(*) n FROM discovery_notifications WHERE status='new'");
+   const counts=await first("SELECT COUNT(*) n FROM matches m JOIN videos v ON v.id=m.video_id JOIN performers p ON p.id=m.performer_id WHERE m.status='PENDING' AND p.status='active' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id)");
    const reports=await first("SELECT COUNT(*) n FROM contributions WHERE kind='flag' AND status='pending'");
-   return json({count:counts.n,reports:reports.n,push:await pushStatus(db,env),items:await all(`SELECT n.*,v.title,v.published_at,v.available,c.name channel_name,p.name performer_name,m.status match_status,
-     EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=n.performer_id AND e.video_id=n.video_id) excluded
-     FROM discovery_notifications n JOIN videos v ON v.id=n.video_id JOIN performers p ON p.id=n.performer_id JOIN matches m ON m.video_id=n.video_id AND m.performer_id=n.performer_id
-     LEFT JOIN channels c ON c.id=v.channel_id WHERE n.status='new' ORDER BY n.created_at DESC LIMIT 100`)});
+   return json({count:counts.n,reports:reports.n,push:await pushStatus(db,env),items:await all(`SELECT m.performer_id,m.video_id,m.source,COALESCE(v.discovered_at,v.published_at) created_at,v.title,v.published_at,v.available,c.name channel_name,p.name performer_name,m.status match_status,0 excluded
+     FROM matches m JOIN videos v ON v.id=m.video_id JOIN performers p ON p.id=m.performer_id
+     LEFT JOIN channels c ON c.id=v.channel_id WHERE m.status='PENDING' AND p.status='active' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id) ORDER BY COALESCE(v.discovered_at,v.published_at) DESC,m.video_id LIMIT 100`)});
   }
   if(path==='/list'){
    const items=await all(`SELECT p.*,(SELECT COUNT(*) FROM matches m WHERE m.performer_id=p.id AND m.status='PENDING') pending,
@@ -31,7 +30,7 @@ export async function managePerformers(request,env,seed,user){try{
   if(path==='/results'){
    const id=text(url.searchParams.get('id'),1,100,'Performer');if(!await first('SELECT 1 FROM performers WHERE id=?',id))fail('Performer not found.',404);
    return json({items:await all(`SELECT m.performer_id,m.video_id,m.status,m.source,v.title,v.published_at,v.format,v.available,c.name channel_name
-    FROM matches m JOIN videos v ON v.id=m.video_id LEFT JOIN channels c ON c.id=v.channel_id WHERE m.performer_id=?
+    FROM matches m JOIN videos v ON v.id=m.video_id LEFT JOIN channels c ON c.id=v.channel_id WHERE m.performer_id=? AND m.status='PENDING' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id)
     ORDER BY CASE WHEN m.status='PENDING' THEN 0 ELSE 1 END,v.published_at DESC LIMIT 100`,id)});
   }
   fail('Not found.',404);
