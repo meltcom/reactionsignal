@@ -43,11 +43,12 @@ export async function status(db,env) {
   const history=await db.prepare('SELECT * FROM runs ORDER BY started_at DESC LIMIT 12').all();
   const last=await db.prepare("SELECT finished_at FROM runs WHERE status='succeeded' ORDER BY finished_at DESC LIMIT 1").first();
   const scheduled=await db.prepare("SELECT value FROM state WHERE key='last-scheduled-invocation'").first();
-  const coverage=await db.prepare("SELECT COUNT(*) total, SUM(CASE WHEN checked_at >= ? THEN 1 ELSE 0 END) checked FROM channels").bind(new Date(Date.now()-86400000).toISOString()).first();
+  const coverage=await db.prepare("SELECT COUNT(*) total, SUM(CASE WHEN recent_checked_at >= ? THEN 1 ELSE 0 END) checked FROM channels").bind(new Date(Date.now()-86400000).toISOString()).first();
+  const backlog=await db.prepare('SELECT COUNT(*) channels FROM channels WHERE next_page IS NOT NULL').first();
   const age=scheduled?.value?Date.now()-Date.parse(scheduled.value):Infinity;
   const automation=age>=0&&age<24*3600000?'active':scheduled?'stale':'not_connected';
   const message=!env.YOUTUBE_API_KEY?'Automatic discovery is inactive: YouTube API access is not configured.':automation==='active'?'Scheduled discovery is running. Check the recent batches and channel coverage below.':automation==='stale'?'Scheduled discovery has not fired in the past 24 hours. Check the scheduler.':'Discovery worker ready; scheduled execution is not connected.';
-  return {apiConfigured:Boolean(env.YOUTUBE_API_KEY),automation,lastScheduledAt:scheduled?.value||null,lastSuccessfulBatchAt:last?.finished_at||null,coverage,runs:history.results,message};
+  return {apiConfigured:Boolean(env.YOUTUBE_API_KEY),automation,lastScheduledAt:scheduled?.value||null,lastSuccessfulBatchAt:last?.finished_at||null,coverage,historyBacklog:backlog?.channels||0,lastDiscoveryRunAt:history.results.find(r=>r.finished_at)?.finished_at||null,runs:history.results,message};
 }
 export async function catalog(db,seed,env) {
   const rows=await db.prepare("SELECT v.*,m.performer_id,m.status,m.source,c.name channel_name FROM videos v JOIN matches m ON v.id=m.video_id LEFT JOIN channels c ON c.id=v.channel_id JOIN performers p ON p.id=m.performer_id WHERE p.status='active' AND v.available=1 AND m.status IN ('CONFIRMED','PROBABLE') AND NOT EXISTS (SELECT 1 FROM exclusions e WHERE e.video_id=v.id AND e.performer_id=m.performer_id) ORDER BY v.published_at DESC").all();
