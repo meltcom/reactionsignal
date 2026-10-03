@@ -59,26 +59,54 @@ $('approveDiscovery').onclick=()=>reviewDiscovery('approve');$('excludeDiscovery
 setInterval(()=>{if(!document.hidden&&page==='review'&&reactionAuth.account?.moderator)loadPerformerManager();},60000);
 
 let additionsLoading=false;
-async function loadAutomaticAdditions(summaryOnly=false){
+async function loadAutomaticAdditions(summaryOnly=false,force=false){
  if(!reactionAuth.account?.moderator||additionsLoading)return;additionsLoading=true;
  try{
-  const data=await performerApi('/notifications'+(summaryOnly?'?summary=1':''));
+  const data=await performerApi('/notifications'+(summaryOnly?'?summary=1':'?group='+encodeURIComponent($('reviewGroup').value)));
   $('discoveryNoticeBadge').textContent=data.count+data.reports||'';
   if(summaryOnly)return;
   const push=data.push;
   $('pushServiceStatus').textContent=!push.configured?'Upload notifications need a public endpoint before they can connect.':!push.apiConfigured?'Upload notifications need YouTube API access before videos can be checked.':`${push.active} of ${push.total} channel notifications connected · ${push.queued} uploads queued${push.errors?' · '+push.errors+' connection errors':''}${push.lastReceivedAt?' · Last notification '+new Date(push.lastReceivedAt).toLocaleString():''}`;
   $('connectPush').disabled=!push.configured||!push.apiConfigured;
-  if(document.activeElement?.closest('#automaticAdditions'))return;
-  $('automaticAdditions').innerHTML=data.items.length?data.items.map(v=>`<article class="panel"><h3>${escapeHtml(v.title)}</h3><p class="subtle">${escapeHtml(v.performer_name)} · ${escapeHtml(v.channel_name||'Unknown reactor')} · Found ${v.created_at?new Date(v.created_at).toLocaleString():'in the historical catalog'}</p><p>Awaiting review - not published</p><a href="https://www.youtube.com/watch?v=${escapeHtml(v.video_id)}" target="_blank" rel="noopener noreferrer">Check video on YouTube</a><form data-addition-performer="${escapeHtml(v.performer_id)}" data-addition-video="${escapeHtml(v.video_id)}"><label>Reason if removing<input name="note" minlength="5" maxlength="500" placeholder="Wrong performer, excerpt, or another issue"></label><button class="outline-button" type="submit" name="action" value="keep">Approve & publish</button> <button class="outline-button" type="submit" name="action" value="remove">Exclude video</button> <button class="outline-button" type="submit" name="action" value="short">Mark as Short</button><p class="review-result" role="status"></p></form></article>`).join(''):'<p class="subtle">No uncertain matches awaiting review.</p>';
+  if(!force&&(document.activeElement?.closest('#automaticAdditions')||document.querySelector('#automaticAdditions .queue-select:checked')))return;
+  await loadRecheckStatus();
+  const filtered=data.items.filter(v=>$('reviewGroup').value==='all'||(v.review_group||'unprocessed')===$('reviewGroup').value);
+  $('automaticAdditions').innerHTML=filtered.length?filtered.map(v=>`<article class="panel"><label><input type="checkbox" class="queue-select" data-performer="${escapeHtml(v.performer_id)}" data-video="${escapeHtml(v.video_id)}"> Select for bulk review</label><h3>${escapeHtml(v.title)}</h3><p class="subtle">${escapeHtml(v.performer_name)} · ${escapeHtml(v.channel_name||'Unknown reactor')} · Found ${v.created_at?new Date(v.created_at).toLocaleString():'in the historical catalog'}</p><p>Awaiting review - not published</p><p class="subtle">${escapeHtml(v.review_reason||'Not yet rechecked.')}</p><a href="https://www.youtube.com/watch?v=${escapeHtml(v.video_id)}" target="_blank" rel="noopener noreferrer">Check video on YouTube</a><form data-addition-performer="${escapeHtml(v.performer_id)}" data-addition-video="${escapeHtml(v.video_id)}"><label>Reason if removing<input name="note" minlength="5" maxlength="500" placeholder="Wrong performer, excerpt, or another issue"></label><button class="outline-button" type="submit" name="action" value="keep">Approve & publish</button> <button class="outline-button" type="submit" name="action" value="remove">Exclude video</button> <button class="outline-button" type="submit" name="action" value="short">Mark as Short</button><p class="review-result" role="status"></p></form></article>`).join(''):'<p class="subtle">No uncertain matches awaiting review.</p>';
   $('automaticAdditions').querySelectorAll('form').forEach(form=>form.onsubmit=async event=>{
    event.preventDefault();const action=event.submitter?.value;if(!action)return;
    if(action==='remove'&&form.elements.note.value.trim().length<5){form.querySelector('.review-result').textContent='Enter a reason with at least 5 characters.';form.elements.note.focus();return;}
    form.querySelectorAll('button').forEach(b=>b.disabled=true);
-   try{const result=await performerApi(action==='short'?'/mark-short':'/review',{id:form.dataset.additionPerformer,videos:[form.dataset.additionVideo],decision:action==='keep'?'approve':'exclude'});$('additionStatus').textContent=result.message;await reloadMemberCatalog();additionsLoading=false;await loadAutomaticAdditions();await loadReviewQueue();}catch(error){form.querySelector('.review-result').textContent=error.message;}finally{form.querySelectorAll('button').forEach(b=>b.disabled=false);}
+   try{const result=await performerApi(action==='short'?'/mark-short':'/review',{id:form.dataset.additionPerformer,videos:[form.dataset.additionVideo],decision:action==='keep'?'approve':'exclude'});$('additionStatus').textContent=result.message;await reloadMemberCatalog();additionsLoading=false;await loadAutomaticAdditions(false,true);await loadReviewQueue();}catch(error){form.querySelector('.review-result').textContent=error.message;}finally{form.querySelectorAll('button').forEach(b=>b.disabled=false);}
   });
  }catch(error){$('additionStatus').textContent=error.message;}finally{additionsLoading=false;}
 }
-$('connectPush').onclick=async()=>{const button=$('connectPush');button.disabled=true;try{const result=await performerApi('/push/connect',{});$('additionStatus').textContent=result.message;await loadAutomaticAdditions();}catch(error){$('additionStatus').textContent=error.message;}finally{button.disabled=false;}};
+$('connectPush').onclick=async()=>{const button=$('connectPush');button.disabled=true;try{const result=await performerApi('/push/connect',{});$('additionStatus').textContent=result.message;await loadAutomaticAdditions(false,true);}catch(error){$('additionStatus').textContent=error.message;}finally{button.disabled=false;}};
 setInterval(()=>{if(!document.hidden&&reactionAuth.account?.moderator)loadAutomaticAdditions(page!=='review');},60000);
 
 $('markShortDiscovery').onclick=()=>reviewDiscovery('short');
+
+async function loadRecheckStatus(){
+ const data=await performerApi('/recheck');
+ $('recheckStatus').textContent=(data.enabled?'Background previews enabled. ':'Background previews paused. ')+(data.last?`Last batch: ${data.last.processed} matches · ${data.last.status} · ${new Date(data.last.at).toLocaleString()}${data.last.message?' · '+data.last.message:''}`:'No recheck batch yet.');
+ const labels={strong:'Strong matches',shorts:'Possible Shorts / excerpts',unrelated:'Possibly unrelated',uncertain:'Uncertain evidence',protected:'Moderator / performer holds',unprocessed:'Not rechecked yet'};
+ $('recheckGroups').textContent=data.groups.map(g=>`${labels[g.outcome]||g.outcome}: ${g.count}`).join(' · ');
+ $('publishRecheck').disabled=!data.groups.some(g=>g.outcome==='strong'&&g.count>0);
+ $('batchRecheck').disabled=!data.enabled;
+}
+for(const [id,action] of [['startRecheck','start'],['batchRecheck','batch'],['pauseRecheck','pause'],['publishRecheck','publish']]){
+ $(id).onclick=async()=>{const button=$(id);button.disabled=true;try{const data=await performerApi('/recheck',{action});$('additionStatus').textContent=data.message;await reloadMemberCatalog();await loadAutomaticAdditions(false,true);}catch(e){$('additionStatus').textContent=e.message;}finally{button.disabled=false;await loadRecheckStatus();}};
+}
+$('reviewGroup').onchange=()=>loadAutomaticAdditions(false,true);
+
+$('selectQueueVisible').onclick=()=>{const boxes=[...document.querySelectorAll('#automaticAdditions .queue-select')];const select=!boxes.slice(0,50).every(b=>b.checked);boxes.forEach((b,i)=>b.checked=select&&i<50);};
+for(const [id,decision] of [['approveQueueSelected','approve'],['excludeQueueSelected','exclude'],['shortQueueSelected','short']]){
+ $(id).onclick=async()=>{
+  const boxes=[...document.querySelectorAll('#automaticAdditions .queue-select:checked')];
+  if(!boxes.length||boxes.length>50){$('additionStatus').textContent='Select 1–50 videos.';return;}
+  const buttons=['approveQueueSelected','excludeQueueSelected','shortQueueSelected','selectQueueVisible'].map($);buttons.forEach(b=>b.disabled=true);
+  try{const groups=new Map();for(const b of boxes){const list=groups.get(b.dataset.performer)||[];list.push(b.dataset.video);groups.set(b.dataset.performer,list);}const messages=[];
+   for(const [performer,videos] of groups){const result=await performerApi(decision==='short'?'/mark-short':'/review',{id:performer,videos,decision});messages.push(result.message);}
+   $('additionStatus').textContent=messages.join(' ');await reloadMemberCatalog();await loadAutomaticAdditions(false,true);
+  }catch(e){$('additionStatus').textContent=e.message+' Some groups may already be processed; refresh before retrying.';}finally{buttons.forEach(b=>b.disabled=false);}
+ };
+}
