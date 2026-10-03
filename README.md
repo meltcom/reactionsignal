@@ -1,5 +1,5 @@
 # Reaction Signal — Cloudflare deployment
-
+Deployment refresh: October 2, 2026.
 A member-gated reaction catalog with YouTube discovery, upload notifications, comments, chat, member reports and moderator removal tools. This package hosts the full application directly on Cloudflare Workers. It does not require the private Sites relay.
 
 ## Your configuration
