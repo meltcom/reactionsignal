@@ -1,5 +1,6 @@
 import {database,seedDatabase,status} from './db.mjs';
 import {pushStatus,renewSubscriptions,processPushJobs} from './push.mjs';
+import {recheckStatus,recheckBatch,publishPreview} from './recheck.mjs';
 import {runDiscovery} from './discovery.mjs';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store'}});
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -12,13 +13,15 @@ export async function managePerformers(request,env,seed,user){try{
  const all=async(q,...v)=>(await db.prepare(q).bind(...v).all()).results;
  const first=async(q,...v)=>db.prepare(q).bind(...v).first();
  if(request.method==='GET'){
+  if(path==='/recheck')return json(await recheckStatus(db));
   if(path==='/notifications'){
    const counts=await first("SELECT COUNT(*) n FROM matches m JOIN videos v ON v.id=m.video_id JOIN performers p ON p.id=m.performer_id WHERE m.status='PENDING' AND p.status='active' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id)");
    const reports=await first("SELECT COUNT(*) n FROM contributions WHERE kind='flag' AND status='pending'");
    if(url.searchParams.get('summary')==='1')return json({count:counts.n,reports:reports.n});
-   return json({count:counts.n,reports:reports.n,push:await pushStatus(db,env),items:await all(`SELECT m.performer_id,m.video_id,m.source,COALESCE(v.discovered_at,v.published_at) created_at,v.title,v.published_at,v.available,c.name channel_name,p.name performer_name,m.status match_status,0 excluded
+   const group=url.searchParams.get('group')||'all';if(!['all','strong','shorts','unrelated','uncertain','protected','unprocessed'].includes(group))fail('Invalid review group.');
+   return json({count:counts.n,reports:reports.n,push:await pushStatus(db,env),items:await all(`SELECT m.performer_id,m.video_id,m.source,COALESCE(v.discovered_at,v.published_at) created_at,v.title,v.published_at,v.available,r.outcome review_group,r.reason review_reason,c.name channel_name,p.name performer_name,m.status match_status,0 excluded
      FROM matches m JOIN videos v ON v.id=m.video_id JOIN performers p ON p.id=m.performer_id
-     LEFT JOIN channels c ON c.id=v.channel_id WHERE m.status='PENDING' AND p.status='active' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id) ORDER BY COALESCE(v.discovered_at,v.published_at) DESC,m.video_id LIMIT 100`)});
+     LEFT JOIN channels c ON c.id=v.channel_id LEFT JOIN review_previews r ON r.performer_id=m.performer_id AND r.video_id=m.video_id AND r.original_source=m.source AND r.original_title=v.title AND r.original_format=v.format AND r.aliases=p.aliases AND r.review_mode=p.review_mode AND r.checked_at>=strftime('%Y-%m-%dT%H:%M:%fZ','now','-24 hours') WHERE m.status='PENDING' AND p.status='active' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id) AND (?='all' OR COALESCE(r.outcome,'unprocessed')=?) ORDER BY COALESCE(v.discovered_at,v.published_at) DESC,m.video_id LIMIT 100`,group,group)});
   }
   if(path==='/list'){
    const items=await all(`SELECT p.*,(SELECT COUNT(*) FROM matches m WHERE m.performer_id=p.id AND m.status='PENDING') pending,
@@ -41,6 +44,14 @@ export async function managePerformers(request,env,seed,user){try{
  if(!request.headers.get('Content-Type')?.startsWith('application/json'))fail('JSON required.',415);
  const raw=await request.text();if(raw.length>12000)fail('Request too large.',413);let b;try{b=JSON.parse(raw);}catch{fail('Invalid JSON.');}if(!b||typeof b!=='object'||Array.isArray(b))fail('Invalid request.');
  const now=new Date().toISOString();
+ if(path==='/recheck'){
+  if(!['start','pause','batch','publish'].includes(b.action))fail('Choose a recheck action.');
+  if(b.action==='publish')return json(await publishPreview(db,user));
+  if(b.action==='start'||b.action==='pause')await db.prepare("INSERT INTO state(key,value) VALUES('recheck-enabled',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(b.action==='start'?'1':'0').run();
+  if(b.action==='start'||b.action==='batch'){const result=await recheckBatch(env);return json({...result,message:result.message||'Preview only: matches are unchanged. Further batches run every 15 minutes while enabled.'});}
+  return json({message:'Background recheck previews paused.'});
+ }
+
  if(path==='/push/connect'){
   const subscriptions=await renewSubscriptions(env,seed);const jobs=await processPushJobs(env,seed);
   return json({subscriptions,jobs,push:await pushStatus(db,env),message:subscriptions.reason||'Channel notification requests sent. More channels are connected by subsequent scheduled batches.'});

@@ -4,6 +4,7 @@ import { community } from './community.mjs';
 import { runDiscovery } from './discovery.mjs';
 import { authenticate, authConfig } from './auth.mjs';
 import { youtubePush, renewSubscriptions, processPushJobs } from './push.mjs';
+import {recheckBatch} from './recheck.mjs';
 import { managePerformers } from './performers.mjs';
 import { assets, seed } from './assets.mjs';
 const json=(data,code=200)=>new Response(JSON.stringify(data),{status:code,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
@@ -64,6 +65,7 @@ export default {
       await processPushJobs(env,seed);
       await renewSubscriptions(env,seed);
       await runDiscovery(env,seed);
+      await recheckBatch(env);
     })());
   }
 };
