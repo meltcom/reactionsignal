@@ -7,10 +7,12 @@ const random=()=>crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().repl
 export function callbackBase(env){try{const u=new URL(env.YOUTUBE_PUSH_CALLBACK_URL);return u.protocol==='https:'&&!u.username&&!u.password&&!u.search&&!u.hash&&u.pathname==='/api/youtube/push'?u.href:null;}catch{return null;}}
 export async function pushStatus(db,env){
  const now=Date.now();
- const counts=await db.prepare('SELECT COUNT(*) total,SUM(CASE WHEN expires_at>? THEN 1 ELSE 0 END) active,SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) errors FROM push_subscriptions').bind(now).first();
- const jobs=await db.prepare("SELECT COUNT(*) total FROM push_jobs WHERE status='pending'").first();
+ const counts=await db.prepare("SELECT COUNT(*) total,SUM(CASE WHEN s.expires_at>? THEN 1 ELSE 0 END) active,SUM(CASE WHEN s.error IS NOT NULL THEN 1 ELSE 0 END) errors,SUM(CASE WHEN s.expires_at>? AND s.expires_at<? THEN 1 ELSE 0 END) expiring FROM channels c LEFT JOIN push_subscriptions s ON s.channel_id=c.id WHERE c.discovery_scope='eligible'").bind(now,now,now+86400000).first();
+ const jobs=await db.prepare("SELECT COUNT(*) total FROM push_jobs WHERE status=\'pending\' AND channel_id IN (SELECT id FROM channels WHERE discovery_scope=\'eligible\')").first();
  const last=await db.prepare("SELECT value FROM state WHERE key='last-push-received'").first();
- return {configured:Boolean(callbackBase(env)),apiConfigured:Boolean(env.YOUTUBE_API_KEY),total:counts.total,active:counts.active||0,errors:counts.errors||0,queued:jobs.total,lastReceivedAt:last?.value||null};
+ const problemChannels=(await db.prepare("SELECT c.name,s.channel_id,s.error FROM push_subscriptions s JOIN channels c ON c.id=s.channel_id WHERE c.discovery_scope='eligible' AND s.error IS NOT NULL LIMIT 10").all()).results;
+ const oldest=await db.prepare("SELECT MIN(j.received_at) oldest FROM push_jobs j JOIN channels c ON c.id=j.channel_id WHERE j.status='pending' AND c.discovery_scope='eligible'").first();
+ return {expiring:counts.expiring||0,problemChannels,oldestQueuedAt:oldest?.oldest||null,configured:Boolean(callbackBase(env)),apiConfigured:Boolean(env.YOUTUBE_API_KEY),total:counts.total,active:counts.active||0,errors:counts.errors||0,queued:jobs.total,lastReceivedAt:last?.value||null};
 }
 // Subscribe/renew a bounded batch. Only a verified hub callback activates a lease.
 export async function renewSubscriptions(env,seed,fetcher=fetch){
@@ -22,7 +24,7 @@ export async function renewSubscriptions(env,seed,fetcher=fetch){
  let requested=0,failed=0;
  try{
   const rows=(await db.prepare(`SELECT c.id,s.secret,s.token FROM channels c LEFT JOIN push_subscriptions s ON s.channel_id=c.id
-   WHERE (s.channel_id IS NULL OR (s.expires_at<? AND s.pending_until<?) OR (s.callback<>? AND s.pending_until<?))
+   WHERE c.discovery_scope='eligible' AND (s.channel_id IS NULL OR (s.expires_at<? AND s.pending_until<?) OR (s.callback<>? AND s.pending_until<?))
    ORDER BY COALESCE(s.requested_at,''),c.id LIMIT 20`).bind(now+86400000,now,base,now).all()).results;
   for(const c of rows){
    if(!channelPattern.test(c.id))continue;
@@ -69,6 +71,7 @@ export async function youtubePush(request,env,seed,ctx){
  const sub=await db.prepare('SELECT * FROM push_subscriptions WHERE channel_id=?').bind(channel).first();
  if(!sub||url.searchParams.get('token')!==sub.token)return reply('Unknown subscription',404);
  const now=Date.now();
+ if(!await db.prepare("SELECT 1 FROM channels WHERE id=? AND discovery_scope='eligible'").bind(channel).first())return reply('Channel monitoring paused',410);
  if(request.method==='GET'){
   const mode=url.searchParams.get('hub.mode'),challenge=url.searchParams.get('hub.challenge'),seconds=Number(url.searchParams.get('hub.lease_seconds'));
   if(mode!=='subscribe'||url.searchParams.get('hub.topic')!==topic(channel)||!challenge||challenge.length>2000||!Number.isInteger(seconds)||seconds<1||seconds>31536000||sub.pending_until<now)return reply('Invalid verification',403);
@@ -96,10 +99,10 @@ export async function processPushJobs(env,seed,fetcher=fetch){
  if(!lease.meta.changes)return {status:'busy'};
  let added=0,processed=0;
  try{
-  const jobs=(await db.prepare("SELECT * FROM push_jobs WHERE status='pending' AND next_attempt<=? ORDER BY received_at LIMIT 50").bind(now).all()).results;
+  const jobs=(await db.prepare("SELECT * FROM push_jobs WHERE status='pending' AND channel_id IN (SELECT id FROM channels WHERE discovery_scope='eligible') AND next_attempt<=? ORDER BY received_at LIMIT 50").bind(now).all()).results;
   if(!jobs.length)return {status:'idle',added:0};
   const performers=(await db.prepare('SELECT * FROM performers WHERE discovery_enabled=1 AND id=\'missioned-souls\'').all()).results;
-  const api=new YouTube(env.YOUTUBE_API_KEY,fetcher);let items,failed=false;
+  const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db);let items,failed=false;
   try{const response=await api.get('videos',{part:'snippet,contentDetails,status',id:jobs.map(j=>j.video_id).join(',')});items=new Map((response.items||[]).map(v=>[v.id,v]));}catch{failed=true;items=new Map();}
   for(const job of jobs){
    const item=items.get(job.video_id),at=new Date().toISOString();

@@ -32,7 +32,7 @@ export async function recheckBatch(env,fetcher=fetch){
  if(setting?.value!=='1')return {status:'paused',processed:0};
  if(!env.YOUTUBE_API_KEY)return {status:'blocked',processed:0,message:'YouTube API key is not configured.'};
  const lease=await db.prepare("INSERT INTO state(key,value) VALUES('recheck-lease',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(state.value AS INTEGER)<?").bind(String(Date.now()+120000),Date.now()).run();if(!lease.meta.changes)return {status:'busy',processed:0};
- const now=new Date().toISOString(),api=new YouTube(env.YOUTUBE_API_KEY,fetcher);let result;
+ const now=new Date().toISOString(),api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db);let result;
  try{
   const rows=(await db.prepare(`SELECT m.performer_id,m.video_id,m.source,v.title original_title,v.channel_id,v.format,p.aliases,p.review_mode,(SELECT json_group_array(other.aliases) FROM performers other WHERE other.id<>m.performer_id AND other.status='active') other_aliases,
    CASE WHEN EXISTS(SELECT 1 FROM matches known JOIN videos kv ON kv.id=known.video_id WHERE known.performer_id=m.performer_id AND kv.channel_id=v.channel_id AND known.status='CONFIRMED' AND kv.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions ex WHERE ex.performer_id=known.performer_id AND ex.video_id=known.video_id)) OR EXISTS(SELECT 1 FROM state s WHERE s.key='master-channel-snapshot:'||v.channel_id AND json_extract(s.value,'$.status') LIKE 'VERIFIED%') THEN 1 ELSE 0 END known_reactor

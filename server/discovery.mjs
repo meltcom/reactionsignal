@@ -9,11 +9,12 @@ export function classify(title,aliases,duration) {
 }
 export function seconds(s) { const m=/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(s||''); return m?Number(m[1]||0)*3600+Number(m[2]||0)*60+Number(m[3]||0):null; }
 export class YouTube {
-  constructor(key,fetcher=fetch){this.key=key;this.fetcher=fetcher.bind(globalThis);this.calls=0;this.requestMs=0;this.deadline=Date.now()+20000;}
+  constructor(key,fetcher=fetch,usageDb=null){this.usageDb=usageDb;this.key=key;this.fetcher=fetcher.bind(globalThis);this.calls=0;this.requestMs=0;this.deadline=Date.now()+20000;}
   async get(endpoint,params){
     for(let attempt=0;attempt<3;attempt++){
       if(this.calls>=28||Date.now()>this.deadline) throw new Error('Batch budget reached; continuation retained');
       this.calls++;
+      if(this.usageDb)await this.usageDb.prepare("INSERT INTO state(key,value) VALUES(?, '1') ON CONFLICT(key) DO UPDATE SET value=CAST(state.value AS INTEGER)+1").bind('youtube-requests:'+new Date().toISOString().slice(0,10)+':'+endpoint).run();
       const url=new URL(`https://www.googleapis.com/youtube/v3/${endpoint}`); for(const [k,v] of Object.entries(params)) if(v!==null&&v!==undefined)url.searchParams.set(k,String(v));
       let response,body;const requestStart=Date.now();try { response=await this.fetcher(url,{headers:{'X-Goog-Api-Key':this.key},signal:AbortSignal.timeout(6000)});body=await response.json().catch(()=>({})); } catch { if(attempt===2) throw new Error('YouTube request timed out'); continue; } finally {this.requestMs+=Date.now()-requestStart;}
       if(response.ok)return body;
@@ -46,7 +47,7 @@ export async function saveVideos(db,items,performers,runTime,source){
         channels.set(snippet.channelId,snippet.channelTitle||'Unknown reactor');
         statements.push(db.prepare('INSERT INTO videos(id,channel_id,title,published_at,discovered_at,checked_at,format,available) VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=excluded.published_at,checked_at=excluded.checked_at,available=1').bind(item.id,snippet.channelId,snippet.title,snippet.publishedAt||null,runTime,runTime,duration!==null&&duration>180?'FULL_LENGTH':'UNKNOWN'));
       }
-      if(!prior)inserted++;
+      if(!prior){inserted++;const lag=Date.parse(runTime)-Date.parse(snippet.publishedAt);statements.push(db.prepare('INSERT OR IGNORE INTO discovery_observations(video_id,source,discovered_at,published_at,delay_seconds) VALUES(?,?,?,?,?)').bind(item.id,source,runTime,snippet.publishedAt||null,Number.isFinite(lag)&&lag>=0?Math.floor(lag/1000):null));}
       for(const {p,classification:found} of missing){
         const classification=p.review_mode==='review'?'PENDING':found;
         statements.push(db.prepare("INSERT OR IGNORE INTO discovery_notifications(performer_id,video_id,created_at,source) SELECT ?,?,?,? WHERE ?='CONFIRMED' AND ?='active' AND NOT EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?) AND NOT EXISTS(SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?)").bind(p.id,item.id,runTime,source,classification,p.status,p.id,item.id,p.id,item.id));
@@ -62,23 +63,29 @@ export async function saveVideos(db,items,performers,runTime,source){
 export async function saveVideo(db,item,performers,runTime,source){return saveVideos(db,[item],performers,runTime,source);}
 function measuredDatabase(raw,metrics){
   const originals=new WeakMap();
-  const measure=async task=>{const start=Date.now();try{return await task();}finally{metrics.dbMs+=Date.now()-start;}};
+  const measure=async task=>{const start=Date.now();try{const result=await task();for(const item of Array.isArray(result)?result:[result]){metrics.rowsRead+=(item?.meta?.rows_read||0);metrics.rowsWritten+=(item?.meta?.rows_written||0);}return result;}finally{metrics.dbMs+=Date.now()-start;}};
   function wrap(statement){const proxy={bind(...args){return wrap(statement.bind(...args));},first(...args){return measure(()=>statement.first(...args));},all(...args){return measure(()=>statement.all(...args));},run(...args){return measure(()=>statement.run(...args));}};originals.set(proxy,statement);return proxy;}
   return {prepare(query){return wrap(raw.prepare(query));},batch(statements){return measure(()=>raw.batch(statements.map(s=>originals.get(s)||s)));}};
 }
 export async function runDiscovery(env,seed,fetcher=fetch,options={}){
-  const startedMs=Date.now(),metrics={dbMs:0,examined:0};const db=measuredDatabase(database(env),metrics);await seedDatabase(db,seed);
+  const startedMs=Date.now(),metrics={dbMs:0,examined:0,rowsRead:0,rowsWritten:0};const db=measuredDatabase(database(env),metrics);await seedDatabase(db,seed);
   if(!env.YOUTUBE_API_KEY)return {status:'blocked',reason:'YouTube API key is not configured'};
   const id=crypto.randomUUID(),now=new Date().toISOString();
   const lease=await db.prepare("INSERT INTO state(key,value) VALUES('discovery-lease',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(state.value AS INTEGER)<?").bind(String(Date.now()+120000),Date.now()).run();
   if(!lease.meta.changes)return {status:'busy'};
-  const api=new YouTube(env.YOUTUBE_API_KEY,fetcher);let added=0,scanned=0,historyPages=0,recentAdded=0,historyAdded=0,final='succeeded',detail='';
+  const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db);let added=0,scanned=0,historyPages=0,recentAdded=0,historyAdded=0,final='succeeded',detail='';
   await db.prepare('INSERT INTO runs(id,started_at,status) VALUES(?,?,?)').bind(id,now,'running').run();
   try{
     const performers=(await db.prepare("SELECT p.* FROM performers p LEFT JOIN state s ON s.key='search-touch:'||p.id WHERE p.discovery_enabled=1 AND p.id='missioned-souls' ORDER BY COALESCE(s.value,''),p.id").all()).results;
     if(!performers.length)return {id,status:'succeeded',calls:0,channels:0,added:0,detail:'No discovery-enabled performers.'};
     // Fresh uploads get the first allocation. Historical cursors are independent.
-    const due=options.performerId?[]:(await db.prepare('SELECT * FROM channels WHERE recent_checked_at IS NULL OR recent_checked_at<? ORDER BY recent_attempted_at ASC,recent_checked_at ASC,id LIMIT 7').bind(new Date(Date.now()-86400000).toISOString()).all()).results;
+    const batchSize=Math.max(1,Math.min(14,Number.parseInt(env.DISCOVERY_RECENT_BATCH_SIZE,10)||7));
+    const historyLimit=Math.max(0,Math.min(2,Number.parseInt(env.DISCOVERY_HISTORY_PAGES??'1',10)||0));
+    const due=options.performerId?[]:(await db.prepare("SELECT * FROM channels WHERE discovery_scope='eligible' AND (recent_checked_at IS NULL OR recent_checked_at<?) ORDER BY recent_attempted_at ASC,recent_checked_at ASC,id LIMIT ?").bind(new Date(Date.now()-86400000).toISOString(),batchSize).all()).results;
+    // Reserve up to two remaining slots for channels with recent confirmed reactions.
+    const prioritySlots=Math.min(2,Math.max(0,batchSize-due.length));
+    if(!options.performerId&&prioritySlots){const extra=(await db.prepare("SELECT c.* FROM channels c WHERE c.discovery_scope='eligible' AND c.recent_checked_at<? AND EXISTS(SELECT 1 FROM videos v JOIN matches m ON m.video_id=v.id WHERE v.channel_id=c.id AND m.performer_id='missioned-souls' AND m.status='CONFIRMED' AND v.published_at>?) ORDER BY c.recent_attempted_at ASC LIMIT ?").bind(new Date(Date.now()-2*3600000).toISOString(),new Date(Date.now()-14*86400000).toISOString(),prioritySlots).all()).results;due.push(...extra.filter(c=>!due.some(d=>d.id===c.id)));}
+
     if(due.length)await db.batch(due.map(c=>db.prepare('UPDATE channels SET recent_attempted_at=? WHERE id=?').bind(now,c.id)));
     const missing=due.filter(c=>!c.uploads);
     if(missing.length){
@@ -127,7 +134,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
     await checkpointRecent();
     if(pageError)throw pageError;
     // Rotate historical work separately, at most two pages from distinct channels.
-    const backlog=options.performerId?[]:(await db.prepare('SELECT * FROM channels WHERE next_page IS NOT NULL ORDER BY history_checked_at ASC,id LIMIT 2').all()).results;
+    const backlog=options.performerId?[]:(await db.prepare('SELECT * FROM channels WHERE discovery_scope=\'eligible\' AND next_page IS NOT NULL ORDER BY history_checked_at ASC,id LIMIT ?').bind(historyLimit).all()).results;
     for(const channel of backlog){
       if(api.calls>22||Date.now()>api.deadline-6000)break;
       const page=await api.get('playlistItems',{part:'contentDetails',playlistId:channel.uploads,maxResults:50,pageToken:channel.next_page});
@@ -178,14 +185,14 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
     }
     // Refresh a bounded oldest-first batch, including items no longer publicly available.
     if(!options.performerId&&api.calls<27&&Date.now()<api.deadline-4000){
-      const stale=(await db.prepare('SELECT id FROM videos WHERE checked_at IS NULL OR checked_at<? ORDER BY checked_at ASC LIMIT 50').bind(new Date(Date.now()-7*86400000).toISOString()).all()).results;
+      const stale=(await db.prepare('SELECT v.id FROM videos v WHERE (v.checked_at IS NULL OR v.checked_at<?) AND EXISTS(SELECT 1 FROM matches m WHERE m.video_id=v.id AND m.performer_id=\'missioned-souls\') ORDER BY v.checked_at ASC LIMIT 50').bind(new Date(Date.now()-7*86400000).toISOString()).all()).results;
       if(stale.length){const result=await api.get('videos',{part:'snippet,status',id:stale.map(v=>v.id).join(',')});const found=new Map((result.items||[]).map(v=>[v.id,v]));
         await db.batch(stale.map(v=>{const fresh=found.get(v.id);return fresh?.status?.privacyStatus==='public'?db.prepare('UPDATE videos SET title=?,checked_at=?,available=1 WHERE id=?').bind(fresh.snippet.title,now,v.id):db.prepare('UPDATE videos SET checked_at=?,available=0 WHERE id=?').bind(now,v.id);}));}
     }
     if(detail&&final==='succeeded')final='partial';
   }catch(error){final='partial';detail+=error.message;}
   finally{
-    await db.prepare('UPDATE runs SET finished_at=?,status=?,calls=?,channels=?,added=?,detail=?,history_pages=?,recent_added=?,history_added=?,api_ms=?,db_ms=?,duration_ms=?,records_examined=? WHERE id=?').bind(new Date().toISOString(),final,api.calls,scanned,added,detail,historyPages,recentAdded,historyAdded,api.requestMs,metrics.dbMs,Date.now()-startedMs,metrics.examined,id).run();
+    await db.prepare('UPDATE runs SET finished_at=?,status=?,calls=?,channels=?,added=?,detail=?,history_pages=?,recent_added=?,history_added=?,api_ms=?,db_ms=?,duration_ms=?,records_examined=?,rows_read=?,rows_written=? WHERE id=?').bind(new Date().toISOString(),final,api.calls,scanned,added,detail,historyPages,recentAdded,historyAdded,api.requestMs,metrics.dbMs,Date.now()-startedMs,metrics.examined,metrics.rowsRead,metrics.rowsWritten,id).run();
     // Lease remains until its 120-second expiry, preventing accidental rapid repeats.
   }
   return {id,status:final,calls:api.calls,channels:scanned,added,detail};
