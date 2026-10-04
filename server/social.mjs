@@ -15,7 +15,7 @@ export function settings(input,performerIds=[]){
 }
 export async function social(request,env,seed,user){try{
  const db=database(env);await seedDatabase(db,seed);if(!user)fail('Sign in to continue.',401);
- const active=(await db.prepare("SELECT id,name,chat_enabled FROM performers WHERE status='active' ORDER BY name").all()).results;
+ const active=(await db.prepare("SELECT id,name,chat_enabled FROM performers WHERE status='active' AND id='missioned-souls' ORDER BY name").all()).results;
  const rooms=[...active.filter(p=>p.chat_enabled).map(p=>({id:p.id,name:p.name,description:'Discuss the music and reactions.'})),{id:'new-reactions',name:'New reactions today'},{id:'song-talk',name:'Songs & performances'}];
  const performerIds=active.map(p=>p.id);
  const url=new URL(request.url),path=url.pathname.replace('/api/social',''),now=new Date().toISOString();

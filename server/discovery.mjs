@@ -75,7 +75,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
   const api=new YouTube(env.YOUTUBE_API_KEY,fetcher);let added=0,scanned=0,historyPages=0,recentAdded=0,historyAdded=0,final='succeeded',detail='';
   await db.prepare('INSERT INTO runs(id,started_at,status) VALUES(?,?,?)').bind(id,now,'running').run();
   try{
-    const performers=(await db.prepare("SELECT p.* FROM performers p LEFT JOIN state s ON s.key='search-touch:'||p.id WHERE p.discovery_enabled=1 ORDER BY COALESCE(s.value,''),p.id").all()).results;
+    const performers=(await db.prepare("SELECT p.* FROM performers p LEFT JOIN state s ON s.key='search-touch:'||p.id WHERE p.discovery_enabled=1 AND p.id='missioned-souls' ORDER BY COALESCE(s.value,''),p.id").all()).results;
     if(!performers.length)return {id,status:'succeeded',calls:0,channels:0,added:0,detail:'No discovery-enabled performers.'};
     // Fresh uploads get the first allocation. Historical cursors are independent.
     const due=options.performerId?[]:(await db.prepare('SELECT * FROM channels WHERE recent_checked_at IS NULL OR recent_checked_at<? ORDER BY recent_attempted_at ASC,recent_checked_at ASC,id LIMIT 7').bind(new Date(Date.now()-86400000).toISOString()).all()).results;

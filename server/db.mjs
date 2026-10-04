@@ -51,8 +51,8 @@ export async function status(db,env) {
   return {apiConfigured:Boolean(env.YOUTUBE_API_KEY),automation,lastScheduledAt:scheduled?.value||null,lastSuccessfulBatchAt:last?.finished_at||null,coverage,historyBacklog:backlog?.channels||0,lastDiscoveryRunAt:history.results.find(r=>r.finished_at)?.finished_at||null,runs:history.results,message};
 }
 export async function catalog(db,seed,env) {
-  const rows=await db.prepare("SELECT v.*,m.performer_id,m.status,m.source,c.name channel_name FROM videos v JOIN matches m ON v.id=m.video_id LEFT JOIN channels c ON c.id=v.channel_id JOIN performers p ON p.id=m.performer_id WHERE p.status='active' AND v.available=1 AND m.status IN ('CONFIRMED','PROBABLE') AND NOT EXISTS (SELECT 1 FROM exclusions e WHERE e.video_id=v.id AND e.performer_id=m.performer_id) ORDER BY v.published_at DESC").all();
-  const performers=(await db.prepare("SELECT id,name,official_url FROM performers WHERE status='active' ORDER BY name").all()).results;
+  const rows=await db.prepare("SELECT v.*,m.performer_id,m.status,m.source,c.name channel_name FROM videos v JOIN matches m ON v.id=m.video_id LEFT JOIN channels c ON c.id=v.channel_id JOIN performers p ON p.id=m.performer_id WHERE p.status='active' AND p.id='missioned-souls' AND v.available=1 AND m.status IN ('CONFIRMED','PROBABLE') AND NOT EXISTS (SELECT 1 FROM exclusions e WHERE e.video_id=v.id AND e.performer_id=m.performer_id) ORDER BY v.published_at DESC").all();
+  const performers=(await db.prepare("SELECT id,name,official_url FROM performers WHERE status='active' AND id='missioned-souls' ORDER BY name").all()).results;
   const activeIds=new Set(performers.map(p=>p.id));
   const snapshots=new Map(seed.videos.map(v=>[v.id,v]));
   const importedSnapshots=(await db.prepare("SELECT value FROM state WHERE key >= 'master-video-snapshot:' AND key < 'master-video-snapshot;'").all()).results;

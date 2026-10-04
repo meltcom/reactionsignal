@@ -23,6 +23,8 @@ export async function community(request,env,seed,user){
     const db=database(env);await seedDatabase(db,seed);
     const u=new URL(request.url),path=u.pathname.replace('/api/community','');
     if(!user)return json({error:'Sign in to participate.'},401);
+    if(path==='/coverage'||path==='/coverage/queue'){if(request.method==='GET')return json({items:[]});fail('Reaction Signal covers Missioned Souls only.',400);}
+    if(path==='/coverage/review')fail('Performer recommendations are closed.',400);
     const me=await db.prepare('SELECT name FROM members WHERE id=?').bind(user.id).first();
     if(request.method==='GET'){
       if(path==='/coverage'){

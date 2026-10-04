@@ -98,7 +98,7 @@ export async function processPushJobs(env,seed,fetcher=fetch){
  try{
   const jobs=(await db.prepare("SELECT * FROM push_jobs WHERE status='pending' AND next_attempt<=? ORDER BY received_at LIMIT 50").bind(now).all()).results;
   if(!jobs.length)return {status:'idle',added:0};
-  const performers=(await db.prepare('SELECT * FROM performers WHERE discovery_enabled=1').all()).results;
+  const performers=(await db.prepare('SELECT * FROM performers WHERE discovery_enabled=1 AND id=\'missioned-souls\'').all()).results;
   const api=new YouTube(env.YOUTUBE_API_KEY,fetcher);let items,failed=false;
   try{const response=await api.get('videos',{part:'snippet,contentDetails,status',id:jobs.map(j=>j.video_id).join(',')});items=new Map((response.items||[]).map(v=>[v.id,v]));}catch{failed=true;items=new Map();}
   for(const job of jobs){
