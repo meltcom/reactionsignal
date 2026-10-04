@@ -23,7 +23,7 @@ export async function authenticate(request,env,fetchUser=fetch){
     return {error:json({error:'Confirm your email before participating.'},403)};
   const email=profile.email.trim().toLowerCase();
   const allowlist=String(env.MEMBER_EMAIL_ALLOWLIST||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
-  if(allowlist.length&&!allowlist.includes(email))return {error:json({error:'Reaction Signal is currently limited to invited members.'},403)};
+  if(allowlist.length&&!allowlist.includes(email))return {error:json({error:'Reaction Journey is currently limited to invited members.'},403)};
   const moderators=String(env.COMMUNITY_MODERATOR_EMAILS||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
   return {user:{id:`supabase:${profile.id}`,email,moderator:moderators.includes(email)}};
 }

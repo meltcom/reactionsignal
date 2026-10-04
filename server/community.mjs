@@ -23,7 +23,7 @@ export async function community(request,env,seed,user){
     const db=database(env);await seedDatabase(db,seed);
     const u=new URL(request.url),path=u.pathname.replace('/api/community','');
     if(!user)return json({error:'Sign in to participate.'},401);
-    if(path==='/coverage'||path==='/coverage/queue'){if(request.method==='GET')return json({items:[]});fail('Reaction Signal covers Missioned Souls only.',400);}
+    if(path==='/coverage'||path==='/coverage/queue'){if(request.method==='GET')return json({items:[]});fail('Reaction Journey covers Missioned Souls only.',400);}
     if(path==='/coverage/review')fail('Performer recommendations are closed.',400);
     const me=await db.prepare('SELECT name FROM members WHERE id=?').bind(user.id).first();
     if(request.method==='GET'){
@@ -57,7 +57,7 @@ export async function community(request,env,seed,user){
       return json({error:'Not found'},404);
     }
     if(request.method!=='POST')return json({error:'Method not allowed'},405);
-    if(request.headers.get('Origin')!==u.origin || request.headers.get('Sec-Fetch-Site')==='cross-site')fail('Please submit from the Reaction Signal website.',403);
+    if(request.headers.get('Origin')!==u.origin || request.headers.get('Sec-Fetch-Site')==='cross-site')fail('Please submit from the Reaction Journey website.',403);
     if(!request.headers.get('Content-Type')?.startsWith('application/json'))fail('JSON required.',415);
     const raw=await request.text();if(raw.length>10000)fail('Submission too large.',413);
     let b;try{b=JSON.parse(raw);}catch{fail('Invalid submission.');}if(!b||typeof b!=='object')fail('Invalid submission.');

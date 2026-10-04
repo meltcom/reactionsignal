@@ -12,7 +12,7 @@ export async function managePerformers(request,env,seed,user){try{
  const url=new URL(request.url),path=url.pathname.replace('/api/performers','');
  const all=async(q,...v)=>(await db.prepare(q).bind(...v).all()).results;
  const first=async(q,...v)=>db.prepare(q).bind(...v).first();
- if(url.searchParams.has('id')&&url.searchParams.get('id')!=='missioned-souls')fail('Reaction Signal covers Missioned Souls only.',400);
+ if(url.searchParams.has('id')&&url.searchParams.get('id')!=='missioned-souls')fail('Reaction Journey covers Missioned Souls only.',400);
  if(request.method==='GET'){
   if(path==='/recheck')return json(await recheckStatus(db));
   if(path==='/notifications'){
@@ -41,10 +41,10 @@ export async function managePerformers(request,env,seed,user){try{
   fail('Not found.',404);
  }
  if(request.method!=='POST')fail('Method not allowed.',405);
- if(request.headers.get('Origin')!==url.origin||request.headers.get('Sec-Fetch-Site')==='cross-site')fail('Use the Reaction Signal website.',403);
+ if(request.headers.get('Origin')!==url.origin||request.headers.get('Sec-Fetch-Site')==='cross-site')fail('Use the Reaction Journey website.',403);
  if(!request.headers.get('Content-Type')?.startsWith('application/json'))fail('JSON required.',415);
  const raw=await request.text();if(raw.length>12000)fail('Request too large.',413);let b;try{b=JSON.parse(raw);}catch{fail('Invalid JSON.');}if(!b||typeof b!=='object'||Array.isArray(b))fail('Invalid request.');
- if((b.id&&b.id!=='missioned-souls')||(b.performerId&&b.performerId!=='missioned-souls')||(path==='/save'&&(!b.id||b.name!=='Missioned Souls')))fail('Reaction Signal covers Missioned Souls only.',400);
+ if((b.id&&b.id!=='missioned-souls')||(b.performerId&&b.performerId!=='missioned-souls')||(path==='/save'&&(!b.id||b.name!=='Missioned Souls')))fail('Reaction Journey covers Missioned Souls only.',400);
  const now=new Date().toISOString();
  if(path==='/recheck'){
   if(!['start','pause','batch','publish'].includes(b.action))fail('Choose a recheck action.');
