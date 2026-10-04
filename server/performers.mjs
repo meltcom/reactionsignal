@@ -14,13 +14,14 @@ export async function managePerformers(request,env,seed,user){try{
  const first=async(q,...v)=>db.prepare(q).bind(...v).first();
  if(url.searchParams.has('id')&&url.searchParams.get('id')!=='missioned-souls')fail('Reaction Journey covers Missioned Souls only.',400);
  if(request.method==='GET'){
+  if(path==='/shorts/recovery')return json({items:await all("SELECT v.id video_id,v.title,v.format,v.published_at,c.name channel_name,e.reason FROM exclusions e JOIN videos v ON v.id=e.video_id JOIN matches m ON m.video_id=v.id AND m.performer_id=e.performer_id LEFT JOIN channels c ON c.id=v.channel_id WHERE e.performer_id='missioned-souls' AND e.reason='Moderator marked as Short/excerpt' AND v.format='SHORT' AND v.available=1 AND m.status='REJECTED' ORDER BY v.published_at DESC,v.id LIMIT 100")});
   if(path==='/recheck')return json(await recheckStatus(db));
   if(path==='/notifications'){
    const counts=await first("SELECT COUNT(*) n FROM matches m JOIN videos v ON v.id=m.video_id JOIN performers p ON p.id=m.performer_id WHERE m.status='PENDING' AND p.status='active' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id)");
    const reports=await first("SELECT COUNT(*) n FROM contributions WHERE kind='flag' AND status='pending'");
    if(url.searchParams.get('summary')==='1')return json({count:counts.n,reports:reports.n});
    const group=url.searchParams.get('group')||'all';if(!['all','strong','shorts','unrelated','uncertain','protected','unprocessed'].includes(group))fail('Invalid review group.');
-   return json({count:counts.n,reports:reports.n,push:await pushStatus(db,env),items:await all(`SELECT m.performer_id,m.video_id,m.source,COALESCE(v.discovered_at,v.published_at) created_at,v.title,v.published_at,v.available,r.outcome review_group,r.reason review_reason,c.name channel_name,p.name performer_name,m.status match_status,0 excluded
+   return json({count:counts.n,reports:reports.n,push:await pushStatus(db,env),items:await all(`SELECT m.performer_id,m.video_id,m.source,COALESCE(v.discovered_at,v.published_at) created_at,v.title,v.published_at,v.format,v.available,r.outcome review_group,r.reason review_reason,c.name channel_name,p.name performer_name,m.status match_status,0 excluded
      FROM matches m JOIN videos v ON v.id=m.video_id JOIN performers p ON p.id=m.performer_id
      LEFT JOIN channels c ON c.id=v.channel_id LEFT JOIN review_previews r ON r.performer_id=m.performer_id AND r.video_id=m.video_id AND r.original_source=m.source AND r.original_title=v.title AND r.original_format=v.format AND r.aliases=p.aliases AND r.review_mode=p.review_mode AND r.checked_at>=strftime('%Y-%m-%dT%H:%M:%fZ','now','-24 hours') WHERE m.status='PENDING' AND p.status='active' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id) AND (?='all' OR COALESCE(r.outcome,'unprocessed')=?) ORDER BY COALESCE(v.discovered_at,v.published_at) DESC,m.video_id LIMIT 100`,group,group)});
   }
@@ -103,20 +104,20 @@ export async function managePerformers(request,env,seed,user){try{
   const result=await runDiscovery(env,seed,fetch,{performerId:id});
   return json({result,message:result.status==='blocked'?result.reason:result.status==='busy'?'Another discovery batch is running. Try again in two minutes.':result.detail||'Discovery batch finished. Review the results below.'});
  }
- if(path==='/mark-short'){
+ if(path==='/mark-short'||path==='/shorts/restore'){
   const id=text(b.id,1,100,'Performer');
   if(!Array.isArray(b.videos)||!b.videos.length||b.videos.length>50||b.videos.some(v=>typeof v!=='string'||!/^[-\w]{11}$/.test(v)))fail('Select 1–50 valid videos.');
   if(!await first('SELECT 1 FROM performers WHERE id=?',id))fail('Performer not found.',404);
-  const ops=[];
+  const ops=[],restore=path==='/shorts/restore';
   for(const video of [...new Set(b.videos)]){
-   ops.push(db.prepare("UPDATE videos SET format='SHORT' WHERE id=? AND EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?)").bind(video,id,video));
-   ops.push(db.prepare("INSERT OR IGNORE INTO exclusions(performer_id,video_id,reason) SELECT ?,?,'Moderator marked as Short/excerpt' WHERE EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?)").bind(id,video,id,video));
-   ops.push(db.prepare("UPDATE matches SET status='REJECTED' WHERE performer_id=? AND video_id=? AND status<>'REJECTED'").bind(id,video));
-   ops.push(db.prepare("UPDATE discovery_notifications SET status='removed',reviewed_at=?,reviewed_by=?,note='Moderator marked as Short/excerpt' WHERE performer_id=? AND video_id=?").bind(now,user.id,id,video));
+   if(restore){
+    ops.push(db.prepare("UPDATE matches SET status='CONFIRMED',source='Moderator-restored Short' WHERE performer_id=? AND video_id=? AND status='REJECTED' AND EXISTS(SELECT 1 FROM videos WHERE id=? AND format='SHORT' AND available=1) AND EXISTS(SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=? AND reason='Moderator marked as Short/excerpt')").bind(id,video,video,id,video));
+    ops.push(db.prepare("DELETE FROM exclusions WHERE performer_id=? AND video_id=? AND reason='Moderator marked as Short/excerpt' AND EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=? AND status='CONFIRMED' AND source='Moderator-restored Short')").bind(id,video,id,video));
+   }else ops.push(db.prepare("UPDATE videos SET format='SHORT',format_locked=1 WHERE id=? AND EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?)").bind(video,id,video));
   }
-  ops.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('performer-audit:'+crypto.randomUUID(),JSON.stringify({performerId:id,actor:user.id,at:now,action:'mark-short',videos:[...new Set(b.videos)]})));
-  const results=await db.batch(ops);const changed=results.slice(0,-1).reduce((n,r,i)=>n+(i%4===2?Number(r.meta?.changes||0):0),0);
-  return json({ok:true,message:`${changed} video${changed===1?'':'s'} marked as Short and excluded for this performer. Future discovery respects the exclusion.`});
+  ops.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('performer-audit:'+crypto.randomUUID(),JSON.stringify({performerId:id,actor:user.id,at:now,action:restore?'restore-short':'classify-short',videos:[...new Set(b.videos)]})));
+  const results=await db.batch(ops);const changed=results.slice(0,-1).reduce((n,r,i)=>n+(!restore||i%2===0?Number(r.meta?.changes||0):0),0);
+  return json({ok:true,message:restore?`${changed} Shorts restored and approved. Other exclusions remain unchanged.`:`${changed} videos classified as Short. Publication status unchanged; approve pending matches separately.`});
  }
  if(path==='/review'){
   const id=text(b.id,1,100,'Performer');if(!Array.isArray(b.videos)||!b.videos.length||b.videos.length>50||b.videos.some(v=>typeof v!=='string'||!/^[-\w]{11}$/.test(v)))fail('Select 1–50 valid videos.');
