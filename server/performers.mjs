@@ -104,6 +104,14 @@ export async function managePerformers(request,env,seed,user){try{
   const result=await runDiscovery(env,seed,fetch,{performerId:id});
   return json({result,message:result.status==='blocked'?result.reason:result.status==='busy'?'Another discovery batch is running. Try again in two minutes.':result.detail||'Discovery batch finished. Review the results below.'});
  }
+ if(path==='/format'){
+  const video=text(b.videoId,11,11,'Video');if(!/^[\w-]{11}$/.test(video)||!['SHORT','FULL_LENGTH','UNKNOWN'].includes(b.format))fail('Choose Short, Full-length, or Unknown.');
+  const prior=await first("SELECT v.format FROM videos v JOIN matches m ON m.video_id=v.id WHERE v.id=? AND m.performer_id='missioned-souls'",video);if(!prior)fail('Video not found.',404);
+  await db.batch([
+   db.prepare("UPDATE videos SET format=?,format_locked=1 WHERE id=?").bind(b.format,video),
+   db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('performer-audit:'+crypto.randomUUID(),JSON.stringify({performerId:'missioned-souls',actor:user.id,at:now,action:'change-format',videoId:video,from:prior.format,to:b.format}))
+  ]);return json({ok:true,message:'Video format updated. Approval and exclusions are unchanged.'});
+ }
  if(path==='/mark-short'||path==='/shorts/restore'){
   const id=text(b.id,1,100,'Performer');
   if(!Array.isArray(b.videos)||!b.videos.length||b.videos.length>50||b.videos.some(v=>typeof v!=='string'||!/^[-\w]{11}$/.test(v)))fail('Select 1–50 valid videos.');

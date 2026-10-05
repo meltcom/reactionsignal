@@ -31,7 +31,7 @@ export async function importDiscoveryRun(db,run) {
   for(const c of run.channels) statements.push(db.prepare('INSERT INTO channels(id,name) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name').bind(c.id,c.name));
   for(const v of run.videos) {
     statements.push(db.prepare('INSERT INTO channels(id,name) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name').bind(v.channelId,v.channelName));
-    statements.push(db.prepare('INSERT INTO videos(id,channel_id,title,published_at,discovered_at,format) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET channel_id=excluded.channel_id,title=excluded.title,published_at=excluded.published_at,discovered_at=COALESCE(videos.discovered_at,excluded.discovered_at),format=excluded.format').bind(v.id,v.channelId,v.title,v.publishedAt,run.startedAt,v.format));
+    statements.push(db.prepare('INSERT INTO videos(id,channel_id,title,published_at,discovered_at,format) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET channel_id=excluded.channel_id,title=excluded.title,published_at=excluded.published_at,discovered_at=COALESCE(videos.discovered_at,excluded.discovered_at),format=CASE WHEN videos.format_locked=1 THEN videos.format ELSE excluded.format END').bind(v.id,v.channelId,v.title,v.publishedAt,run.startedAt,v.format));
     statements.push(db.prepare('INSERT INTO matches(performer_id,video_id,status,source) VALUES(?,?,?,?) ON CONFLICT(performer_id,video_id) DO UPDATE SET status=excluded.status,source=excluded.source').bind('missioned-souls',v.id,v.confidence,`v3.3.1 import ${run.id}`));
   }
   await batches(db,statements);
