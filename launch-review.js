@@ -2,7 +2,7 @@ let classificationOffset=0,memberOffset=0;
 async function loadLaunchReview(){
  if(!communityState?.moderator)return;
  let panel=$('launchReview');
- if(!panel){panel=document.createElement('div');panel.id='launchReview';panel.className='panel';$('review').prepend(panel);
+ if(!panel){panel=document.createElement('div');panel.id='launchReview';panel.className='panel';$('member-review').append(panel);
  panel.innerHTML='<h2>Member review</h2><p>Novice: fewer than 25 points. Contributor: 25 points. Higher existing badges continue at 100, 250 and 1,000 points. Mutes stop posting for 24 hours and allow browsing.</p><label>Search names or email <input id="memberSearch" maxlength="100"></label><button id="memberRefresh" class="outline-button">Search / refresh</button><div id="memberItems"></div><button id="memberPrevious" class="outline-button">Previous 100</button><button id="memberNext" class="outline-button">Next 100</button><p id="memberReviewStatus" role="status"></p>';
  $('memberRefresh').onclick=()=>{memberOffset=0;loadMembers();};
  $('memberPrevious').onclick=()=>{memberOffset=Math.max(0,memberOffset-100);loadMembers();};
@@ -39,4 +39,4 @@ async function loadMembers(){try{
  $('memberPrevious').disabled=memberOffset===0;$('memberNext').disabled=!r.hasMore;
  $('memberItems').querySelectorAll('form').forEach(f=>f.onsubmit=async e=>{e.preventDefault();const b=f.querySelector('button');b.disabled=true;try{const r=await communityApi('/users/update',{id:f.dataset.member,action:f.elements.action.value,name:f.elements.name.value,amount:Number(f.elements.amount.value),note:f.elements.note.value});$('memberReviewStatus').textContent=r.message;await loadMembers();await loadCommunity();}catch(err){f.querySelector('[role=status]').textContent=err.message;}finally{b.disabled=false;}});
  }catch(e){$('memberReviewStatus').textContent=e.message;}}
-window.addEventListener('reaction-auth-change',()=>{$('launchReview')?.remove();$('classificationReviewPanel')?.remove();$('classificationReviewNav').hidden=true;});
+window.addEventListener('reaction-auth-change',()=>{$('launchReview')?.remove();$('classificationReviewPanel')?.remove();$('classificationReviewNav').hidden=true;$('moderatorNavSection').hidden=true;});
