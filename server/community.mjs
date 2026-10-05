@@ -10,7 +10,7 @@ export function youtubeId(input){
     return /^[\w-]{11}$/.test(id||'')?id:null;
   }catch{return null;}
 }
-export const tier=points=>points>=1000?'Community champion':points>=250?'Catalog curator':points>=100?'Reaction scout':points>=25?'Contributor':'New member';
+export const tier=points=>points>=1000?'Community champion':points>=250?'Catalog curator':points>=100?'Reaction scout':points>=25?'Contributor':'Novice';
 function award(db,id,user,kind,amount,cap,now,guard='1',args=[]){
   return db.prepare(`INSERT OR IGNORE INTO points(id,user_id,kind,amount,created_at)
     SELECT ?,?,?,?,? WHERE (${guard}) AND (SELECT COUNT(*) FROM points WHERE user_id=? AND kind=? AND amount>0 AND created_at>=?)<?`)
@@ -20,11 +20,15 @@ const pending='EXISTS(SELECT 1 FROM contributions WHERE id=? AND status=\'pendin
 async function known(db,performer,video){if(!await db.prepare("SELECT 1 FROM matches m JOIN videos v ON v.id=m.video_id WHERE m.performer_id=? AND m.video_id=? AND m.status='CONFIRMED' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id)").bind(performer,video).first())fail('This video is not currently in the confirmed catalog.',404);}
 export async function community(request,env,seed,user){
   try {
+    if(!user)return json({error:'Sign in to participate.'},401);
+    if(new URL(request.url).pathname.startsWith('/api/community/users')&&!user.moderator)return json({error:'Moderator access required.'},403);
+    if(new URL(request.url).pathname==='/api/community/contact/inbox'&&!user.moderator)return json({error:'Moderator access required.'},403);
     const db=database(env);await seedDatabase(db,seed);
     const u=new URL(request.url),path=u.pathname.replace('/api/community','');
     if(!user)return json({error:'Sign in to participate.'},401);
     if(path==='/coverage'||path==='/coverage/queue'){if(request.method==='GET')return json({items:[]});fail('Reaction Journey covers Missioned Souls only.',400);}
     if(path==='/coverage/review')fail('Performer recommendations are closed.',400);
+    if(path==='/summary'&&request.method==='GET')await db.prepare("INSERT INTO members(id,name,created_at,email,last_seen_at) VALUES(?,'',?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email,last_seen_at=excluded.last_seen_at WHERE members.last_seen_at IS NULL OR members.last_seen_at<? OR members.email IS NOT excluded.email").bind(user.id,new Date().toISOString(),user.email||null,new Date().toISOString(),new Date(Date.now()-3600000).toISOString()).run();
     const me=await db.prepare('SELECT name FROM members WHERE id=?').bind(user.id).first();
     if(request.method==='GET'){
       if(path==='/coverage'){
@@ -35,6 +39,23 @@ export async function community(request,env,seed,user){
         if(!user.moderator)fail('Moderator access required.',403);
         const rows=await db.prepare("SELECT c.*,m.name member_name FROM coverage_requests c JOIN members m ON m.id=c.user_id ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at DESC LIMIT 100").all();
         return json({items:rows.results});
+      }
+      if(path==='/contact'||path==='/contact/inbox'){
+        const offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0));
+        const rows=await db.prepare("SELECT t.id,t.subject,t.category,t.status,t.created_at,t.updated_at,m.name FROM contact_tickets t LEFT JOIN members m ON m.id=t.user_id "+(path==='/contact'?"WHERE t.user_id=? ":"")+"ORDER BY t.updated_at DESC,t.id LIMIT 51 OFFSET ?").bind(...(path==='/contact'?[user.id,offset]:[offset])).all();
+        return json({items:rows.results.slice(0,50),hasMore:rows.results.length>50});
+      }
+      if(path==='/contact/thread'){
+        const ticket=await db.prepare('SELECT * FROM contact_tickets WHERE id=?').bind(u.searchParams.get('id')).first();
+        if(!ticket||!user.moderator&&ticket.user_id!==user.id)fail('Request not found.',404);
+        const messages=await db.prepare('SELECT body,moderator,created_at FROM contact_messages WHERE ticket_id=? ORDER BY created_at,id').bind(ticket.id).all();
+        return json({ticket,messages:messages.results});
+      }
+      if(path==='/users'){
+        const offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0)),q=(u.searchParams.get('q')||'').slice(0,100);
+        const rows=await db.prepare("SELECT m.id,m.name,m.email,m.created_at,m.last_seen_at,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points,(SELECT until FROM mutes WHERE user_id=m.id) muted_until FROM members m WHERE instr(lower(m.name||' '||COALESCE(m.email,'')),lower(?))>0 ORDER BY m.created_at DESC,m.id LIMIT 101 OFFSET ?").bind(q,offset).all();
+        const moderators=String(env.COMMUNITY_MODERATOR_EMAILS||'').toLowerCase().split(',').map(x=>x.trim());
+        return json({items:rows.results.slice(0,100).map(m=>({...m,tier:tier(m.points),moderator:moderators.includes(m.email?.toLowerCase())})),hasMore:rows.results.length>100,offset});
       }
       if(path==='/summary'){
         const totals=await db.prepare('SELECT COALESCE(SUM(amount),0) total FROM points WHERE user_id=?').bind(user.id).first();
@@ -62,11 +83,55 @@ export async function community(request,env,seed,user){
     const raw=await request.text();if(raw.length>10000)fail('Submission too large.',413);
     let b;try{b=JSON.parse(raw);}catch{fail('Invalid submission.');}if(!b||typeof b!=='object')fail('Invalid submission.');
     const now=new Date().toISOString();
+    if(path==='/contact'){
+      const subject=text(b.subject,3,120,'Subject'),body=text(b.body,10,4000,'Message');
+      if(!['question','bug','account','other'].includes(b.category))fail('Choose a category.');
+      const id=crypto.randomUUID();
+      // The member row is needed for the ticket foreign key, even before a profile is saved.
+      await db.prepare("INSERT OR IGNORE INTO members(id,name,created_at,email,last_seen_at) VALUES(?,'',?,?,?)").bind(user.id,now,user.email||null,now).run();
+      const r=await db.batch([
+       db.prepare("INSERT INTO contact_tickets(id,user_id,subject,category,status,created_at,updated_at) SELECT ?,?,?,?,'open',?,? WHERE (SELECT COUNT(*) FROM contact_tickets WHERE user_id=? AND created_at>=?)<5").bind(id,user.id,subject,b.category,now,now,user.id,now.slice(0,10)),
+       db.prepare('INSERT INTO contact_messages(id,ticket_id,user_id,moderator,body,created_at) SELECT ?,?,?,0,?,? WHERE EXISTS(SELECT 1 FROM contact_tickets WHERE id=?)').bind(crypto.randomUUID(),id,user.id,body,now,id)
+      ]);
+      if(!r[0].meta?.changes)fail('You can submit up to five new requests per day.',429);
+      return json({ok:true,id,message:'Request sent. Check Contact for replies.'});
+    }
+    if(path==='/contact/reply'||path==='/contact/status'){
+      if(path==='/contact/status'&&!user.moderator)fail('Moderator access required.',403);
+      const id=text(b.id,1,100,'Request ID'),t=await db.prepare('SELECT * FROM contact_tickets WHERE id=?').bind(id).first();
+      if(!t||!user.moderator&&t.user_id!==user.id)fail('Request not found.',404);
+      if(path==='/contact/status'){
+       if(!['open','closed'].includes(b.status))fail('Choose Open or Closed.');
+       await db.batch([db.prepare('UPDATE contact_tickets SET status=?,updated_at=? WHERE id=?').bind(b.status,now,id),db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('contact-audit:'+crypto.randomUUID(),JSON.stringify({actor:user.id,ticket:id,status:b.status,at:now}))]);
+      }else{
+       const body=text(b.body,2,4000,'Reply');
+       const r=await db.batch([
+        db.prepare('INSERT INTO contact_messages(id,ticket_id,user_id,moderator,body,created_at) SELECT ?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM contact_messages WHERE user_id=? AND created_at>=?)<50').bind(crypto.randomUUID(),id,user.id,Number(user.moderator),body,now,user.id,now.slice(0,10)),
+        db.prepare("UPDATE contact_tickets SET status='open',updated_at=? WHERE id=? AND EXISTS(SELECT 1 FROM contact_messages WHERE ticket_id=? AND user_id=? AND created_at=?)").bind(now,id,id,user.id,now)
+       ]);if(!r[0].meta?.changes)fail('Daily reply limit reached.',429);
+      }return json({ok:true,message:'Request updated.'});
+    }
+    if(path==='/users/update'){
+      const id=text(b.id,1,100,'Member ID'),note=text(b.note,5,500,'Reason');
+      if(!await db.prepare('SELECT 1 FROM members WHERE id=?').bind(id).first())fail('Member not found.',404);
+      const ops=[];
+      if(b.action==='name')ops.push(db.prepare('UPDATE members SET name=? WHERE id=?').bind(text(b.name,2,40,'Display name'),id));
+      else if(b.action==='points'){
+        if(!Number.isInteger(b.amount)||b.amount===0||Math.abs(b.amount)>1000)fail('Choose a nonzero adjustment from -1000 to 1000.');
+        ops.push(db.prepare('INSERT INTO points(id,user_id,kind,amount,created_at) VALUES(?,?,?,?,?)').bind('moderator-adjustment:'+crypto.randomUUID(),id,'Moderator adjustment: '+note,b.amount,now));
+      }else if(b.action==='mute'){
+        if(id===user.id)fail('Choose another member.');
+        ops.push(db.prepare('INSERT INTO mutes(user_id,until,reason) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET until=excluded.until,reason=excluded.reason').bind(id,new Date(Date.now()+86400000).toISOString(),note));
+      }else if(b.action==='unmute')ops.push(db.prepare('DELETE FROM mutes WHERE user_id=?').bind(id));
+      else fail('Choose a valid member action.');
+      ops.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('member-audit:'+crypto.randomUUID(),JSON.stringify({actor:user.id,member:id,action:b.action,amount:b.amount,name:b.name,note,at:now})));
+      await db.batch(ops);return json({ok:true,message:'Member updated. Badge follows the current point total.'});
+    }
     if(path==='/profile'){
       const name=text(b.name,2,40,'Display name');
       await db.prepare('INSERT INTO members(id,name,created_at) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name').bind(user.id,name,now).run();return json({ok:true});
     }
-    if(!me)fail('Save a community display name first.',409);
+    if(!me?.name)fail('Save a community display name first.',409);
     if(path==='/coverage'){
       if(await db.prepare('SELECT 1 FROM mutes WHERE user_id=? AND until>?').bind(user.id,now).first())fail('Posting is temporarily muted.',403);
       const name=text(b.name,2,100,'Band or performer name');

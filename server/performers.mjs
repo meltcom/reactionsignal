@@ -14,6 +14,12 @@ export async function managePerformers(request,env,seed,user){try{
  const first=async(q,...v)=>db.prepare(q).bind(...v).first();
  if(url.searchParams.has('id')&&url.searchParams.get('id')!=='missioned-souls')fail('Reaction Journey covers Missioned Souls only.',400);
  if(request.method==='GET'){
+  if(path==='/classification'){
+   const group=url.searchParams.get('group');if(!['unknown','probable'].includes(group))fail('Choose Unknown or Probable.');
+   const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
+   const items=await all("SELECT v.id,v.title,v.format,v.published_at,c.name channel_name,m.status FROM videos v JOIN matches m ON m.video_id=v.id LEFT JOIN channels c ON c.id=v.channel_id WHERE m.performer_id='missioned-souls' AND m.status IN ('CONFIRMED','PROBABLE','PENDING') AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.video_id=v.id AND e.performer_id=m.performer_id) AND "+(group==='unknown'?"v.format='UNKNOWN'":"m.status='PROBABLE'")+" ORDER BY v.id LIMIT 51 OFFSET ?",offset);
+   return json({items:items.slice(0,50),hasMore:items.length>50,offset});
+  }
   if(path==='/shorts/recovery')return json({items:await all("SELECT v.id video_id,v.title,v.format,v.published_at,c.name channel_name,e.reason FROM exclusions e JOIN videos v ON v.id=e.video_id JOIN matches m ON m.video_id=v.id AND m.performer_id=e.performer_id LEFT JOIN channels c ON c.id=v.channel_id WHERE e.performer_id='missioned-souls' AND e.reason='Moderator marked as Short/excerpt' AND v.format='SHORT' AND v.available=1 AND m.status='REJECTED' ORDER BY v.published_at DESC,v.id LIMIT 100")});
   if(path==='/recheck')return json(await recheckStatus(db));
   if(path==='/notifications'){
@@ -103,6 +109,17 @@ export async function managePerformers(request,env,seed,user){try{
   const id=text(b.id,1,100,'Performer');const p=await first('SELECT * FROM performers WHERE id=?',id);if(!p)fail('Performer not found.',404);if(!p.discovery_enabled)fail('Enable discovery for this performer first.');
   const result=await runDiscovery(env,seed,fetch,{performerId:id});
   return json({result,message:result.status==='blocked'?result.reason:result.status==='busy'?'Another discovery batch is running. Try again in two minutes.':result.detail||'Discovery batch finished. Review the results below.'});
+ }
+ if(path==='/classification/confirm'){
+  const video=text(b.videoId,11,11,'Video');if(!/^[\w-]{11}$/.test(video))fail('Invalid video ID.');
+  const prior=await first("SELECT v.format,m.status FROM videos v JOIN matches m ON m.video_id=v.id WHERE v.id=? AND m.performer_id='missioned-souls' AND v.available=1 AND m.status IN ('PENDING','PROBABLE','CONFIRMED') AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.video_id=v.id AND e.performer_id=m.performer_id)",video);
+  if(!prior)fail('Video unavailable or excluded.',409);
+  if(!['SHORT','FULL_LENGTH','UNKNOWN'].includes(b.format)||prior.format==='UNKNOWN'&&b.format==='UNKNOWN')fail('Choose Short or Full-length for an Unknown video.');
+  await db.batch([
+   db.prepare("UPDATE videos SET format=?,format_locked=1 WHERE id=? AND available=1 AND EXISTS(SELECT 1 FROM matches m WHERE m.video_id=videos.id AND m.performer_id='missioned-souls' AND m.status IN ('PENDING','PROBABLE','CONFIRMED') AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.video_id=m.video_id AND e.performer_id=m.performer_id))").bind(b.format,video),
+   db.prepare("UPDATE matches SET status='CONFIRMED',source='Moderator-confirmed classification' WHERE video_id=? AND performer_id='missioned-souls' AND status IN ('PENDING','PROBABLE','CONFIRMED') AND EXISTS(SELECT 1 FROM videos WHERE id=? AND available=1) AND NOT EXISTS(SELECT 1 FROM exclusions WHERE video_id=? AND performer_id='missioned-souls')").bind(video,video,video),
+   db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('performer-audit:'+crypto.randomUUID(),JSON.stringify({actor:user.id,action:'confirm-classification',videoId:video,from:prior,format:b.format,at:now}))
+  ]);return json({ok:true,message:'Reaction confirmed and format saved.'});
  }
  if(path==='/format'){
   const video=text(b.videoId,11,11,'Video');if(!/^[\w-]{11}$/.test(video)||!['SHORT','FULL_LENGTH','UNKNOWN'].includes(b.format))fail('Choose Short, Full-length, or Unknown.');
