@@ -85,7 +85,9 @@ export async function community(request,env,seed,user){
       }
       if(path==='/queue'){
         if(!user.moderator)fail('Moderator access required.',403);
-        const rows=await db.prepare("SELECT c.*,m.name FROM contributions c JOIN members m ON m.id=c.user_id WHERE c.status='pending' OR (c.kind='comment' AND c.status='accepted') ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at ASC LIMIT 100").all();return json({items:rows.results});
+        const kind=u.searchParams.get('kind')||'all',offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0));
+        if(!['all','submission','comment','flag'].includes(kind))fail('Invalid review category.');
+        const rows=await db.prepare("SELECT c.*,m.name FROM contributions c JOIN members m ON m.id=c.user_id WHERE (c.status='pending' OR (c.kind='comment' AND c.status='accepted')) "+(kind!=='all'?"AND c.kind=? ":"")+"ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at ASC,c.id LIMIT 51 OFFSET ?").bind(...(kind!=='all'?[kind,offset]:[offset])).all();return json({items:rows.results.slice(0,50),hasMore:rows.results.length>50});
       }
       return json({error:'Not found'},404);
     }
