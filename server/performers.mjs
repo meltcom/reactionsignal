@@ -14,6 +14,11 @@ export async function managePerformers(request,env,seed,user){try{
  const first=async(q,...v)=>db.prepare(q).bind(...v).first();
  if(url.searchParams.has('id')&&url.searchParams.get('id')!=='missioned-souls')fail('Reaction Journey covers Missioned Souls only.',400);
  if(request.method==='GET'){
+  if(path==='/channels'){
+   const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0)),q=(url.searchParams.get('q')||'').slice(0,100),unavailable=url.searchParams.get('unavailable')==='1';
+   const items=await all("SELECT id,name,discovery_scope,recent_failures,recent_retry_at,recent_error,recent_checked_at FROM channels WHERE instr(lower(name||' '||id),lower(?))>0 "+(unavailable?"AND recent_failures>0 ":"")+"ORDER BY name,id LIMIT 51 OFFSET ?",q,offset);
+   return json({items:items.slice(0,50),hasMore:items.length>50});
+  }
   if(path==='/classification'){
    const group=url.searchParams.get('group');if(!['unknown','probable'].includes(group))fail('Choose Unknown or Probable.');
    const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
@@ -109,6 +114,24 @@ export async function managePerformers(request,env,seed,user){try{
   const id=text(b.id,1,100,'Performer');const p=await first('SELECT * FROM performers WHERE id=?',id);if(!p)fail('Performer not found.',404);if(!p.discovery_enabled)fail('Enable discovery for this performer first.');
   const result=await runDiscovery(env,seed,fetch,{performerId:id});
   return json({result,message:result.status==='blocked'?result.reason:result.status==='busy'?'Another discovery batch is running. Try again in two minutes.':result.detail||'Discovery batch finished. Review the results below.'});
+ }
+ if(path==='/channels/save'||path==='/channels/retry'){
+  const channel=text(b.channelId,24,200,'Channel ID or URL');
+  let id=channel;
+  if(channel.startsWith('https://')){let u;try{u=new URL(channel);}catch{fail('Invalid channel URL.');}if(!['youtube.com','www.youtube.com','m.youtube.com'].includes(u.hostname)||u.username||u.password||u.port)fail('Use a YouTube channel URL.');id=u.pathname.match(/^\/channel\/(UC[\w-]{22})\/?$/)?.[1];}
+  if(!/^UC[\w-]{22}$/.test(id||''))fail('Use the channel ID (UC plus 22 characters) or its youtube.com/channel/UC… URL. Handles must be resolved to a channel ID first.');
+  const prior=await first('SELECT * FROM channels WHERE id=?',id),note=text(b.note,5,500,'Reason');
+  const ops=[];
+  if(path==='/channels/retry'){
+   if(!prior||prior.discovery_scope!=='eligible')fail('Activate this channel before requesting a retry.');
+   ops.push(db.prepare('UPDATE channels SET recent_retry_at=NULL,recent_attempted_at=NULL,recent_checked_at=NULL,uploads=NULL WHERE id=?').bind(id));
+  }else{
+   const name=text(b.name,2,100,'Channel name');if(!['eligible','paused','retired','official','review','other'].includes(b.status))fail('Choose a valid channel status.');
+   ops.push(db.prepare('INSERT INTO channels(id,name,discovery_scope,scope_locked) VALUES(?,?,?,1) ON CONFLICT(id) DO UPDATE SET name=excluded.name,discovery_scope=excluded.discovery_scope,scope_locked=1').bind(id,name,b.status));
+   if(b.status==='eligible'&&prior?.discovery_scope!=='eligible')ops.push(db.prepare('UPDATE channels SET recent_retry_at=NULL,recent_attempted_at=NULL,recent_checked_at=NULL WHERE id=?').bind(id));
+  }
+  ops.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('channel-audit:'+crypto.randomUUID(),JSON.stringify({channelId:id,actor:user.id,at:now,action:path==='/channels/retry'?'retry':'save',before:prior?{name:prior.name,status:prior.discovery_scope}:null,name:b.name,status:b.status,note})));
+  await db.batch(ops);return json({ok:true,message:path==='/channels/retry'?'Retry queued for a scheduled discovery run.':'Channel saved. Only Active reactor channels receive routine discovery checks.'});
  }
  if(path==='/classification/confirm'){
   const video=text(b.videoId,11,11,'Video');if(!/^[\w-]{11}$/.test(video))fail('Invalid video ID.');

@@ -187,7 +187,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
     }
     // Refresh a bounded oldest-first batch, including items no longer publicly available.
     if(!options.performerId&&api.calls<27&&Date.now()<api.deadline-4000){
-      const stale=(await db.prepare('SELECT v.id FROM videos v WHERE (v.checked_at IS NULL OR v.checked_at<?) AND EXISTS(SELECT 1 FROM matches m WHERE m.video_id=v.id AND m.performer_id=\'missioned-souls\') ORDER BY v.checked_at ASC LIMIT 50').bind(new Date(Date.now()-7*86400000).toISOString()).all()).results;
+      const stale=(await db.prepare('SELECT id FROM (SELECT id,checked_at FROM (SELECT v.id,v.checked_at FROM videos v INDEXED BY journey_videos_checked_id WHERE v.checked_at IS NULL AND EXISTS(SELECT 1 FROM matches m WHERE m.video_id=v.id AND m.performer_id=\'missioned-souls\') ORDER BY v.id LIMIT 50) UNION ALL SELECT id,checked_at FROM (SELECT v.id,v.checked_at FROM videos v INDEXED BY journey_videos_checked_id WHERE v.checked_at<? AND EXISTS(SELECT 1 FROM matches m WHERE m.video_id=v.id AND m.performer_id=\'missioned-souls\') ORDER BY v.checked_at,v.id LIMIT 50)) ORDER BY checked_at,id LIMIT 50').bind(new Date(Date.now()-7*86400000).toISOString()).all()).results;
       if(stale.length){const result=await api.get('videos',{part:'snippet,status',id:stale.map(v=>v.id).join(',')});const found=new Map((result.items||[]).map(v=>[v.id,v]));
         await db.batch(stale.map(v=>{const fresh=found.get(v.id);return fresh?.status?.privacyStatus==='public'?db.prepare('UPDATE videos SET title=?,checked_at=?,available=1 WHERE id=?').bind(fresh.snippet.title,now,v.id):db.prepare('UPDATE videos SET checked_at=?,available=0 WHERE id=?').bind(now,v.id);}));}
     }
