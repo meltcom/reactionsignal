@@ -25,3 +25,5 @@ body.signed-out{background:var(--paper);margin:0}
 
 /* Display the complete supplied logo, including its wordmark. */
 .site-logo{display:block;max-width:100%;height:auto;object-fit:contain;background:#fff;border-radius:8px}.sidebar .brand{display:block}.sidebar-logo{width:200px;margin:0 auto}.welcome-brand{display:block}.welcome-logo{width:100%;max-width:360px;margin:0 auto}.welcome-card h1{margin-top:24px}@media(max-width:760px){.sidebar-logo{width:180px;margin:0}.sidebar #moderatorNavSection:not([hidden]){display:flex;gap:6px;flex-shrink:0}}
+
+.reactor-manager td{vertical-align:middle}.reactor-manager form{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.reactor-manager input{width:76px;padding:8px}.reactor-manager form p{flex-basis:100%;margin:0}.reactor-manager th{white-space:nowrap}#reactorGrid>.panel{margin-top:24px}
