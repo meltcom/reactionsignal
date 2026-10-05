@@ -52,6 +52,9 @@ export async function community(request,env,seed,user){
         const rows=await db.prepare("SELECT c.*,m.name member_name FROM coverage_requests c JOIN members m ON m.id=c.user_id ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at DESC LIMIT 100").all();
         return json({items:rows.results});
       }
+      if(path==='/reactor-requests'){
+        const rows=await db.prepare('SELECT id,kind,channel_id,channel_name,body,status,created_at,review_note FROM reactor_requests WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(user.id).all();return json({items:rows.results});
+      }
       if(path==='/submission/metadata'){
         if(!user.moderator)fail('Moderator access required.',403);
         const c=await db.prepare("SELECT video_id FROM contributions WHERE id=? AND kind='submission' AND status='pending'").bind(u.searchParams.get('id')).first();if(!c)fail('Submission not available.',404);
@@ -113,6 +116,20 @@ export async function community(request,env,seed,user){
     const raw=await request.text();if(raw.length>10000)fail('Submission too large.',413);
     let b;try{b=JSON.parse(raw);}catch{fail('Invalid submission.');}if(!b||typeof b!=='object')fail('Invalid submission.');
     const now=new Date().toISOString();
+    if(path==='/reactor-requests'){
+      if(!['add','remove'].includes(b.kind))fail('Choose Add or Remove.');
+      const raw=text(b.channelId,24,200,'Channel ID or URL');let id=raw;
+      if(raw.startsWith('https://')){let link;try{link=new URL(raw);}catch{fail('Invalid channel URL.');}if(!['youtube.com','www.youtube.com','m.youtube.com'].includes(link.hostname)||link.username||link.password||link.port)fail('Use a direct YouTube channel URL.');id=link.pathname.match(/^\/channel\/(UC[\w-]{22})\/?$/)?.[1];}
+      if(!/^UC[\w-]{22}$/.test(id||''))fail('Use a UC channel ID or a direct youtube.com/channel/UC… URL.');
+      const existing=await db.prepare('SELECT name,discovery_scope FROM channels WHERE id=?').bind(id).first();
+      if(b.kind==='remove'&&!existing)fail('Choose a listed reactor.',404);
+      if(b.kind==='add'&&existing?.discovery_scope==='eligible')fail('This reactor is already active. Search its name or unhide it.',409);
+      const name=b.kind==='remove'?existing.name:text(b.name,2,100,'Channel name'),body=text(b.body,10,1000,'Explanation');
+      if(await db.prepare("SELECT 1 FROM reactor_requests WHERE user_id=? AND kind=? AND channel_id=? AND status='pending'").bind(user.id,b.kind,id).first())fail('Your request for this channel is already awaiting review.',409);
+      const r=await db.prepare("INSERT INTO reactor_requests(id,user_id,kind,channel_id,channel_name,body,created_at) SELECT ?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM reactor_requests WHERE user_id=? AND created_at>=?)<5").bind(crypto.randomUUID(),user.id,b.kind,id,name,body,now,user.id,now.slice(0,10)).run();
+      if(!r.meta?.changes)fail('You can send up to five reactor requests per day.',429);
+      return json({ok:true,message:'Request sent to moderators. No channel changes until review.'});
+    }
     if(path==='/presence'){
       await db.prepare("INSERT INTO members(id,name,created_at,email,active_at) VALUES(?,'',?,?,?) ON CONFLICT(id) DO UPDATE SET active_at=excluded.active_at WHERE members.active_at IS NULL OR members.active_at<?").bind(user.id,now,user.email||null,now,new Date(Date.now()-90000).toISOString()).run();
       return json({ok:true});

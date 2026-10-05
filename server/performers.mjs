@@ -14,6 +14,11 @@ export async function managePerformers(request,env,seed,user){try{
  const first=async(q,...v)=>db.prepare(q).bind(...v).first();
  if(url.searchParams.has('id')&&url.searchParams.get('id')!=='missioned-souls')fail('Reaction Journey covers Missioned Souls only.',400);
  if(request.method==='GET'){
+  if(path==='/channels/requests'){
+   const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
+   const rows=await all("SELECT r.*,m.name member_name FROM reactor_requests r LEFT JOIN members m ON m.id=r.user_id WHERE r.status='pending' ORDER BY r.created_at,r.id LIMIT 51 OFFSET ?",offset);
+   return json({items:rows.slice(0,50),hasMore:rows.length>50});
+  }
   if(path==='/channels'){
    const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0)),q=(url.searchParams.get('q')||'').slice(0,100),unavailable=url.searchParams.get('unavailable')==='1';
    const items=await all("SELECT id,name,discovery_scope,recent_failures,recent_retry_at,recent_error,recent_checked_at FROM channels WHERE instr(lower(name||' '||id),lower(?))>0 "+(unavailable?"AND recent_failures>0 ":"")+"ORDER BY name,id LIMIT 51 OFFSET ?",q,offset);
@@ -56,7 +61,7 @@ export async function managePerformers(request,env,seed,user){try{
  if(request.headers.get('Origin')!==url.origin||request.headers.get('Sec-Fetch-Site')==='cross-site')fail('Use the Reaction Journey website.',403);
  if(!request.headers.get('Content-Type')?.startsWith('application/json'))fail('JSON required.',415);
  const raw=await request.text();if(raw.length>12000)fail('Request too large.',413);let b;try{b=JSON.parse(raw);}catch{fail('Invalid JSON.');}if(!b||typeof b!=='object'||Array.isArray(b))fail('Invalid request.');
- if((b.id&&b.id!=='missioned-souls')||(b.performerId&&b.performerId!=='missioned-souls')||(path==='/save'&&(!b.id||b.name!=='Missioned Souls')))fail('Reaction Journey covers Missioned Souls only.',400);
+ if((b.id&&b.id!=='missioned-souls'&&path!=='/channels/requests/review')||(b.performerId&&b.performerId!=='missioned-souls')||(path==='/save'&&(!b.id||b.name!=='Missioned Souls')))fail('Reaction Journey covers Missioned Souls only.',400);
  const now=new Date().toISOString();
  if(path==='/recheck'){
   if(!['start','pause','batch','publish'].includes(b.action))fail('Choose a recheck action.');
@@ -114,6 +119,22 @@ export async function managePerformers(request,env,seed,user){try{
   const id=text(b.id,1,100,'Performer');const p=await first('SELECT * FROM performers WHERE id=?',id);if(!p)fail('Performer not found.',404);if(!p.discovery_enabled)fail('Enable discovery for this performer first.');
   const result=await runDiscovery(env,seed,fetch,{performerId:id});
   return json({result,message:result.status==='blocked'?result.reason:result.status==='busy'?'Another discovery batch is running. Try again in two minutes.':result.detail||'Discovery batch finished. Review the results below.'});
+ }
+ if(path==='/channels/requests/review'){
+  const id=text(b.id,1,100,'Request'),note=text(b.note,5,500,'Review note');if(!['accept','reject'].includes(b.decision))fail('Choose Accept or Reject.');
+  const r=await first("SELECT * FROM reactor_requests WHERE id=? AND status='pending'",id);if(!r)fail('Request already reviewed or unavailable.',409);
+  const guard="EXISTS(SELECT 1 FROM reactor_requests WHERE id=? AND status='pending')",ops=[];
+  if(b.decision==='accept'){
+   if(r.kind==='add'){
+    const name=text(b.name||r.channel_name,2,100,'Verified channel name');
+    if(!['eligible','official','review'].includes(b.status))fail('Choose Active reactor, Official performer, or Needs review.');
+    ops.push(db.prepare(`INSERT INTO channels(id,name,discovery_scope,scope_locked) SELECT ?,?,?,1 WHERE ${guard} ON CONFLICT(id) DO UPDATE SET name=excluded.name,discovery_scope=excluded.discovery_scope,scope_locked=1`).bind(r.channel_id,name,b.status,id));
+    if(b.status==='eligible')ops.push(db.prepare(`UPDATE channels SET recent_retry_at=NULL,recent_attempted_at=NULL,recent_checked_at=NULL WHERE id=? AND ${guard}`).bind(r.channel_id,id));
+   }else ops.push(db.prepare(`UPDATE channels SET discovery_scope='retired',scope_locked=1 WHERE id=? AND ${guard}`).bind(r.channel_id,id));
+  }
+  ops.push(db.prepare(`INSERT INTO state(key,value) SELECT ?,? WHERE ${guard}`).bind('reactor-request-audit:'+crypto.randomUUID(),JSON.stringify({actor:user.id,request:id,channel:r.channel_id,decision:b.decision,note,at:now}),id));
+  ops.push(db.prepare("UPDATE reactor_requests SET status=?,review_note=?,reviewed_at=?,reviewed_by=? WHERE id=? AND status='pending'").bind(b.decision==='accept'?'accepted':'rejected',note,now,user.id,id));
+  await db.batch(ops);return json({ok:true,message:b.decision==='reject'?'Request declined.':r.kind==='remove'?'Channel retired from monitoring. Existing videos remain.':'Channel request accepted. Saved with the chosen status.'});
  }
  if(path==='/channels/save'||path==='/channels/retry'){
   const channel=text(b.channelId,24,200,'Channel ID or URL');
