@@ -1,4 +1,15 @@
 import { database, seedDatabase } from './db.mjs';
+import {YouTube,seconds} from './discovery.mjs';
+export async function submissionMetadata(db,env,videoId,fetcher=fetch){
+ const key='submission-metadata:'+videoId,cached=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();
+ if(cached){try{const c=JSON.parse(cached.value);if(Date.now()-c.fetchedAt<600000)return c;}catch{}}
+ if(!env.YOUTUBE_API_KEY)fail('YouTube metadata lookup is not configured. Enter verified details manually.',503);
+ const data=await new YouTube(env.YOUTUBE_API_KEY,fetcher,db).get('videos',{part:'snippet,contentDetails,status',id:videoId});
+ const v=data.items?.find(v=>v.id===videoId);if(!v?.snippet||v.status?.privacyStatus!=='public')fail('This video is not publicly available on YouTube.',409);
+ const duration=seconds(v.contentDetails?.duration),m={title:v.snippet.title,channelName:v.snippet.channelTitle,channelId:v.snippet.channelId,publishedAt:v.snippet.publishedAt,duration,format:duration!==null&&duration>180?'FULL_LENGTH':'UNKNOWN',fetchedAt:Date.now()};
+ if(!/^UC[\w-]{22}$/.test(m.channelId||'')||!m.title||!m.publishedAt)fail('YouTube returned incomplete video details.',502);
+ await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,JSON.stringify(m)).run();return m;
+}
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const text=(value,min,max,label)=>{if(typeof value!=='string'||value.trim().length<min||value.trim().length>max)fail(`${label} must contain ${min}–${max} characters.`);return value.trim();};
@@ -40,6 +51,11 @@ export async function community(request,env,seed,user){
         if(!user.moderator)fail('Moderator access required.',403);
         const rows=await db.prepare("SELECT c.*,m.name member_name FROM coverage_requests c JOIN members m ON m.id=c.user_id ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at DESC LIMIT 100").all();
         return json({items:rows.results});
+      }
+      if(path==='/submission/metadata'){
+        if(!user.moderator)fail('Moderator access required.',403);
+        const c=await db.prepare("SELECT video_id FROM contributions WHERE id=? AND kind='submission' AND status='pending'").bind(u.searchParams.get('id')).first();if(!c)fail('Submission not available.',404);
+        return json(await submissionMetadata(db,env,c.video_id));
       }
       if(path==='/activity/presence'){
         const rows=await db.prepare('SELECT id,name,active_at FROM members WHERE active_at IS NOT NULL ORDER BY active_at DESC,id LIMIT 100').all();
@@ -226,13 +242,15 @@ export async function community(request,env,seed,user){
         // Moderator self-reviews can change the catalog but never earn approval points.
         if(c.kind==='submission'){
           if(await db.prepare('SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?').bind(c.performer_id,c.video_id).first())fail('This video is excluded. Resolve the existing catalog decision first.',409);
-          if(await db.prepare('SELECT 1 FROM matches WHERE performer_id=? AND video_id=?').bind(c.performer_id,c.video_id).first())fail('Already in the catalog. Reject this submission as a duplicate.',409);
-          const title=text(b.title,3,250,'Verified video title'),channelName=text(b.channelName,2,100,'Verified channel name');
-          if(!/^UC[\w-]{22}$/.test(b.channelId||''))fail('Enter the verified YouTube channel ID (UC plus 22 characters).');
-          const date=b.publishedAt||null;if(date&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date||Date.parse(date)>Date.now()))fail('Enter a valid past upload date, or leave blank.');
-          statements.push(db.prepare(`INSERT OR IGNORE INTO channels(id,name) SELECT ?,? WHERE ${pending}`).bind(b.channelId,channelName,c.id));
-          statements.push(db.prepare(`INSERT OR IGNORE INTO videos(id,channel_id,title,published_at,discovered_at,format) SELECT ?,?,?,?,?,'UNKNOWN' WHERE ${pending}`).bind(c.video_id,b.channelId,title,date,now,c.id));
-          statements.push(db.prepare(`INSERT OR IGNORE INTO matches(performer_id,video_id,status,source) SELECT ?,?,'CONFIRMED','Community submission verified by moderator' WHERE ${pending}`).bind(c.performer_id,c.video_id,c.id));
+          const metadata=env.YOUTUBE_API_KEY?await submissionMetadata(db,env,c.video_id):null;
+          const title=text(metadata?.title||b.title,3,250,'Verified video title'),channelName=text(metadata?.channelName||b.channelName,2,100,'Verified channel name'),channelId=metadata?.channelId||b.channelId;
+          if(!/^UC[\w-]{22}$/.test(channelId||''))fail('Enter the verified YouTube channel ID.');
+          const date=metadata?.publishedAt||b.publishedAt||null;
+          if(date&&(Number.isNaN(Date.parse(date))||Date.parse(date)>Date.now()))fail('Enter a valid past upload date, or leave blank.');
+          const format=b.format||metadata?.format||'UNKNOWN';if(!['FULL_LENGTH','SHORT','UNKNOWN'].includes(format))fail('Choose a valid format.');
+          statements.push(db.prepare(`INSERT OR IGNORE INTO channels(id,name) SELECT ?,? WHERE ${pending}`).bind(channelId,channelName,c.id));
+          statements.push(db.prepare(`INSERT INTO videos(id,channel_id,title,published_at,discovered_at,format,available,format_locked) SELECT ?,?,?,?,?,?,1,? WHERE ${pending} ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=excluded.published_at,available=1,discovered_at=COALESCE(videos.discovered_at,excluded.discovered_at),format=CASE WHEN videos.format_locked=1 THEN videos.format ELSE excluded.format END,format_locked=MAX(videos.format_locked,excluded.format_locked)`).bind(c.video_id,channelId,title,date,now,format,Number(Boolean(b.format)),c.id));
+          statements.push(db.prepare(`INSERT INTO matches(performer_id,video_id,status,source) SELECT ?,?,'CONFIRMED','Community submission verified by moderator' WHERE ${pending} ON CONFLICT(performer_id,video_id) DO UPDATE SET status='CONFIRMED',source=excluded.source`).bind(c.performer_id,c.video_id,c.id));
         }
         if(c.kind==='flag'){
           if(await db.prepare('SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?').bind(c.performer_id,c.video_id).first())fail('Already excluded. Reject this report as a duplicate.',409);
