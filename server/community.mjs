@@ -23,6 +23,7 @@ export async function community(request,env,seed,user){
     if(!user)return json({error:'Sign in to participate.'},401);
     if(new URL(request.url).pathname.startsWith('/api/community/users')&&!user.moderator)return json({error:'Moderator access required.'},403);
     if(new URL(request.url).pathname==='/api/community/contact/inbox'&&!user.moderator)return json({error:'Moderator access required.'},403);
+    if(new URL(request.url).pathname.startsWith('/api/community/activity')&&!user.moderator)return json({error:'Moderator access required.'},403);
     const db=database(env);await seedDatabase(db,seed);
     const u=new URL(request.url),path=u.pathname.replace('/api/community','');
     if(!user)return json({error:'Sign in to participate.'},401);
@@ -39,6 +40,17 @@ export async function community(request,env,seed,user){
         if(!user.moderator)fail('Moderator access required.',403);
         const rows=await db.prepare("SELECT c.*,m.name member_name FROM coverage_requests c JOIN members m ON m.id=c.user_id ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at DESC LIMIT 100").all();
         return json({items:rows.results});
+      }
+      if(path==='/activity/presence'){
+        const rows=await db.prepare('SELECT id,name,active_at FROM members WHERE active_at IS NOT NULL ORDER BY active_at DESC,id LIMIT 100').all();
+        return json({items:rows.results.map(m=>({...m,activeRecently:Date.now()-Date.parse(m.active_at)<300000})),windowMinutes:5});
+      }
+      if(path==='/activity'){
+        const offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0)),q=(u.searchParams.get('q')||'').slice(0,100),member=(u.searchParams.get('user')||'').slice(0,100),kind=u.searchParams.get('kind')||'all';
+        if(!['all','rating','contribution','chat','follow','watch','contact','preferences','profile','video-click'].includes(kind))fail('Invalid activity filter.');
+        const cutoff=new Date(Date.now()-30*86400000).toISOString();
+        const rows=await db.prepare("SELECT a.*,m.name FROM user_activity a LEFT JOIN members m ON m.id=a.user_id WHERE a.created_at>=? "+(member?"AND a.user_id=? ":"")+(kind!=='all'?"AND a.kind=? ":"")+"AND instr(lower(COALESCE(m.name,'')||' '||a.user_id),lower(?))>0 ORDER BY a.created_at DESC,a.id DESC LIMIT 101 OFFSET ?").bind(cutoff,...(member?[member]:[]),...(kind!=='all'?[kind]:[]),q,offset).all();
+        return json({items:rows.results.slice(0,100),hasMore:rows.results.length>100,windowDays:30});
       }
       if(path==='/contact'||path==='/contact/inbox'){
         const offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0));
@@ -83,6 +95,17 @@ export async function community(request,env,seed,user){
     const raw=await request.text();if(raw.length>10000)fail('Submission too large.',413);
     let b;try{b=JSON.parse(raw);}catch{fail('Invalid submission.');}if(!b||typeof b!=='object')fail('Invalid submission.');
     const now=new Date().toISOString();
+    if(path==='/presence'){
+      await db.prepare("INSERT INTO members(id,name,created_at,email,active_at) VALUES(?,'',?,?,?) ON CONFLICT(id) DO UPDATE SET active_at=excluded.active_at WHERE members.active_at IS NULL OR members.active_at<?").bind(user.id,now,user.email||null,now,new Date(Date.now()-90000).toISOString()).run();
+      return json({ok:true});
+    }
+    if(path==='/video-click'){
+      const id=text(b.videoId,11,11,'Video');if(!/^[\w-]{11}$/.test(id)||!['details','preview','youtube'].includes(b.action))fail('Invalid video click.');
+      const video=await db.prepare("SELECT v.title FROM videos v WHERE v.id=? AND EXISTS(SELECT 1 FROM matches m WHERE m.video_id=v.id AND m.performer_id='missioned-souls')").bind(id).first();if(!video)fail('Video not found.',404);
+      const summary={details:'Opened video details',preview:'Clicked video preview',youtube:'Clicked Watch on YouTube'}[b.action]+': '+video.title;
+      await db.prepare("INSERT INTO user_activity(user_id,kind,target,summary,created_at) SELECT ?,'video-click',?,?,? WHERE NOT EXISTS(SELECT 1 FROM user_activity WHERE user_id=? AND kind='video-click' AND target=? AND summary=? AND created_at>=?)").bind(user.id,id,summary,now,user.id,id,summary,new Date(Date.now()-60000).toISOString()).run();
+      return json({ok:true});
+    }
     if(path==='/contact'){
       const subject=text(b.subject,3,120,'Subject'),body=text(b.body,10,4000,'Message');
       if(!['question','bug','account','other'].includes(b.category))fail('Choose a category.');
