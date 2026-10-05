@@ -4,6 +4,7 @@ const root=new URL('../',import.meta.url);
 await rm(new URL('dist/',root),{recursive:true,force:true});
 await mkdir(new URL('dist/server/',root),{recursive:true});
 const assets={};for(const [name,type] of [['index.html','text/html; charset=utf-8'],['styles.css','text/css; charset=utf-8'],['app.js','text/javascript; charset=utf-8'],['community.js','text/javascript; charset=utf-8'],['dashboard.js','text/javascript; charset=utf-8'],['dashboard.css','text/css; charset=utf-8'],['performers.js','text/javascript; charset=utf-8'],['launch-review.js','text/javascript; charset=utf-8'],['contact.js','text/javascript; charset=utf-8']])assets[`/${name}`]={type,body:await readFile(new URL(name,root),'utf8')};
+assets['/images/reaction-journey-logo.png']={type:'image/png',base64:(await readFile(new URL('images/reaction-journey-logo.png',root))).toString('base64')};
 const {build}=await import('esbuild');
 const authBundle=await build({entryPoints:[new URL('auth-client.js',root).pathname],bundle:true,format:'iife',platform:'browser',target:'es2022',write:false,minify:true});
 assets['/auth-client.js']={type:'text/javascript; charset=utf-8',body:authBundle.outputFiles[0].text};
