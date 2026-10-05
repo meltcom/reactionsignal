@@ -1,0 +1,12 @@
+let activityOffset=0,activityUser='';
+async function loadUserActivity(){if(!communityState?.moderator)return;try{
+ const presence=await communityApi('/activity/presence');
+ $('activityPresence').innerHTML=presence.items.map(m=>`<p><strong>${escapeHtml(m.name||'Member')}</strong> · ${m.activeRecently?'Active recently':'Last seen'} · ${escapeHtml(new Date(m.active_at).toLocaleString())}</p>`).join('')||'<p>No presence check-ins recorded yet.</p>';
+ const r=await communityApi('/activity?q='+encodeURIComponent($('activitySearch').value)+'&kind='+$('activityKind').value+'&offset='+activityOffset+'&user='+encodeURIComponent(activityUser));
+ $('activityFilterStatus').textContent=activityUser?'Showing one member. Use Show all users to clear.':'Showing all matching members.';
+ $('activityList').innerHTML=r.items.length?'<table class="points-table"><thead><tr><th>Time (your local timezone)</th><th>Member</th><th>Activity</th></tr></thead><tbody>'+r.items.map(a=>`<tr><td>${escapeHtml(new Date(a.created_at).toLocaleString())}</td><td><button class="outline-button" data-activity-user="${escapeHtml(a.user_id)}">${escapeHtml(a.name||'Member')}</button><small style="display:block;overflow-wrap:anywhere">${escapeHtml(a.user_id)}</small></td><td>${escapeHtml(a.summary)}${a.target?`<small style="display:block;overflow-wrap:anywhere">${escapeHtml(a.target)}</small>`:''}</td></tr>`).join('')+'</tbody></table>':'<p>No matching activity recorded. Logging begins after this update is deployed.</p>';
+ $('activityPrevious').disabled=activityOffset===0;$('activityNext').disabled=!r.hasMore;
+ $('activityList').querySelectorAll('[data-activity-user]').forEach(b=>b.onclick=()=>{activityUser=b.dataset.activityUser;activityOffset=0;loadUserActivity();});
+ }catch(e){$('activityStatus').textContent=e.message;}}
+$('activityRefresh').onclick=$('activityKind').onchange=()=>{activityOffset=0;loadUserActivity();};$('activityAllUsers').onclick=()=>{activityUser='';activityOffset=0;$('activitySearch').value='';loadUserActivity();};$('activityPrevious').onclick=()=>{activityOffset=Math.max(0,activityOffset-100);loadUserActivity();};$('activityNext').onclick=()=>{activityOffset+=100;loadUserActivity();};
+window.addEventListener('reaction-auth-change',()=>{$('activityList').replaceChildren();$('activityPresence').replaceChildren();activityUser='';activityOffset=0;$('activitySearch').value='';$('activityStatus').textContent='';$('activityFilterStatus').textContent='';});
