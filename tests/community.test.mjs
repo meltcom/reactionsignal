@@ -122,3 +122,25 @@ test('correction uses verified YouTube metadata over incorrect form channel',asy
  assert.equal((await call('/catalog-video/update',{videoId:'abcdefghijk',title:'Wrong title',channelId:channel,channelName:'Wrong reactor',format:'SHORT',note:'Refresh incorrect channel from YouTube'},'owner')).status,200);
  const row=sql.prepare('SELECT * FROM videos WHERE id=?').get('abcdefghijk');assert.equal(row.channel_id,actual);assert.equal(row.title,'Actual YouTube title');assert.equal(row.format,'SHORT');
 });
+
+test('correction restore confirms only Missioned Souls and records the reversed decision',async()=>{
+ const {call,video,sql,db,points}=await setup();sql.prepare('INSERT OR IGNORE INTO channels(id,name) VALUES(?,?)').run(channel,'Original reactor');video();
+ sql.exec("UPDATE matches SET status='REJECTED' WHERE video_id='abcdefghijk'; INSERT INTO exclusions VALUES('missioned-souls','abcdefghijk','Community review: duplicate. wrong reactor listed'); INSERT INTO performers(id,name,status,aliases) VALUES('another-band','Another band','active','[]'); INSERT INTO matches VALUES('another-band','abcdefghijk','REJECTED','test'); INSERT INTO exclusions VALUES('another-band','abcdefghijk','Keep other exclusion');");
+ const body={videoId:'abcdefghijk',title:'Correct reaction title',channelId:channel,channelName:'Original reactor',format:'FULL_LENGTH',note:'Verified channel; reverse mistaken removal',restore:true};
+ const loaded=await call('/catalog-video?video=abcdefghijk',null,'owner');assert.equal(loaded.data.decision.status,'REJECTED');assert.match(loaded.data.decision.exclusionReason,/wrong reactor/);
+ assert.equal((await call('/catalog-video/update',body,'fan')).status,403);
+ assert.equal((await call('/catalog-video/update',{...body,note:''},'owner')).status,400);
+ assert.equal((await call('/catalog-video/update',{...body,restore:'true'},'owner')).status,400);
+ const restored=await call('/catalog-video/update',body,'owner');assert.equal(restored.status,200);assert.equal(restored.data.eligible,true);
+ assert.equal(sql.prepare("SELECT status FROM matches WHERE video_id=? AND performer_id='missioned-souls'").get(body.videoId).status,'CONFIRMED');
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM exclusions WHERE video_id=? AND performer_id='missioned-souls'").get(body.videoId).n,0);
+ assert.equal(sql.prepare("SELECT reason FROM exclusions WHERE video_id=? AND performer_id='another-band'").get(body.videoId).reason,'Keep other exclusion');
+ assert.ok((await catalog(db,seed,{})).videos.some(v=>v.id===body.videoId));
+ const history=(await call('/catalog-video?video=abcdefghijk',null,'owner')).data.history[0];assert.equal(history.moderator_id,'owner');assert.equal(JSON.parse(history.before_json).decision.status,'REJECTED');assert.equal(JSON.parse(history.after_json).action,'restore-and-confirm');assert.equal(points('owner'),0);
+});
+test('correction restore does not publish unavailable or unmatched videos',async()=>{
+ const {call,video,sql}=await setup();sql.prepare('INSERT OR IGNORE INTO channels(id,name) VALUES(?,?)').run(channel,'Original reactor');video();
+ const body={videoId:'abcdefghijk',title:'Correct reaction title',channelId:channel,channelName:'Original reactor',format:'FULL_LENGTH',note:'Verified restoration reason',restore:true};
+ sql.prepare('UPDATE videos SET available=0 WHERE id=?').run(body.videoId);assert.equal((await call('/catalog-video/update',body,'owner')).status,409);
+ sql.prepare('UPDATE videos SET available=1 WHERE id=?').run(body.videoId);sql.prepare('DELETE FROM matches WHERE video_id=?').run(body.videoId);assert.equal((await call('/catalog-video/update',body,'owner')).status,409);
+});
