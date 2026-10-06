@@ -1,0 +1,10 @@
+{
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "reaction-signal-preview",
+      "database_id": "ba7d7d84-6947-4bfc-9270-03d63ee699af",
+      "migrations_dir": "drizzle"
+    }
+  ]
+}
