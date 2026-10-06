@@ -16,3 +16,14 @@ await writeFile(new URL('dist/server/assets.mjs',root),`export const assets=${JS
 for(const f of ['db.mjs','discovery.mjs','community.mjs','social.mjs','auth.mjs','performers.mjs','push.mjs','recheck.mjs','workbook-import.mjs'])await copyFile(new URL(`server/${f}`,root),new URL(`dist/server/${f}`,root));
 await copyFile(new URL('server/worker.mjs',root),new URL('dist/server/index.js',root));
 console.log('Built Reaction Journey for direct Cloudflare Workers hosting.');
+
+// Cloudflare runs the build command before its automatic branch Preview command.
+// Only non-main Cloudflare builds prepare the isolated Preview database.
+if (process.env.WORKERS_CI_BRANCH && process.env.WORKERS_CI_BRANCH !== 'main') {
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx',
+    ['wrangler@4', 'd1', 'migrations', 'apply', 'DB', '--remote', '--config', 'wrangler.preview-migrations.jsonc'],
+    { cwd: root.pathname, stdio: 'inherit', shell: false });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error('Preview database migrations failed; stopping Preview build.');
+}

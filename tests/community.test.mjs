@@ -86,3 +86,39 @@ test('moderator onboarding supports drafts, reviews, publishing, recommendations
  await saveVideo(db,discovered,[profile],new Date().toISOString(),'rescan');
  assert.equal((await api('/results?id='+id)).data.items[0].status,'REJECTED');
 });
+
+test('moderators can correct catalog channel details with history and without altering decisions',async()=>{
+ const {call,video,sql,points}=await setup();
+ sql.prepare('INSERT OR IGNORE INTO channels(id,name) VALUES(?,?)').run(channel,'Original reactor');video();
+ const newChannel='UCabcdefghijklmnopqrstuv';
+ const correction={videoId:'abcdefghijk',title:'Correct reaction title',channelName:'Correct reactor',channelId:newChannel,publishedAt:'2026-01-01',format:'FULL_LENGTH',note:'Corrected wrong submitted channel'};
+ assert.equal((await call('/catalog-video?video=abcdefghijk',null,'fan')).status,403);
+ assert.equal((await call('/catalog-video/update',correction,'fan')).status,403);
+ assert.equal((await call('/catalog-video/update',{...correction,channelId:'invalid'},'owner')).status,400);
+ sql.prepare("INSERT INTO exclusions(performer_id,video_id,reason) VALUES('missioned-souls',?,'Retained exclusion')").run('abcdefghijk');
+ assert.equal((await call('/catalog-video/update',correction,'owner')).status,200);
+ const row=sql.prepare('SELECT * FROM videos WHERE id=?').get('abcdefghijk');assert.equal(row.channel_id,newChannel);assert.equal(row.title,correction.title);assert.equal(row.format_locked,1);
+ assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get('abcdefghijk').status,'CONFIRMED');
+ assert.equal(sql.prepare('SELECT reason FROM exclusions WHERE video_id=?').get('abcdefghijk').reason,'Retained exclusion');
+ assert.equal(points('fan'),0);assert.equal(points('owner'),0);
+ const result=await call('/catalog-video?video=https%3A%2F%2Fyoutu.be%2Fabcdefghijk',null,'owner');assert.equal(result.status,200);assert.equal(result.data.video.channelName,'Correct reactor');assert.equal(result.data.history.length,1);assert.equal(JSON.parse(result.data.history[0].before_json).channel_id,channel);
+ assert.equal((await call('/catalog-video/update',{...correction,channelName:'Rename shared channel'},'owner')).status,409);
+});
+test('approval fixes an existing wrong video channel instead of retaining it',async()=>{
+ const {call,sql}=await setup();
+ await call('/contribute',{kind:'submission',performerId:'missioned-souls',url:'https://youtu.be/abcdefghijk',body:'This is a new Missioned Souls reaction.'});
+ const id=(await call('/summary')).data.mine[0].id;
+ sql.prepare('INSERT OR IGNORE INTO channels(id,name) VALUES(?,?)').run(channel,'Wrong reactor');
+ sql.prepare("INSERT INTO videos(id,channel_id,title,format,available) VALUES(?,?,?,'UNKNOWN',1)").run('abcdefghijk',channel,'Incorrect title');
+ const correct='UCabcdefghijklmnopqrstuv';
+ assert.equal((await call('/moderate',{id,decision:'accept',note:'Verified correct YouTube channel',title:'Verified reaction title',channelId:correct,channelName:'Correct reactor'},'owner')).status,200);
+ assert.equal(sql.prepare('SELECT channel_id FROM videos WHERE id=?').get('abcdefghijk').channel_id,correct);
+});
+
+test('correction uses verified YouTube metadata over incorrect form channel',async()=>{
+ const {call,video,sql,env}=await setup();sql.prepare('INSERT OR IGNORE INTO channels(id,name) VALUES(?,?)').run(channel,'Wrong reactor');video();
+ env.YOUTUBE_API_KEY='test-key';const actual='UCabcdefghijklmnopqrstuv';
+ sql.prepare('INSERT INTO state(key,value) VALUES(?,?)').run('submission-metadata:abcdefghijk',JSON.stringify({title:'Actual YouTube title',channelName:'Actual reactor',channelId:actual,publishedAt:'2026-01-02T00:00:00Z',format:'UNKNOWN',fetchedAt:Date.now()}));
+ assert.equal((await call('/catalog-video/update',{videoId:'abcdefghijk',title:'Wrong title',channelId:channel,channelName:'Wrong reactor',format:'SHORT',note:'Refresh incorrect channel from YouTube'},'owner')).status,200);
+ const row=sql.prepare('SELECT * FROM videos WHERE id=?').get('abcdefghijk');assert.equal(row.channel_id,actual);assert.equal(row.title,'Actual YouTube title');assert.equal(row.format,'SHORT');
+});
