@@ -28,6 +28,10 @@ function award(db,id,user,kind,amount,cap,now,guard='1',args=[]){
     .bind(id,user,kind,amount,now,...args,user,kind,now.slice(0,10),cap);
 }
 const pending='EXISTS(SELECT 1 FROM contributions WHERE id=? AND status=\'pending\')';
+async function videoDecision(db,id){
+ const row=await db.prepare("SELECT m.status,m.source,p.status performerStatus,e.reason exclusionReason FROM matches m JOIN performers p ON p.id=m.performer_id LEFT JOIN exclusions e ON e.performer_id=m.performer_id AND e.video_id=m.video_id WHERE m.performer_id='missioned-souls' AND m.video_id=?").bind(id).first();
+ return row||{status:null,exclusionReason:null};
+}
 async function known(db,performer,video){if(!await db.prepare("SELECT 1 FROM matches m JOIN videos v ON v.id=m.video_id WHERE m.performer_id=? AND m.video_id=? AND m.status='CONFIRMED' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id)").bind(performer,video).first())fail('This video is not currently in the confirmed catalog.',404);}
 export async function community(request,env,seed,user){
   try {
@@ -63,7 +67,8 @@ export async function community(request,env,seed,user){
         if(!video)fail('Video not found in the catalog.',404);
         if(path.endsWith('/metadata'))return json(await submissionMetadata(db,env,id));
         const history=await db.prepare('SELECT moderator_id,note,before_json,after_json,created_at FROM video_corrections WHERE video_id=? ORDER BY created_at DESC LIMIT 10').bind(id).all();
-        return json({video,history:history.results});
+        const decision=await videoDecision(db,id);
+        return json({video,decision,history:history.results});
       }
       if(path==='/submission/metadata'){
         if(!user.moderator)fail('Moderator access required.',403);
@@ -131,6 +136,11 @@ export async function community(request,env,seed,user){
       if(!/^[\w-]{11}$/.test(b.videoId||''))fail('Invalid video ID.');
       const before=await db.prepare('SELECT v.*,c.name channelName FROM videos v LEFT JOIN channels c ON c.id=v.channel_id WHERE v.id=?').bind(b.videoId).first();
       if(!before)fail('Video not found in the catalog.',404);
+      if(b.restore!==undefined&&typeof b.restore!=='boolean')fail('Invalid restore action.');
+      const decision=await videoDecision(db,b.videoId),restore=b.restore===true;
+      if(restore&&!decision.status)fail('This video has no Missioned Souls match to restore.',409);
+      if(restore&&before.available!==1)fail('This video is marked unavailable. Verify availability before restoring it.',409);
+      if(restore&&decision.performerStatus!=='active')fail('Missioned Souls coverage must be active before restoring this video.',409);
       const note=text(b.note,5,500,'Correction reason');
       const metadata=env.YOUTUBE_API_KEY?await submissionMetadata(db,env,b.videoId):null;
       const title=text(metadata?.title||b.title,3,250,'Verified video title'),channelName=text(metadata?.channelName||b.channelName,2,100,'Verified channel name'),channelId=metadata?.channelId||b.channelId;
@@ -141,13 +151,18 @@ export async function community(request,env,seed,user){
       const existingChannel=await db.prepare('SELECT name FROM channels WHERE id=?').bind(channelId).first();
       // A manual fallback may reassign this video, but must not rename a shared channel.
       if(!metadata&&existingChannel&&existingChannel.name!==channelName)fail('Channel name differs from the existing catalog channel. Use its current name or fetch YouTube details.',409);
-      const after={title,channel_id:channelId,channelName,published_at:date,format:b.format};
+      const after={title,channel_id:channelId,channelName,published_at:date,format:b.format,action:restore?'restore-and-confirm':'correct-details',decision:restore?{...decision,status:'CONFIRMED',source:'Moderator restored after video correction',exclusionReason:null}:decision};
       await db.batch([
         db.prepare('INSERT INTO channels(id,name) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name').bind(channelId,channelName),
         db.prepare('UPDATE videos SET channel_id=?,title=?,published_at=?,format=?,format_locked=1 WHERE id=?').bind(channelId,title,date,b.format,b.videoId),
-        db.prepare('INSERT INTO video_corrections(id,video_id,moderator_id,note,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)').bind(crypto.randomUUID(),b.videoId,user.id,note,JSON.stringify(before),JSON.stringify(after),now)
+        ...(restore?[
+          db.prepare("DELETE FROM exclusions WHERE performer_id='missioned-souls' AND video_id=?").bind(b.videoId),
+          db.prepare("UPDATE matches SET status='CONFIRMED',source='Moderator restored after video correction' WHERE performer_id='missioned-souls' AND video_id=?").bind(b.videoId)
+        ]:[]),
+        db.prepare('INSERT INTO video_corrections(id,video_id,moderator_id,note,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)').bind(crypto.randomUUID(),b.videoId,user.id,note,JSON.stringify({...before,decision}),JSON.stringify(after),now)
       ]);
-      return json({ok:true,message:'Video details corrected. Catalog decisions and member activity are preserved.'});
+      const current=await videoDecision(db,b.videoId),eligible=before.available===1&&current.performerStatus==='active'&&['CONFIRMED','PROBABLE'].includes(current.status)&&!current.exclusionReason;
+      return json({ok:true,eligible,decision:current,message:restore?'Corrections saved and video restored as Confirmed. Eligible for the catalog; member feed filters still apply.':'Video details corrected. '+(eligible?'Eligible for the catalog; member feed filters still apply.':'Still hidden by its catalog status, exclusion, availability, or performer coverage. Use Save Corrections & Restore to reverse a rejection or exclusion.')});
     }
     if(path==='/reactor-requests'){
       if(!['add','remove'].includes(b.kind))fail('Choose Add or Remove.');
