@@ -1,4 +1,5 @@
 import { database, seedDatabase, catalog, status } from './db.mjs';
+import { youtubeSubscriptions } from './youtube-subscriptions.mjs';
 import { social } from './social.mjs';
 import { community } from './community.mjs';
 import { runDiscovery } from './discovery.mjs';
@@ -22,6 +23,10 @@ export default {
     const path=new URL(request.url).pathname;
     try{
       if(path==='/api/youtube/push')return await youtubePush(request,env,seed,ctx);
+      if(path.startsWith('/api/youtube/subscriptions/')){
+        const result=await authenticate(request,env);if(result.error)return result.error;
+        return youtubeSubscriptions(request,env,seed,result.user);
+      }
       if(path==='/api/auth/config'){
         if(request.method!=='GET')return json({error:'Method not allowed'},405);
         return json(authConfig(env)||{configured:false});

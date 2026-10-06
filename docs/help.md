@@ -134,6 +134,8 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 ### Following and Reactors
 
+Use **Reactors → Import YouTube subscriptions → Connect YouTube** to grant optional read-only permission. Review matching reactors and select **Follow selected reactors**. Existing follows and hidden reactors are preserved. This is a one-time import; new YouTube subscriptions require another import. If import is awaiting Google configuration, manual follows remain available.
+
 - In Reactors, search channel names, compare community scores, open the channel on YouTube, and click + Follow or Following to toggle a channel follow.
 
 - Following lists performer, reactor, and song follows; Unfollow removes one.
