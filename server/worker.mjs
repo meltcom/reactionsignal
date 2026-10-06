@@ -67,7 +67,8 @@ export default {
         if(etag&&request.headers.get('If-None-Match')===etag)return new Response(null,{status:304,headers:{ETag:etag,'Cache-Control':'private, no-store'}});
         const response=json(await catalog(db,seed,env));if(etag)response.headers.set('ETag',etag);return response;
       }
-      const asset=assets[path==='/'?'/index.html':path];if(!asset)return new Response('Not found',{status:404});
+      const publicPage={'/privacy':'/privacy.html','/privacy/':'/privacy.html','/terms':'/terms.html','/terms/':'/terms.html'}[path];
+      const asset=assets[publicPage||(path==='/'?'/index.html':path)];if(!asset)return new Response('Not found',{status:404});
       return new Response(request.method==='HEAD'?null:asset.base64?Uint8Array.from(atob(asset.base64),c=>c.charCodeAt(0)):asset.body,{headers:{'Content-Type':asset.type,'Cache-Control':'private, no-cache','X-Content-Type-Options':'nosniff','Referrer-Policy':'strict-origin-when-cross-origin'}});
     }catch{console.error('Catalog request failed');return json({error:'Catalog temporarily unavailable. Please retry.'},503);}
   },
