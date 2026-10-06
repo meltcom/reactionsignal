@@ -529,3 +529,11 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 - Cloudflare database metrics show row reads/writes; database quota, worker capacity, YouTube quota, and sign-in provider limits are separate checks.
 
 - A successful deployment does not guarantee healthy discovery: verify recent runs, catalog loading, login, and moderation.
+
+## Automatic subscriber refresh
+
+Reactor subscriber counts refresh from YouTube automatically, using the existing 15-minute Cloudflare schedule. Each invocation updates up to 50 channels whose last successful update is at least 24 hours old. The first refresh of 500 channels takes roughly 2½ hours and normally uses 10 YouTube API requests. Opening pages does not make additional YouTube API requests.
+
+The Reactors table shows subscribers and the last successful update date. YouTube supplies rounded public counts; hidden or missing counts display as unknown. Missing channels retain their last known counts and show an unavailable notice. API failures preserve previous data and retry after at least one hour; channels missing from a successful response retry after a day. Moderator names, decisions, exclusions, follows and ratings are preserved.
+
+Discovery status also shows the last subscriber-refresh batch. Refresh requests are included in the existing endpoint request counters. No additional cron configuration or database migration is required. The scheduler must be active and the existing YouTube API key must be configured.

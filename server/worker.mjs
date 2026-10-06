@@ -2,6 +2,7 @@ import { database, seedDatabase, catalog, status } from './db.mjs';
 import { social } from './social.mjs';
 import { community } from './community.mjs';
 import { runDiscovery } from './discovery.mjs';
+import { refreshChannelStats } from './channel-stats.mjs';
 import { authenticate, authConfig } from './auth.mjs';
 import { youtubePush, renewSubscriptions, processPushJobs } from './push.mjs';
 import {recheckBatch} from './recheck.mjs';
@@ -66,6 +67,7 @@ export default {
     }catch{console.error('Catalog request failed');return json({error:'Catalog temporarily unavailable. Please retry.'},503);}
   },
   async scheduled(event,env,ctx){
+    ctx.waitUntil(refreshChannelStats(env).catch(()=>console.error('Channel statistics refresh failed')));
     ctx.waitUntil((async()=>{
       const db=database(env);
       await seedDatabase(db,seed);

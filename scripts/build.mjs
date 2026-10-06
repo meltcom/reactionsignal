@@ -13,7 +13,7 @@ assets['/workbook-import.js']={type:'text/javascript; charset=utf-8',body:import
 const seed=JSON.parse(await readFile(new URL('data.json',root),'utf8'));
 seed.importRun=JSON.parse(await readFile(new URL('import-run.json',root),'utf8'));
 await writeFile(new URL('dist/server/assets.mjs',root),`export const assets=${JSON.stringify(assets)};\nexport const seed=${JSON.stringify(seed)};\n`);
-for(const f of ['db.mjs','discovery.mjs','community.mjs','social.mjs','auth.mjs','performers.mjs','push.mjs','recheck.mjs','workbook-import.mjs','reconciliation.mjs'])await copyFile(new URL(`server/${f}`,root),new URL(`dist/server/${f}`,root));
+for(const f of ['db.mjs','discovery.mjs','channel-stats.mjs','community.mjs','social.mjs','auth.mjs','performers.mjs','push.mjs','recheck.mjs','workbook-import.mjs','reconciliation.mjs'])await copyFile(new URL(`server/${f}`,root),new URL(`dist/server/${f}`,root));
 await copyFile(new URL('server/worker.mjs',root),new URL('dist/server/index.js',root));
 console.log('Built Reaction Journey for direct Cloudflare Workers hosting.');
 
