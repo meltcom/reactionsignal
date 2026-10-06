@@ -6,6 +6,7 @@ import { authenticate, authConfig } from './auth.mjs';
 import { youtubePush, renewSubscriptions, processPushJobs } from './push.mjs';
 import {recheckBatch} from './recheck.mjs';
 import { managePerformers } from './performers.mjs';
+import { workbookImport } from './workbook-import.mjs';
 import { assets, seed } from './assets.mjs';
 const json=(data,code=200)=>new Response(JSON.stringify(data),{status:code,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
 async function authorized(request,env){
@@ -27,6 +28,11 @@ export default {
         if(request.method!=='GET')return json({error:'Method not allowed'},405);
         const result=await authenticate(request,env);
         return result.error||json({id:result.user.id,email:result.user.email,moderator:result.user.moderator});
+      }
+      if(path.startsWith('/api/workbook-import/')){
+        const result=await authenticate(request,env);
+        if(result.error)return result.error;
+        return workbookImport(request,env,result.user);
       }
       if(path.startsWith('/api/social/')||path.startsWith('/api/community/')||path.startsWith('/api/performers/')){
         const result=await authenticate(request,env);
