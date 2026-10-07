@@ -1,3 +1,4 @@
+import { missionedSouls, scheduledMissionedSouls } from './missioned-souls.mjs';
 import { database, seedDatabase, catalog, status } from './db.mjs';
 import { youtubeSubscriptions } from './youtube-subscriptions.mjs';
 import { social } from './social.mjs';
@@ -36,6 +37,7 @@ export default {
         const result=await authenticate(request,env);
         return result.error||json({id:result.user.id,email:result.user.email,moderator:result.user.moderator});
       }
+      if(path==='/api/missioned-souls'){const result=await authenticate(request,env);if(result.error)return result.error;return missionedSouls(request,env,seed.missionedSouls,result.user);}
       if(path==='/api/reconciliation'){const result=await authenticate(request,env);if(result.error)return result.error;return reconcile(request,env,result.user);}
       if(path.startsWith('/api/workbook-import/')){
         const result=await authenticate(request,env);
@@ -67,6 +69,7 @@ export default {
         if(etag&&request.headers.get('If-None-Match')===etag)return new Response(null,{status:304,headers:{ETag:etag,'Cache-Control':'private, no-store'}});
         const response=json(await catalog(db,seed,env));if(etag)response.headers.set('ETag',etag);return response;
       }
+      if(path==='/missioned-souls'||path==='/missioned-souls/')return Response.redirect(new URL('/#missioned-souls',request.url),302);
       const publicPage={'/privacy':'/privacy.html','/privacy/':'/privacy.html','/terms':'/terms.html','/terms/':'/terms.html'}[path];
       const asset=assets[publicPage||(path==='/'?'/index.html':path)];if(!asset)return new Response('Not found',{status:404});
       return new Response(request.method==='HEAD'?null:asset.base64?Uint8Array.from(atob(asset.base64),c=>c.charCodeAt(0)):asset.body,{headers:{'Content-Type':asset.type,'Cache-Control':'private, no-cache','X-Content-Type-Options':'nosniff','Referrer-Policy':'strict-origin-when-cross-origin'}});
@@ -82,6 +85,7 @@ export default {
       await renewSubscriptions(env,seed);
       await runDiscovery(env,seed);
       await recheckBatch(env);
+      await scheduledMissionedSouls(env,seed.missionedSouls).catch(()=>console.error('MS Journey refresh failed'));
     })());
   }
 };
