@@ -53,7 +53,7 @@ export async function community(request,env,seed,user){
       }
       if(path==='/coverage/queue'){
         if(!user.moderator)fail('Moderator access required.',403);
-        const rows=await db.prepare("SELECT c.*,m.name member_name FROM coverage_requests c JOIN members m ON m.id=c.user_id ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at DESC LIMIT 100").all();
+        const rows=await db.prepare("SELECT c.*,m.name member_name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM coverage_requests c JOIN members m ON m.id=c.user_id ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at DESC LIMIT 100").all();
         return json({items:rows.results});
       }
     if(path==='/reactor-requests'){
@@ -76,19 +76,19 @@ export async function community(request,env,seed,user){
         return json(await submissionMetadata(db,env,c.video_id));
       }
       if(path==='/activity/presence'){
-        const rows=await db.prepare('SELECT id,name,active_at FROM members WHERE active_at IS NOT NULL ORDER BY active_at DESC,id LIMIT 100').all();
+        const rows=await db.prepare('SELECT id,name,active_at,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=members.id),0) points FROM members WHERE active_at IS NOT NULL ORDER BY active_at DESC,id LIMIT 100').all();
         return json({items:rows.results.map(m=>({...m,activeRecently:Date.now()-Date.parse(m.active_at)<300000})),windowMinutes:5});
       }
       if(path==='/activity'){
         const offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0)),q=(u.searchParams.get('q')||'').slice(0,100),member=(u.searchParams.get('user')||'').slice(0,100),kind=u.searchParams.get('kind')||'all';
         if(!['all','rating','contribution','chat','follow','watch','contact','preferences','profile','video-click'].includes(kind))fail('Invalid activity filter.');
         const cutoff=new Date(Date.now()-30*86400000).toISOString();
-        const rows=await db.prepare("SELECT a.*,m.name FROM user_activity a LEFT JOIN members m ON m.id=a.user_id WHERE a.created_at>=? "+(member?"AND a.user_id=? ":"")+(kind!=='all'?"AND a.kind=? ":"")+"AND instr(lower(COALESCE(m.name,'')||' '||a.user_id),lower(?))>0 ORDER BY a.created_at DESC,a.id DESC LIMIT 101 OFFSET ?").bind(cutoff,...(member?[member]:[]),...(kind!=='all'?[kind]:[]),q,offset).all();
+        const rows=await db.prepare("SELECT a.*,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM user_activity a LEFT JOIN members m ON m.id=a.user_id WHERE a.created_at>=? "+(member?"AND a.user_id=? ":"")+(kind!=='all'?"AND a.kind=? ":"")+"AND instr(lower(COALESCE(m.name,'')||' '||a.user_id),lower(?))>0 ORDER BY a.created_at DESC,a.id DESC LIMIT 101 OFFSET ?").bind(cutoff,...(member?[member]:[]),...(kind!=='all'?[kind]:[]),q,offset).all();
         return json({items:rows.results.slice(0,100),hasMore:rows.results.length>100,windowDays:30});
       }
       if(path==='/contact'||path==='/contact/inbox'){
         const offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0));
-        const rows=await db.prepare("SELECT t.id,t.subject,t.category,t.status,t.created_at,t.updated_at,m.name FROM contact_tickets t LEFT JOIN members m ON m.id=t.user_id "+(path==='/contact'?"WHERE t.user_id=? ":"")+"ORDER BY t.updated_at DESC,t.id LIMIT 51 OFFSET ?").bind(...(path==='/contact'?[user.id,offset]:[offset])).all();
+        const rows=await db.prepare("SELECT t.id,t.subject,t.category,t.status,t.created_at,t.updated_at,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM contact_tickets t LEFT JOIN members m ON m.id=t.user_id "+(path==='/contact'?"WHERE t.user_id=? ":"")+"ORDER BY t.updated_at DESC,t.id LIMIT 51 OFFSET ?").bind(...(path==='/contact'?[user.id,offset]:[offset])).all();
         return json({items:rows.results.slice(0,50),hasMore:rows.results.length>50});
       }
       if(path==='/contact/thread'){
@@ -114,14 +114,14 @@ export async function community(request,env,seed,user){
       if(path==='/video'){
         const video=u.searchParams.get('id');if(!/^[\w-]{11}$/.test(video||''))fail('Invalid video ID.');
         const rating=await db.prepare('SELECT score FROM ratings WHERE user_id=? AND video_id=?').bind(user.id,video).first();
-        const comments=await db.prepare("SELECT c.id,c.body,c.created_at,m.name FROM contributions c JOIN members m ON m.id=c.user_id WHERE c.kind='comment' AND c.video_id=? AND c.status='accepted' ORDER BY c.created_at DESC LIMIT 100").bind(video).all();
+        const comments=await db.prepare("SELECT c.id,c.body,c.created_at,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM contributions c JOIN members m ON m.id=c.user_id WHERE c.kind='comment' AND c.video_id=? AND c.status='accepted' ORDER BY c.created_at DESC LIMIT 100").bind(video).all();
         return json({rating:rating?.score||0,comments:comments.results});
       }
       if(path==='/queue'){
         if(!user.moderator)fail('Moderator access required.',403);
         const kind=u.searchParams.get('kind')||'all',offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0));
         if(!['all','submission','comment','flag'].includes(kind))fail('Invalid review category.');
-        const rows=await db.prepare("SELECT c.*,m.name FROM contributions c JOIN members m ON m.id=c.user_id WHERE (c.status='pending' OR (c.kind='comment' AND c.status='accepted')) "+(kind!=='all'?"AND c.kind=? ":"")+"ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at ASC,c.id LIMIT 51 OFFSET ?").bind(...(kind!=='all'?[kind,offset]:[offset])).all();return json({items:rows.results.slice(0,50),hasMore:rows.results.length>50});
+        const rows=await db.prepare("SELECT c.*,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM contributions c JOIN members m ON m.id=c.user_id WHERE (c.status='pending' OR (c.kind='comment' AND c.status='accepted')) "+(kind!=='all'?"AND c.kind=? ":"")+"ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at ASC,c.id LIMIT 51 OFFSET ?").bind(...(kind!=='all'?[kind,offset]:[offset])).all();return json({items:rows.results.slice(0,50),hasMore:rows.results.length>50});
       }
       return json({error:'Not found'},404);
     }

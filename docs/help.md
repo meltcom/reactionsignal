@@ -408,7 +408,7 @@ Use **Reactors → Import YouTube subscriptions → Connect YouTube** to grant o
 
 - Use Member Review under Moderator to search names or email, correct display names, adjust points with a reason, or mute and unmute posting.
 
-- New members are Novice until 25 points, then Contributor. Higher badges follow the existing point thresholds.
+- New members are Novice until 25 points, then Contributor. Badges appear before member display names: Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000+). Hover over a badge to see its level and current points. The Reputation page shows the badge legend. Badges use participation points, not verified reputation, and reflect point adjustments or reversals on refresh.
 
 ## Moderator & administrator help
 
