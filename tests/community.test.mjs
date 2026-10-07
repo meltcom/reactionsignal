@@ -144,3 +144,31 @@ test('correction restore does not publish unavailable or unmatched videos',async
  sql.prepare('UPDATE videos SET available=0 WHERE id=?').run(body.videoId);assert.equal((await call('/catalog-video/update',body,'owner')).status,409);
  sql.prepare('UPDATE videos SET available=1 WHERE id=?').run(body.videoId);sql.prepare('DELETE FROM matches WHERE video_id=?').run(body.videoId);assert.equal((await call('/catalog-video/update',body,'owner')).status,409);
 });
+
+test('reviewed submission history finds rejected videos outside the catalog and is moderator-only',async()=>{
+ const {call,sql}=await setup();
+ sql.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,status,created_at,reviewed_at,reviewed_by,review_note) VALUES('history-test','fan','submission','missioned-souls','KYI8i2_v8nU','Please check this MS reaction','rejected','2026-01-01','2026-01-02','owner','Incorrect details')").run();
+ assert.equal((await call('/submission-history',null,'fan')).status,403);
+ const r=await call('/submission-history?status=rejected&q='+encodeURIComponent('https://youtu.be/KYI8i2_v8nU?si=test'),null,'owner');assert.equal(r.status,200);assert.equal(r.data.items.length,1);assert.equal(r.data.items[0].review_note,'Incorrect details');
+ assert.equal((await call('/submission-history?status=accepted',null,'owner')).data.items.length,0);
+ assert.equal((await call('/submission-history?status=invalid',null,'owner')).status,400);
+});
+test('reopening a rejected submission preserves decisions, audits the old review and returns it to the queue',async()=>{
+ const {call,sql,points}=await setup();
+ sql.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,status,created_at,reviewed_at,reviewed_by,review_note) VALUES('reopen-test','fan','submission','missioned-souls','KYI8i2_v8nU','Please check this MS reaction','rejected','2026-01-01','2026-01-02','owner','Incorrect details')").run();
+ sql.prepare("INSERT INTO exclusions VALUES('missioned-souls','KYI8i2_v8nU','Preserved exclusion')").run();
+ const b={id:'reopen-test',note:'Verify corrected details again'};
+ assert.equal((await call('/submission/reopen',b,'fan')).status,403);
+ assert.equal((await call('/submission/reopen',{...b,note:''},'owner')).status,400);
+ assert.equal((await call('/submission/reopen',b,'owner')).status,200);
+ const row=sql.prepare('SELECT * FROM contributions WHERE id=?').get(b.id);assert.equal(row.status,'pending');assert.equal(row.review_note,null);assert.equal(row.reviewed_at,null);assert.equal(row.created_at,'2026-01-01');
+ assert.ok((await call('/queue?kind=submission',null,'owner')).data.items.some(c=>c.id===b.id));
+ assert.equal(sql.prepare("SELECT reason FROM exclusions WHERE video_id='KYI8i2_v8nU'").get().reason,'Preserved exclusion');
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM videos WHERE id='KYI8i2_v8nU'").get().n,0);
+ const audit=JSON.parse(sql.prepare("SELECT value FROM state WHERE key LIKE 'submission-reopen:%'").get().value);assert.equal(audit.actor,'owner');assert.equal(audit.before.review_note,'Incorrect details');assert.equal(audit.note,b.note);assert.equal(points('fan'),0);
+ assert.equal((await call('/submission/reopen',b,'owner')).status,409);
+});
+test('accepted submissions and rejected comments cannot be reopened as submissions',async()=>{
+ const {call,sql}=await setup();
+ for(const [id,kind,status] of [['accepted-test','submission','accepted'],['comment-test','comment','rejected']]){sql.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,status,created_at) VALUES(?,'fan',?,'missioned-souls','KYI8i2_v8nU','Test contribution',?,'2026-01-01')").run(id,kind,status);assert.equal((await call('/submission/reopen',{id,note:'Review this item again'},'owner')).status,409);}
+});
