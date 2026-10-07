@@ -30,3 +30,5 @@ body.signed-out{background:var(--paper);margin:0}
 
 /* Public application overview remains readable before member sign-in. */
 .welcome-card{max-width:850px}.welcome-card nav{font-size:14px;line-height:1.8}.welcome-card .public-tagline{font-size:20px;font-weight:600}.public-sign-in{max-width:480px;margin:32px auto 0;padding-top:12px;border-top:1px solid var(--line)}
+
+footer{flex-wrap:wrap}footer nav[aria-label="Policies"]{display:flex;flex-wrap:wrap;gap:10px}footer nav[aria-label="Policies"] a{text-decoration:underline;text-underline-offset:3px}

@@ -117,6 +117,14 @@ export async function community(request,env,seed,user){
         const comments=await db.prepare("SELECT c.id,c.body,c.created_at,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM contributions c JOIN members m ON m.id=c.user_id WHERE c.kind='comment' AND c.video_id=? AND c.status='accepted' ORDER BY c.created_at DESC LIMIT 100").bind(video).all();
         return json({rating:rating?.score||0,comments:comments.results});
       }
+      if(path==='/submission-history'){
+        if(!user.moderator)fail('Moderator access required.',403);
+        const status=u.searchParams.get('status')||'all',q=(u.searchParams.get('q')||'').trim().slice(0,250),offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0));
+        if(!['all','accepted','rejected'].includes(status))fail('Invalid submission status.');
+        const id=youtubeId(q)||q;
+        const rows=await db.prepare("SELECT c.*,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=c.user_id),0) points FROM contributions c LEFT JOIN members m ON m.id=c.user_id WHERE c.kind='submission' AND c.status IN ('accepted','rejected') "+(status!=='all'?"AND c.status=? ":"")+"AND instr(lower(c.video_id||' '||c.body||' '||COALESCE(c.review_note,'')),lower(?))>0 ORDER BY c.reviewed_at DESC,c.id LIMIT 51 OFFSET ?").bind(...(status!=='all'?[status]:[]),id,offset).all();
+        return json({items:rows.results.slice(0,50),hasMore:rows.results.length>50});
+      }
       if(path==='/queue'){
         if(!user.moderator)fail('Moderator access required.',403);
         const kind=u.searchParams.get('kind')||'all',offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0));
@@ -131,6 +139,19 @@ export async function community(request,env,seed,user){
     const raw=await request.text();if(raw.length>10000)fail('Submission too large.',413);
     let b;try{b=JSON.parse(raw);}catch{fail('Invalid submission.');}if(!b||typeof b!=='object')fail('Invalid submission.');
     const now=new Date().toISOString();
+    if(path==='/submission/reopen'){
+      if(!user.moderator)fail('Moderator access required.',403);
+      const id=text(b.id,1,200,'Submission ID'),note=text(b.note,5,500,'Reason for reopening');
+      const before=await db.prepare("SELECT * FROM contributions WHERE id=? AND kind='submission' AND status='rejected'").bind(id).first();
+      if(!before)fail('Only rejected submissions can be reopened. Refresh the history.',409);
+      const guard="EXISTS(SELECT 1 FROM contributions WHERE id=? AND kind='submission' AND status='rejected')";
+      const result=await db.batch([
+        db.prepare(`INSERT INTO state(key,value) SELECT ?,? WHERE ${guard}`).bind('submission-reopen:'+crypto.randomUUID(),JSON.stringify({actor:user.id,action:'reopen-submission',note,before,at:now}),id),
+        db.prepare("UPDATE contributions SET status='pending',reviewed_at=NULL,reviewed_by=NULL,review_note=NULL WHERE id=? AND kind='submission' AND status='rejected'").bind(id)
+      ]);
+      if(!result[1].meta?.changes)fail('This submission has already changed. Refresh the history.',409);
+      return json({ok:true,message:'Submission reopened for review. It is awaiting approval in Submitted reactions; catalog decisions and exclusions are unchanged.'});
+    }
       if(path==='/catalog-video/update'){
       if(!user.moderator)fail('Moderator access required.',403);
       if(!/^[\w-]{11}$/.test(b.videoId||''))fail('Invalid video ID.');

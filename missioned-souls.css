@@ -10,10 +10,10 @@
 
 .ms-official-link{grid-column:2;grid-row:3;color:#103f38;font-size:13px;font-weight:600;margin-top:5px}
 .ms-header-link{display:inline-flex;flex-shrink:0;align-items:center;margin-left:8px}
-.ms-header-link img{width:64px;height:44px;object-fit:contain}
+.ms-header-link img{width:128px;height:88px;object-fit:contain}
 .ms-category-row{display:flex;align-items:center;gap:6px;padding:6px 0;flex-wrap:wrap}
 .ms-category-row input{width:220px;max-width:100%;min-width:0}
 .ms-category-row button{min-width:36px;min-height:36px}
 #ms-category-add{display:flex;align-items:end;gap:8px;flex-wrap:wrap}
-@media(max-width:600px){.app-header{flex-wrap:wrap;gap:8px}.app-header>div{flex-wrap:wrap;justify-content:flex-end}.ms-header-link img{width:54px;height:38px}}
+@media(max-width:600px){.app-header{flex-wrap:wrap;gap:8px}.app-header>div{flex-wrap:wrap;justify-content:flex-end}.ms-header-link img{width:96px;height:66px}}
 @media(max-width:480px){.ms-result h2{flex-basis:100%;width:100%}}
