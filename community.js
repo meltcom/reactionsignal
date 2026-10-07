@@ -21,7 +21,7 @@ async function communityApi(path,body){
 function communityScore(id){const s=scoreMap.get(id);return s?`${Number(s.average).toFixed(1)} / 5 · ${s.count} rating${s.count===1?'':'s'}`:'Not rated yet';}
 function communityRank(id){const s=scoreMap.get(id);return s&&s.count>=3?s.ranking:-1;}
 function communityMessage(id,message){$(id).textContent=message;}
-async function loadCommunity(){
+async function loadCommunity({deferSecondary=false}={}){
   try{
     communityState=await communityApi('/summary');scoreMap=new Map(communityState.scores.map(s=>[s.video_id,s]));
     $('displayName').value=communityState.name;
@@ -32,8 +32,10 @@ async function loadCommunity(){
     $('myContributions').innerHTML=communityState.mine.length?communityState.mine.map(c=>`<article class="contribution"><strong>${escapeHtml(c.kind)} · ${escapeHtml(c.status)}</strong> <a target="_blank" rel="noopener" href="https://www.youtube.com/watch?v=${escapeHtml(c.video_id)}">Open video ↗</a><p>${escapeHtml(c.body)}</p>${c.review_note?`<p>Review: ${escapeHtml(c.review_note)}</p>`:''}</article>`).join(''):'<p>No contributions submitted yet.</p>';
     $('pointsHistory').innerHTML=communityState.ledger.length?communityState.ledger.map(p=>`<p>${prettyDate(p.created_at)} · ${escapeHtml(p.kind)} · ${p.amount>0?'+':''}${p.amount} points</p>`).join(''):'<p>Your points history will appear here.</p>';
     $('moderation').hidden=!communityState.moderator;
-    await loadCoverage();
-    if(communityState.moderator)await loadReviewQueue();
+    if(!deferSecondary){
+      await loadCoverage();
+      if(communityState.moderator)await loadReviewQueue();
+    }
   }catch(e){communityMessage('communityStatus',e.message);}
 }
 async function formAction(form,statusId,work){

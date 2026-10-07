@@ -43,7 +43,21 @@ function renderDiscovery() {
   if(communityState?.moderator===true)for(const r of d?.runs||[]){let queries=[];try{queries=JSON.parse(r.query_metrics||'[]');}catch{}if(!queries.length)continue;const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent=`Query diagnostics: ${r.started_at}`;details.append(summary);for(const q of queries){const line=document.createElement('p');line.textContent=`${q.rowsRead} rows read · ${q.rowsWritten} written · ${q.calls} calls · ${q.ms}ms individual requests · ${q.query}`;details.append(line);}$('discoveryRuns').append(details);}
 
 }
-async function init() { try { const response = await reactionAuth.fetch('/data.json', {cache:'no-store'}); if(!response.ok) throw new Error('Unavailable'); catalog = await response.json(); $('catalogCount').textContent = catalog.stats.channels.toLocaleString(); $('performerCount').textContent = catalog.performers.length; await loadCommunity(); await loadDashboard(); renderAll(); renderDiscovery(); } catch (error) { $('discoveryStatus').textContent='The catalog service is temporarily unavailable. Please reload to retry.'; $('videoGrid').innerHTML = '<div class="empty-state">The catalog is temporarily unavailable. Please try again shortly.</div>'; } }
+async function init() {
+  try {
+    // Start independent member reads together; only rendering needs the catalog.
+    const catalogLoad=(async()=>{const response=await reactionAuth.fetch('/data.json',{cache:'no-store'});if(!response.ok)throw new Error('Unavailable');catalog=await response.json();catalogEtag=response.headers.get('ETag');$('catalogCount').textContent=catalog.stats.channels.toLocaleString();$('performerCount').textContent=catalog.performers.length;})();
+    const dashboardLoad=socialApi('/dashboard');
+    const communityLoad=catalogLoad.then(()=>loadCommunity({deferSecondary:true}));
+    const [, , memberDashboard]=await Promise.all([catalogLoad,communityLoad,dashboardLoad]);
+    await loadDashboard(memberDashboard);
+    renderAll();renderDiscovery();
+    loadCoverage().catch(error=>communityMessage('communityStatus',error.message));
+  } catch (error) {
+    $('discoveryStatus').textContent='The catalog service is temporarily unavailable. Please reload to retry.';
+    $('videoGrid').innerHTML='<div class="empty-state">The catalog is temporarily unavailable. Please try again shortly.</div>';
+  }
+}
 
 $('searchInput').addEventListener('input', (event) => { state.query = event.target.value; renderVideos(); });
 $('formatFilter').addEventListener('change', (event) => { state.format = event.target.value; renderVideos(); });

@@ -23,7 +23,27 @@ export async function social(request,env,seed,user){try{
  const first=async(q,...v)=>db.prepare(q).bind(...v).first();
  const run=async(q,...v)=>db.prepare(q).bind(...v).run();
  if(request.method==='GET'){
-  if(path==='/dashboard')return json({userId:user.id,reactorScores:await all('SELECT channel_id,COUNT(*) count,AVG(score) average FROM reactor_ratings GROUP BY channel_id'),myReactorRatings:await all('SELECT channel_id,score FROM reactor_ratings WHERE user_id=?',user.id),hiddenReactors:await all('SELECT h.channel_id,c.name FROM hidden_reactors h JOIN channels c ON c.id=h.channel_id WHERE h.user_id=? ORDER BY c.name',user.id),preferences:JSON.parse((await first('SELECT settings FROM preferences WHERE user_id=?',user.id))?.settings||'{}'),views:(await all('SELECT * FROM saved_views WHERE user_id=? ORDER BY created_at DESC',user.id)).map(v=>({...v,settings:JSON.parse(v.settings)})),follows:await all('SELECT kind,target FROM follows WHERE user_id=?',user.id),watch:await all('SELECT video_id,status,favorite FROM watch WHERE user_id=?',user.id),blocks:await all('SELECT b.target,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM blocks b LEFT JOIN members m ON m.id=b.target WHERE b.user_id=?',user.id),reputation:await all('SELECT amount,reason,created_at FROM reputation_events WHERE user_id=? ORDER BY created_at DESC LIMIT 100',user.id),reputationTotal:(await first('SELECT COALESCE(SUM(amount),0) total FROM reputation_events WHERE user_id=?',user.id)).total,leaders:await all('SELECT m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points,SUM(r.amount) reputation FROM reputation_events r JOIN members m ON m.id=r.user_id GROUP BY r.user_id HAVING SUM(r.amount)>0 ORDER BY reputation DESC LIMIT 20'),scores:await all("SELECT video_id,COUNT(*) comments FROM contributions WHERE kind='comment' AND status='accepted' GROUP BY video_id")});
+  if(path==='/dashboard'){
+    // These account-scoped reads are independent; avoid one round trip after another.
+    const reads={
+      userId: async()=>(user.id),
+      reactorScores: async()=>(await all('SELECT channel_id,COUNT(*) count,AVG(score) average FROM reactor_ratings GROUP BY channel_id')),
+      myReactorRatings: async()=>(await all('SELECT channel_id,score FROM reactor_ratings WHERE user_id=?',user.id)),
+      hiddenReactors: async()=>(await all('SELECT h.channel_id,c.name FROM hidden_reactors h JOIN channels c ON c.id=h.channel_id WHERE h.user_id=? ORDER BY c.name',user.id)),
+      preferences: async()=>(JSON.parse((await first('SELECT settings FROM preferences WHERE user_id=?',user.id))?.settings||'{}')),
+      views: async()=>((await all('SELECT * FROM saved_views WHERE user_id=? ORDER BY created_at DESC',user.id)).map(v=>({...v,settings:JSON.parse(v.settings)}))),
+      follows: async()=>(await all('SELECT kind,target FROM follows WHERE user_id=?',user.id)),
+      watch: async()=>(await all('SELECT video_id,status,favorite FROM watch WHERE user_id=?',user.id)),
+      blocks: async()=>(await all('SELECT b.target,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM blocks b LEFT JOIN members m ON m.id=b.target WHERE b.user_id=?',user.id)),
+      reputation: async()=>(await all('SELECT amount,reason,created_at FROM reputation_events WHERE user_id=? ORDER BY created_at DESC LIMIT 100',user.id)),
+      reputationTotal: async()=>((await first('SELECT COALESCE(SUM(amount),0) total FROM reputation_events WHERE user_id=?',user.id)).total),
+      leaders: async()=>(await all('SELECT m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points,SUM(r.amount) reputation FROM reputation_events r JOIN members m ON m.id=r.user_id GROUP BY r.user_id HAVING SUM(r.amount)>0 ORDER BY reputation DESC LIMIT 20')),
+      scores: async()=>(await all("SELECT video_id,COUNT(*) comments FROM contributions WHERE kind='comment' AND status='accepted' GROUP BY video_id")),
+    };
+    return json(Object.fromEntries(await Promise.all(
+      Object.entries(reads).map(async([key,read])=>[key,await read()])
+    )));
+  }
   if(path==='/comments')return json({items:await all(`SELECT c.id,c.parent_id,c.user_id,c.body,c.status,c.created_at,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points,(SELECT COUNT(*) FROM comment_likes l WHERE l.comment_id=c.id) likes,EXISTS(SELECT 1 FROM comment_likes l WHERE l.comment_id=c.id AND l.user_id=?) liked FROM contributions c JOIN members m ON m.id=c.user_id WHERE c.kind='comment' AND c.video_id=? AND (c.status='accepted' OR (c.user_id=? AND c.status='pending')) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE b.user_id=? AND b.target=c.user_id) ORDER BY c.created_at ASC LIMIT 300`,user.id,url.searchParams.get('video'),user.id,user.id)});
   if(path==='/rooms'){
    const data=[];for(const r of rooms){const unread=await first("SELECT COUNT(*) n FROM chat_messages c WHERE room=? AND status='visible' AND user_id<>? AND created_at>COALESCE((SELECT last_read FROM room_members WHERE user_id=? AND room=?),'') AND NOT EXISTS(SELECT 1 FROM blocks b WHERE b.user_id=? AND b.target=c.user_id)",r.id,user.id,user.id,r.id,user.id);const active=await first('SELECT COUNT(*) n FROM room_members WHERE room=? AND seen_at>?',r.id,new Date(Date.now()-60000).toISOString());data.push({...r,unread:unread.n,active:active.n});}return json({rooms:data});
