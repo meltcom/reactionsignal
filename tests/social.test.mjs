@@ -43,3 +43,23 @@ test('dashboard reads overlap and keep the existing account-scoped response',asy
  assert.deepEqual((await call('/dashboard')).data.follows.map(f=>f.kind),['performer']);
  assert.equal((await call('/reset-follows',{kind:'song',confirm:true})).status,200);
  });
+
+test('Master Reset clears the four selected groups atomically and preserves other member data',async()=>{
+ const {call,sql}=await setup();
+ sql.prepare('INSERT INTO channels(id,name) VALUES(?,?)').run('UC1234567890123456789012','Test reactor');
+ for(const user of ['fan','other']){
+ for(const kind of ['reactor','song','performer'])sql.prepare('INSERT INTO follows VALUES(?,?,?)').run(user,kind,kind==='performer'?'missioned-souls':'sample');
+ sql.prepare('INSERT INTO hidden_reactors VALUES(?,?,?)').run(user,'UC1234567890123456789012','2026-10-07');
+ sql.prepare('INSERT INTO reactor_ratings VALUES(?,?,?,?)').run(user,'UC1234567890123456789012',80,'2026-10-07');
+ sql.prepare('INSERT INTO ratings(user_id,video_id,score,created_at) VALUES(?,?,?,?)').run(user,'abcdefghijk',5,'2026-10-07');
+ }
+ await call('/watch',{videoId:'abcdefghijk',status:'watched',favorite:true});
+ await call('/preferences',{theme:'dark'});
+ assert.equal((await call('/master-reset',{})).status,400);
+ assert.equal((await call('/master-reset',{confirm:true},null)).status,401);
+ assert.equal((await call('/master-reset',{confirm:true},'fan','https://evil.test')).status,403);
+ assert.equal((await call('/master-reset',{confirm:true})).status,200);
+ for(const table of ['hidden_reactors','reactor_ratings','ratings']){assert.equal(sql.prepare(`SELECT COUNT(*) n FROM ${table} WHERE user_id='fan'`).get().n,0);assert.equal(sql.prepare(`SELECT COUNT(*) n FROM ${table} WHERE user_id='other'`).get().n,1);}
+ const d=(await call('/dashboard')).data;assert.deepEqual(d.follows.map(f=>f.kind),['performer']);assert.equal(d.watch[0].favorite,1);assert.equal(d.watch[0].status,'watched');assert.equal(d.preferences.theme,'dark');
+ assert.equal((await call('/master-reset',{confirm:true})).status,200);
+});

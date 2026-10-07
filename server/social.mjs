@@ -73,6 +73,16 @@ export async function social(request,env,seed,user){try{
   await run(b.remove?'DELETE FROM hidden_reactors WHERE user_id=? AND channel_id=?':'INSERT OR IGNORE INTO hidden_reactors(user_id,channel_id,created_at) VALUES(?,?,?)',...(b.remove?[user.id,b.channelId]:[user.id,b.channelId,now]));
   return json({ok:true});
  }
+ if(path==='/master-reset'){
+  if(b.confirm!==true)fail('Confirm Master Reset.');
+  await db.batch([
+   db.prepare("DELETE FROM follows WHERE user_id=? AND kind IN ('reactor','song')").bind(user.id),
+   db.prepare('DELETE FROM hidden_reactors WHERE user_id=?').bind(user.id),
+   db.prepare('DELETE FROM reactor_ratings WHERE user_id=?').bind(user.id),
+   db.prepare('DELETE FROM ratings WHERE user_id=?').bind(user.id)
+  ]);
+  return json({ok:true});
+ }
  if(path==='/reset-follows'){
   if(!['reactor','song'].includes(b.kind)||b.confirm!==true)fail('Confirm resetting reactor or song follows.');
   await run('DELETE FROM follows WHERE user_id=? AND kind=?',user.id,b.kind);
