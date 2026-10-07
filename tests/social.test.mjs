@@ -59,7 +59,8 @@ test('Master Reset clears the four selected groups atomically and preserves othe
  assert.equal((await call('/master-reset',{confirm:true},null)).status,401);
  assert.equal((await call('/master-reset',{confirm:true},'fan','https://evil.test')).status,403);
  assert.equal((await call('/master-reset',{confirm:true})).status,200);
- for(const table of ['hidden_reactors','reactor_ratings','ratings']){assert.equal(sql.prepare(`SELECT COUNT(*) n FROM ${table} WHERE user_id='fan'`).get().n,0);assert.equal(sql.prepare(`SELECT COUNT(*) n FROM ${table} WHERE user_id='other'`).get().n,1);}
+ for(const table of ['hidden_reactors','reactor_ratings']){assert.equal(sql.prepare(`SELECT COUNT(*) n FROM ${table} WHERE user_id='fan'`).get().n,0);assert.equal(sql.prepare(`SELECT COUNT(*) n FROM ${table} WHERE user_id='other'`).get().n,1);}
+ assert.equal(sql.prepare("SELECT score FROM ratings WHERE user_id='fan'").get().score,5);
  const d=(await call('/dashboard')).data;assert.deepEqual(d.follows.map(f=>f.kind),['performer']);assert.equal(d.watch[0].favorite,1);assert.equal(d.watch[0].status,'watched');assert.equal(d.preferences.theme,'dark');
  assert.equal((await call('/master-reset',{confirm:true})).status,200);
 });

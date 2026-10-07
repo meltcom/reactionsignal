@@ -78,8 +78,7 @@ export async function social(request,env,seed,user){try{
   await db.batch([
    db.prepare("DELETE FROM follows WHERE user_id=? AND kind IN ('reactor','song')").bind(user.id),
    db.prepare('DELETE FROM hidden_reactors WHERE user_id=?').bind(user.id),
-   db.prepare('DELETE FROM reactor_ratings WHERE user_id=?').bind(user.id),
-   db.prepare('DELETE FROM ratings WHERE user_id=?').bind(user.id)
+   db.prepare('DELETE FROM reactor_ratings WHERE user_id=?').bind(user.id)
   ]);
   return json({ok:true});
  }
