@@ -5,6 +5,20 @@ import {missionedSouls,refreshMissionedSouls,readMissionedSouls,scheduledMission
 import {DatabaseSync} from 'node:sqlite';
 function database(){const sql=new DatabaseSync(':memory:');sql.exec('CREATE TABLE state(key TEXT PRIMARY KEY,value TEXT NOT NULL)');return {prepare(query){let values=[];return {bind(...v){values=v;return this;},async first(){return sql.prepare(query).get(...values)||null;},async all(){return {results:sql.prepare(query).all(...values)};},async run(){return {meta:{changes:Number(sql.prepare(query).run(...values).changes)}};}};},async batch(ops){const result=[];for(const op of ops)result.push(await op.run());return result;}};}
 const video=(id='C1yfkA_0_Sg',extra={})=>normalizeVideo({title:'Studio cover',url:'https://www.youtube.com/watch?v='+id,...extra});
+test('manual Shorts classification preserves metadata and survives later refreshes in either direction',async()=>{
+ const db=database(),seed={videos:[video(undefined,{tags:['OPM'],views:123})],coverage:'starter'},env={DB:db,YOUTUBE_API_KEY:'fixture'};
+ const mark=isShort=>missionedSouls(new Request('https://reactionjourney.com/api/missioned-souls',{method:'POST',body:JSON.stringify({action:'set-short',id:'yt:C1yfkA_0_Sg',isShort})}),env,seed,{moderator:true});
+ assert.equal((await mark(true)).status,200);
+ let current=(await readMissionedSouls(db,seed)).videos[0];
+ assert.deepEqual(current.tags,['OPM','Shorts']);assert.equal(current.views,123);assert.equal(current.reviewed,false);
+ const fetcher=async url=>{const p=new URL(url).pathname;return Response.json(p.endsWith('/channels')?{items:[{id:'official',contentDetails:{relatedPlaylists:{uploads:'uploads'}}}]}:p.endsWith('/playlistItems')?{items:[{contentDetails:{videoId:'C1yfkA_0_Sg'}}]}:{items:[{id:'C1yfkA_0_Sg',snippet:{title:'Studio cover #shorts',channelId:'official',publishedAt:'2026-01-01'},statistics:{viewCount:'456'}}]});};
+ await refreshMissionedSouls(env,seed,fetcher);
+ current=(await readMissionedSouls(db,seed)).videos[0];assert.ok(current.tags.includes('Shorts'));assert.equal(current.views,456);
+ assert.equal((await mark(false)).status,200);
+ await refreshMissionedSouls(env,seed,fetcher);
+ current=(await readMissionedSouls(db,seed)).videos[0];assert.equal(current.tags.includes('Shorts'),false);assert.equal(current.shortsOverride,false);
+ const denied=await missionedSouls(new Request('https://reactionjourney.com/api/missioned-souls',{method:'POST',body:JSON.stringify({action:'set-short',id:current.id,isShort:true})}),env,seed,{moderator:false});assert.equal(denied.status,403);
+});
 test('overlapping categories and OPM Shorts inclusion',()=>{
  const a=video(undefined,{tags:['OPM','Shorts','Songs']}),b=video('3DzA_GoOE60',{tags:['OPM','Songs']});
  assert.equal(selectVideos([a,b],{category:'OPM'}).length,2);

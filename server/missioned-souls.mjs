@@ -1,4 +1,4 @@
-import {normalizeVideo,suggestCategories} from '../missioned-souls-core.mjs';
+import {normalizeVideo,suggestCategories,classifyShort} from '../missioned-souls-core.mjs';
 const json=(v,status=200)=>new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store'}});
 const upsert=(db,key,value)=>db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,JSON.stringify(value));
 async function state(db,key){const r=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();return r?JSON.parse(r.value):null;}
@@ -15,6 +15,7 @@ async function saveVideos(db,items,{manual=false}={}){
  const histories=items.map((item,index)=>{if(item.history==null)return [];if(!Array.isArray(item.history)||item.history.length>400)throw new Error('Use at most 400 daily snapshots per video.');return item.history.map(s=>{if(!s||!Number.isFinite(Date.parse(s.at))||!Number.isSafeInteger(s.views)||s.views<0)throw new Error('History needs dated, nonnegative whole view counts.');return {id:normalized[index].id,at:new Date(s.at).toISOString(),views:s.views};});});
  for(const [index,item] of normalized.entries()){const old=await state(db,'ms-video:'+item.id);const v={...item};
   if(!manual&&old?.reviewed){v.tags=old.tags;v.reviewed=true;v.youtubeEquivalent=old.youtubeEquivalent;}
+  if(!manual&&typeof old?.shortsOverride==='boolean')Object.assign(v,classifyShort(v,old.shortsOverride));
   ops.push(upsert(db,'ms-video:'+v.id,v));
   for(const s of histories[index])ops.push(upsert(db,'ms-history:'+v.id+':'+s.at.slice(0,10),s));
   if(v.statsAt&&v.views!=null)ops.push(upsert(db,'ms-history:'+v.id+':'+v.statsAt.slice(0,10),{id:v.id,at:v.statsAt,views:v.views}));
@@ -59,6 +60,13 @@ export async function missionedSouls(request,env,seed,user){
   if(Number(request.headers.get('Content-Length'))>2000000)return json({error:'Import is too large.'},413);
   const raw=await request.text();if(raw.length>2000000)return json({error:'Import is too large.'},413);const b=JSON.parse(raw);
   if(b.action==='refresh')return json(await refreshMissionedSouls(env,seed));
+  if(b.action==='set-short'){
+   if(typeof b.isShort!=='boolean'||typeof b.id!=='string')return json({error:'Choose a video and whether it is a Short.'},400);
+   const video=(await readMissionedSouls(env.DB,seed)).videos.find(v=>v.id===b.id);
+   if(!video)return json({error:'Video not found.'},404);
+   await saveVideos(env.DB,[classifyShort(video,b.isShort)],{manual:true});
+   return json({ok:true,message:b.isShort?'Video categorized as Shorts.':'Shorts category removed.'});
+  }
   if(b.action==='save'||b.action==='import'){
    const items=b.action==='save'?[b.video]:b.videos;
    if(!Array.isArray(items)||!items.length||items.length>1000)return json({error:'Import 1–1000 videos per file.'},400);

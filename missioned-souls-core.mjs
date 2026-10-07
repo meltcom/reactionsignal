@@ -19,7 +19,11 @@ export function normalizeVideo(v){
  const num=k=>v[k]==null||v[k]===''?null:Number.isSafeInteger(Number(v[k]))&&Number(v[k])>=0?Number(v[k]):(()=>{throw new Error('Statistics must be nonnegative whole numbers.');})();
  const date=k=>!v[k]?null:Number.isFinite(Date.parse(v[k]))?new Date(v[k]).toISOString():(()=>{throw new Error('Use a valid date.');})();
  if(v.tags!=null&&(!Array.isArray(v.tags)||v.tags.some(t=>!categories.includes(t))))throw new Error('Choose categories from the catalog list.');
- return {id,title:v.title.trim(),url:youtube?'https://www.youtube.com/watch?v='+ytId:u.href,platform,youtubeId:ytId,publishedAt:date('publishedAt'),statsAt:date('statsAt'),views:num('views'),likes:num('likes'),comments:num('comments'),tags:v.tags||suggestCategories(v.title),reviewed:!!v.reviewed,available:v.available!==false,youtubeEquivalent:!!v.youtubeEquivalent,sourceNote:String(v.sourceNote||'').slice(0,500)};
+ return {id,title:v.title.trim(),url:youtube?'https://www.youtube.com/watch?v='+ytId:u.href,platform,youtubeId:ytId,publishedAt:date('publishedAt'),statsAt:date('statsAt'),views:num('views'),likes:num('likes'),comments:num('comments'),tags:v.tags||suggestCategories(v.title),shortsOverride:typeof v.shortsOverride==='boolean'?v.shortsOverride:null,reviewed:!!v.reviewed,available:v.available!==false,youtubeEquivalent:!!v.youtubeEquivalent,sourceNote:String(v.sourceNote||'').slice(0,500)};
+}
+export function classifyShort(v,isShort){
+ if(typeof isShort!=='boolean')throw new Error('Choose whether this video is a Short.');
+ return {...v,tags:[...(v.tags||[]).filter(t=>t!=='Shorts'),...(isShort?['Shorts']:[])],shortsOverride:isShort};
 }
 export function viewGain(v,days,now=Date.now()){
  const end=Date.parse(v.statsAt),target=end-days*86400000;
