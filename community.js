@@ -77,6 +77,7 @@ let memberContributionOffset=0;
 async function loadReviewQueue(){
   if(!communityState?.moderator)return;
   $('moderation').hidden=false;
+  await loadSubmissionHistory();
   try{$('memberContributionStatus').textContent='Loading member contributions…';const kind=$('memberContributionKind').value;const r=await communityApi('/queue?kind='+kind+'&offset='+memberContributionOffset);
     $('memberContributionPrevious').disabled=memberContributionOffset===0;$('memberContributionNext').disabled=!r.hasMore;
     $('memberContributionStatus').textContent=r.items.length?`${r.items.length} ${kind==='submission'?'submitted reactions':'contributions'} shown.`:'No '+(kind==='submission'?'submitted reactions awaiting review':'matching contributions')+'.';
@@ -89,3 +90,28 @@ $('refreshQueue').addEventListener('click',loadReviewQueue);
 $('memberContributionKind').onchange=()=>{memberContributionOffset=0;loadReviewQueue();};
 $('memberContributionPrevious').onclick=()=>{memberContributionOffset=Math.max(0,memberContributionOffset-50);loadReviewQueue();};
 $('memberContributionNext').onclick=()=>{memberContributionOffset+=50;loadReviewQueue();};
+
+let submissionHistoryOffset=0,submissionHistoryRequest=0;
+async function loadSubmissionHistory(){
+ if(!communityState?.moderator)return;
+ const token=++submissionHistoryRequest;
+ $('submissionHistoryStatus').textContent='Loading reviewed submissions…';
+ try{
+  const params=new URLSearchParams({status:$('submissionHistoryFilter').value,q:$('submissionHistoryQuery').value.trim(),offset:String(submissionHistoryOffset)});
+  const r=await communityApi('/submission-history?'+params);
+  if(token!==submissionHistoryRequest||!communityState?.moderator)return;
+  $('submissionHistoryPrevious').disabled=submissionHistoryOffset===0;$('submissionHistoryNext').disabled=!r.hasMore;
+  $('submissionHistoryStatus').textContent=r.items.length?`${r.items.length} reviewed submissions shown.`:'No reviewed submissions match this search.';
+  $('submissionHistoryItems').innerHTML=r.items.map(c=>`<article class="review-item"><h4>${escapeHtml(c.video_id)} · ${escapeHtml(c.status)} · ${memberDisplayName(c.name||'Member',c.points)}</h4><a href="https://www.youtube.com/watch?v=${escapeHtml(c.video_id)}" target="_blank" rel="noopener">Verify on YouTube ↗</a><p>${escapeHtml(c.body)}</p><p><strong>Review note:</strong> ${escapeHtml(c.review_note||'No note recorded')}</p><p>Reviewed ${escapeHtml(prettyDate(c.reviewed_at||c.created_at))}</p>${c.status==='rejected'?`<form data-reopen-submission="${escapeHtml(c.id)}"><label>Reason for reopening<textarea name="note" required minlength="5" maxlength="500"></textarea></label><button class="outline-button">Reopen for Review</button><p role="status"></p></form>`:''}</article>`).join('');
+  $('submissionHistoryItems').querySelectorAll('[data-reopen-submission]').forEach(form=>form.onsubmit=async e=>{
+   e.preventDefault();const button=form.querySelector('button'),message=form.querySelector('[role=status]');button.disabled=true;
+   try{const r=await communityApi('/submission/reopen',{id:form.dataset.reopenSubmission,note:form.elements.note.value});$('memberContributionKind').value='submission';memberContributionOffset=0;await loadReviewQueue();$('submissionHistoryStatus').textContent=r.message;}
+   catch(err){message.textContent=err.message;}finally{button.disabled=false;}
+  });
+ }catch(err){if(token===submissionHistoryRequest){$('submissionHistoryItems').replaceChildren();$('submissionHistoryStatus').textContent=err.message;}}
+}
+$('submissionHistorySearch').onsubmit=e=>{e.preventDefault();submissionHistoryOffset=0;loadSubmissionHistory();};
+$('submissionHistoryFilter').onchange=()=>{submissionHistoryOffset=0;loadSubmissionHistory();};
+$('submissionHistoryPrevious').onclick=()=>{submissionHistoryOffset=Math.max(0,submissionHistoryOffset-50);loadSubmissionHistory();};
+$('submissionHistoryNext').onclick=()=>{submissionHistoryOffset+=50;loadSubmissionHistory();};
+window.addEventListener('reaction-auth-change',()=>{submissionHistoryRequest++;submissionHistoryOffset=0;$('submissionHistoryItems').replaceChildren();$('submissionHistoryStatus').textContent='';});
