@@ -1,19 +1,23 @@
+import {categoryRegistry,manageCategories} from "./ms-categories.mjs";
 import {normalizeVideo,suggestCategories,classifyShort} from '../missioned-souls-core.mjs';
 const json=(v,status=200)=>new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store'}});
 const upsert=(db,key,value)=>db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,JSON.stringify(value));
 async function state(db,key){const r=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();return r?JSON.parse(r.value):null;}
 export async function readMissionedSouls(db,seed){
+ const registry=await categoryRegistry(db);
  const rows=(await db.prepare("SELECT key,value FROM state WHERE key LIKE 'ms-video:%' OR key LIKE 'ms-history:%'").all()).results;
- const videos=new Map(seed.videos.map(v=>{const n=normalizeVideo(v);return [n.id,n];})),history=new Map();
+ const videos=new Map(seed.videos.map(v=>{const n=normalizeVideo(v,registry.items.map(c=>c.id));return [n.id,n];})),history=new Map();
  for(const r of rows){const v=JSON.parse(r.value);if(r.key.startsWith('ms-video:'))videos.set(v.id,v);else{const h=history.get(v.id)||[];h.push(v);history.set(v.id,h);}}
  const refresh=await state(db,'ms-refresh');
- return {videos:[...videos.values()].map(v=>({...v,history:history.get(v.id)||[]})),coverage:refresh?.lastCompleteAt?'Official-channel upload scan completed '+refresh.lastCompleteAt+'. Category review and Facebook / other-source coverage may still be incomplete.':(await state(db,'ms-coverage'))?.message||seed.coverage,refresh,updatedAt:(await state(db,'ms-updated'))?.at||null};
+ return {categoryDefinitions:registry.items,categoryRevision:registry.revision,videos:[...videos.values()].map(v=>({...v,history:history.get(v.id)||[]})),coverage:refresh?.lastCompleteAt?'Official-channel upload scan completed '+refresh.lastCompleteAt+'. Category review and Facebook / other-source coverage may still be incomplete.':(await state(db,'ms-coverage'))?.message||seed.coverage,refresh,updatedAt:(await state(db,'ms-updated'))?.at||null};
 }
 async function saveVideos(db,items,{manual=false}={}){
- const normalized=items.map(normalizeVideo),ops=[];
+ const registry=await categoryRegistry(db);
+ const normalized=items.map(v=>normalizeVideo(v,registry.items.map(c=>c.id))),ops=[];
  // Validate complete imports before the first write, including historical snapshots.
  const histories=items.map((item,index)=>{if(item.history==null)return [];if(!Array.isArray(item.history)||item.history.length>400)throw new Error('Use at most 400 daily snapshots per video.');return item.history.map(s=>{if(!s||!Number.isFinite(Date.parse(s.at))||!Number.isSafeInteger(s.views)||s.views<0)throw new Error('History needs dated, nonnegative whole view counts.');return {id:normalized[index].id,at:new Date(s.at).toISOString(),views:s.views};});});
  for(const [index,item] of normalized.entries()){const old=await state(db,'ms-video:'+item.id);const v={...item};
+  if(!manual&&old&&!old.reviewed)v.tags=[...new Set([...v.tags,...old.tags.filter(t=>t.startsWith('custom:'))])];
   if(!manual&&old?.reviewed){v.tags=old.tags;v.reviewed=true;v.youtubeEquivalent=old.youtubeEquivalent;}
   if(!manual&&typeof old?.shortsOverride==='boolean')Object.assign(v,classifyShort(v,old.shortsOverride));
   ops.push(upsert(db,'ms-video:'+v.id,v));
@@ -53,12 +57,13 @@ export async function refreshMissionedSouls(env,seed,fetcher=fetch){
 }
 export async function missionedSouls(request,env,seed,user){
  try{
-  if(!user?.moderator)return json({error:'MS Journey is currently limited to moderators for private testing.'},403);
-  if(request.method==='GET'){return json({...await readMissionedSouls(env.DB,seed),moderator:!!user.moderator,apiConfigured:!!env.YOUTUBE_API_KEY});}
+  if(!user?.id)return json({error:'Sign in to view MS Journey.'},401);
+  if(request.method==='GET'){const data=await readMissionedSouls(env.DB,seed);if(!user.moderator)data.videos=data.videos.map(({sourceNote,...v})=>v);return json({...data,moderator:!!user.moderator,apiConfigured:!!env.YOUTUBE_API_KEY});}
   if(request.method!=='POST')return json({error:'Method not allowed'},405);
   if(!user.moderator)return json({error:'Moderator access required.'},403);
   if(Number(request.headers.get('Content-Length'))>2000000)return json({error:'Import is too large.'},413);
   const raw=await request.text();if(raw.length>2000000)return json({error:'Import is too large.'},413);const b=JSON.parse(raw);
+  if(b.action==='categories')return manageCategories(env.DB,b);
   if(b.action==='refresh')return json(await refreshMissionedSouls(env,seed));
   if(b.action==='set-short'){
    if(typeof b.isShort!=='boolean'||typeof b.id!=='string')return json({error:'Choose a video and whether it is a Short.'},400);

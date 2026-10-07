@@ -5,7 +5,7 @@ export function suggestCategories(title){
  for(const [tag,re] of Object.entries(rules))if(re.test(t))tags.push(tag);
  if(tags.some(x=>x.endsWith('Vlogs'))&&!tags.includes('All Vlogs'))tags.push('All Vlogs');return tags;
 }
-export function normalizeVideo(v){
+export function normalizeVideo(v,allowedCategories=categories){
  if(!v||typeof v.title!=='string'||!v.title.trim()||v.title.length>500)throw new Error('A video needs a title (up to 500 characters).');
  let u;try{u=new URL(v.url);}catch{throw new Error('Use a valid HTTPS video URL.');}
  if(u.protocol!=='https:'||u.username||u.password)throw new Error('Use a valid HTTPS video URL.');
@@ -18,7 +18,7 @@ export function normalizeVideo(v){
  const id=youtube?'yt:'+ytId:platform.toLowerCase()+':'+u.href;
  const num=k=>v[k]==null||v[k]===''?null:Number.isSafeInteger(Number(v[k]))&&Number(v[k])>=0?Number(v[k]):(()=>{throw new Error('Statistics must be nonnegative whole numbers.');})();
  const date=k=>!v[k]?null:Number.isFinite(Date.parse(v[k]))?new Date(v[k]).toISOString():(()=>{throw new Error('Use a valid date.');})();
- if(v.tags!=null&&(!Array.isArray(v.tags)||v.tags.some(t=>!categories.includes(t))))throw new Error('Choose categories from the catalog list.');
+ if(v.tags!=null&&(!Array.isArray(v.tags)||v.tags.some(t=>!allowedCategories.includes(t))))throw new Error('Choose categories from the catalog list.');
  return {id,title:v.title.trim(),url:youtube?'https://www.youtube.com/watch?v='+ytId:u.href,platform,youtubeId:ytId,publishedAt:date('publishedAt'),statsAt:date('statsAt'),views:num('views'),likes:num('likes'),comments:num('comments'),tags:v.tags||suggestCategories(v.title),shortsOverride:typeof v.shortsOverride==='boolean'?v.shortsOverride:null,reviewed:!!v.reviewed,available:v.available!==false,youtubeEquivalent:!!v.youtubeEquivalent,sourceNote:String(v.sourceNote||'').slice(0,500)};
 }
 export function classifyShort(v,isShort){
