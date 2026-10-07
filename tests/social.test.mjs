@@ -29,3 +29,17 @@ test('dashboard reads overlap and keep the existing account-scoped response',asy
  assert.equal(response.status,200);assert.ok(peak>=12,`expected concurrent dashboard reads, got ${peak}`);
  assert.equal(response.data.userId,'fan');assert.deepEqual(response.data.preferences,{});assert.deepEqual(response.data.watch,[]);assert.equal(response.data.reputationTotal,0);
 });
+
+ test('reset follows clears only the selected kind for the signed-in member',async()=>{
+ const {call,sql}=await setup();
+ for(const user of ['fan','other'])for(const kind of ['reactor','song','performer'])sql.prepare('INSERT INTO follows VALUES(?,?,?)').run(user,kind,kind==='performer'?'missioned-souls':'sample');
+ assert.equal((await call('/reset-follows',{kind:'reactor',confirm:true},null)).status,401);
+ assert.equal((await call('/reset-follows',{kind:'reactor',confirm:true},'fan','https://evil.test')).status,403);
+ for(const body of [{kind:'performer',confirm:true},{kind:'song'},{kind:'reactor',confirm:false}])assert.equal((await call('/reset-follows',body)).status,400);
+ assert.equal((await call('/reset-follows',{kind:'reactor',confirm:true})).status,200);
+ assert.deepEqual((await call('/dashboard')).data.follows.map(f=>f.kind).sort(),['performer','song']);
+ assert.equal((await call('/dashboard',null,'other')).data.follows.length,3);
+ assert.equal((await call('/reset-follows',{kind:'song',confirm:true})).status,200);
+ assert.deepEqual((await call('/dashboard')).data.follows.map(f=>f.kind),['performer']);
+ assert.equal((await call('/reset-follows',{kind:'song',confirm:true})).status,200);
+ });

@@ -73,6 +73,11 @@ export async function social(request,env,seed,user){try{
   await run(b.remove?'DELETE FROM hidden_reactors WHERE user_id=? AND channel_id=?':'INSERT OR IGNORE INTO hidden_reactors(user_id,channel_id,created_at) VALUES(?,?,?)',...(b.remove?[user.id,b.channelId]:[user.id,b.channelId,now]));
   return json({ok:true});
  }
+ if(path==='/reset-follows'){
+  if(!['reactor','song'].includes(b.kind)||b.confirm!==true)fail('Confirm resetting reactor or song follows.');
+  await run('DELETE FROM follows WHERE user_id=? AND kind=?',user.id,b.kind);
+  return json({ok:true});
+ }
  if(path==='/follow'){if(!['performer','reactor','song'].includes(b.kind))fail('Invalid follow type.');const target=txt(b.target,1,200);if(b.kind==='performer'&&!performerIds.includes(target))fail('Unknown performer.');if(b.kind==='reactor'&&!await first('SELECT 1 FROM channels WHERE id=?',target))fail('Unknown reactor.');await run(b.remove?'DELETE FROM follows WHERE user_id=? AND kind=? AND target=?':'INSERT OR IGNORE INTO follows VALUES(?,?,?)',user.id,b.kind,target);return json({ok:true});}
  if(path==='/watch'){if(!await first('SELECT 1 FROM videos WHERE id=?',b.videoId))fail('Unknown video.');if(!['unwatched','watching','watched'].includes(b.status)||typeof b.favorite!=='boolean')fail('Invalid watch status.');await run('INSERT INTO watch VALUES(?,?,?,?) ON CONFLICT(user_id,video_id) DO UPDATE SET status=excluded.status,favorite=excluded.favorite',user.id,b.videoId,b.status,Number(b.favorite));return json({ok:true});}
  const me=await first('SELECT name FROM members WHERE id=?',user.id);if(!me)fail('Save your display name in My Profile first.',409);
