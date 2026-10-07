@@ -539,3 +539,10 @@ Reactor subscriber counts refresh from YouTube automatically, using the existing
 The Reactors table shows subscribers and the last successful update date. YouTube supplies rounded public counts; hidden or missing counts display as unknown. Missing channels retain their last known counts and show an unavailable notice. API failures preserve previous data and retry after at least one hour; channels missing from a successful response retry after a day. Moderator names, decisions, exclusions, follows and ratings are preserved.
 
 Discovery status also shows the last subscriber-refresh batch. Refresh requests are included in the existing endpoint request counters. No additional cron configuration or database migration is required. The scheduler must be active and the existing YouTube API key must be configured.
+
+
+### Reviewed submission history
+
+In Moderator Queue, Reviewed submission history lists accepted and rejected submissions, including rejected videos that never entered the catalog. Search by YouTube URL, video ID, explanation, or review note, and filter by status. Rejected submissions have Reopen for Review: enter a reason to return the submission to Submitted reactions, then fetch YouTube details and verify before approving. Reopening records the moderator, reason, and previous review in the audit history; it does not publish a video or clear catalog exclusions. Use Correct Video Information and Save Corrections & Restore for existing excluded catalog videos.
+
+The larger MS Journey logo remains at the top right of member pages. Privacy Policy and Terms of Service are linked in the page footer.
