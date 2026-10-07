@@ -1,6 +1,8 @@
 # Import YouTube subscriptions
 
-Members open **Reactors → Import YouTube subscriptions → Connect YouTube**. Google asks them to choose the account/channel and grant YouTube read permission. The preview lists catalog reactors they subscribe to; selected reactors are followed only after **Follow selected reactors**. Up to 100 can be selected per confirmation; remaining matches stay available. Existing follows, hidden reactors, ratings, and YouTube subscriptions are preserved. This is an on-demand import, not a background synchronization.
+Members open **Reactors → Import / re-import YouTube subscriptions → Connect YouTube**. Google asks them to choose the account/channel and grant YouTube read permission. The preview lists catalog reactors they subscribe to; selected reactors are followed only after **Follow selected reactors**. Up to 100 can be selected per confirmation; remaining matches stay available. Existing follows, hidden reactors, ratings, and YouTube subscriptions are preserved. Use **Import / re-import YouTube subscriptions** again for new subscriptions or another account. Each run reads the current list and adds only the selected matches; it never removes existing follows. This is an on-demand import, not a background synchronization.
+
+In **Following**, **Reset all reactor follows** and **Reset all song follows** clear those follow types separately. **Master Reset** also clears hidden reactors and reactor ratings. It preserves **video ratings**, performer follows, favorites, watch status, account settings, earned points, and YouTube subscriptions. Members must confirm each reset. Re-import can rebuild selected reactor follows afterward.
 
 ## Google and Cloudflare setup
 

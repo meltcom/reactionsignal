@@ -1,6 +1,6 @@
 # Reaction Journey Help
 
-Choose a topic to expand its guide. Guides for members, moderators, and administrators. Updated October 6, 2026, for the current Missioned Souls service.
+Choose a topic to expand its guide. Guides for members, moderators, and administrators. Updated October 7, 2026, for the current Missioned Souls service.
 
 - Sign in and get started
 
@@ -30,6 +30,66 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - Troubleshooting and support
 
+- Import or re-import YouTube subscriptions
+
+- Reset follows or use Master Reset
+
+- MS Journey: official video archive
+
+- Public overview, privacy, and support
+
+### Import or re-import YouTube subscriptions
+
+- Open Reactors → Import YouTube subscriptions and select Import / re-import YouTube subscriptions, then Connect YouTube. Choose the Google account and YouTube channel whose subscriptions you want to read.
+
+- This optional Google permission is separate from signing in to Reaction Journey. You can use the site and follow reactors manually without granting YouTube access.
+
+- Review the matched catalog reactors, change the selections, then choose Follow selected reactors. Select 1–100 per confirmation. Already followed, hidden, and outside-catalog channels are counted separately and are not added as new follows.
+
+- Repeat Import / re-import YouTube subscriptions anytime to check newly subscribed channels or another YouTube account. It adds selected follows without removing existing follows; it is not an automatic synchronization.
+
+- Cancel clears the current preview without changing follows. The import does not change your YouTube subscriptions. Only confirmed reactor IDs are saved; the complete subscription list and Google access token are not stored by Reaction Journey.
+
+- After a reset, re-import can help rebuild reactor follows. Revoking Google permission does not remove follows already saved in Reaction Journey. Manage that permission through the Google account connections link in the import panel.
+
+- If the Google popup is closed or blocked, retry Connect YouTube. For origin_mismatch or access restrictions, report the exact message and site address to the administrator. Domain ownership verification and permission to use this OAuth feature are separate checks.
+
+### Reset follows or use Master Reset
+
+- Open Following. Reset all reactor follows removes every reactor follow in your account, including follows of hidden channels. Reset all song follows removes only your song follows.
+
+- Each separate reset asks for confirmation. Other follow types, hidden reactors, ratings, and YouTube subscriptions stay unchanged.
+
+- Master Reset removes your reactor follows, song follows, hidden reactors, and reactor ratings together. Confirm only if you want to clear all four; these choices cannot be automatically restored.
+
+- Master Reset preserves video ratings, performer follows, favorites, watch status, appearance and account settings, earned points, and your YouTube subscriptions. It affects only your own Reaction Journey account.
+
+- After clearing hidden reactors, their eligible videos can appear again. If you still follow Missioned Souls, Following may show its whole catalog until you add reactor or song follows.
+
+### MS Journey: official video archive
+
+- All signed-in Reaction Journey members can open MS Journey from the navigation or the larger logo link at the top right of member pages. Use My Feed to return to reactor videos.
+
+- MS Journey catalogs Missioned Souls performances and other official videos, separately from the reaction catalog. Watch on YouTube, Facebook, or the listed source opens the original video. The Official Missioned Souls website link opens the band’s website.
+
+- Choose a category, search by song/place/title, filter Source, and use Include Shorts. Videos may belong to more than one category, so category counts overlap. Facebook only excludes Facebook entries marked as also having a YouTube version.
+
+- Collection offers All · newest first, Ten most current videos, and Top 10 by views, likes, or comments. Counts are dated snapshots; missing statistics are excluded from numeric rankings and unknown dates from Ten most current videos.
+
+- Top 10 · views gained in 1 day, 1 week, or 1 month measures observed growth over 24 hours, 7 days, or 30 days. It needs a current snapshot no older than 48 hours and a baseline within six hours of the period boundary. It does not measure each video’s first day after upload.
+
+- An empty period ranking can mean insufficient history, not zero views. Check the coverage note, last update, statistics date, and Category review pending label. The archive may be incomplete. Load more videos expands the list.
+
+- Members can browse; only moderators can refresh, import, export, edit videos, or manage categories.
+
+### Public overview, privacy, and support
+
+- The public homepage explains Reaction Journey and the optional YouTube import without requiring sign-in. The member catalog and personal choices require sign-in.
+
+- Privacy Policy and Terms of Service are available publicly at /privacy and /terms. Their links also appear at the bottom of member pages.
+
+- Use Contact for an in-site support request or email contact@reactionjourney.com. Include the direct video/channel link, exact error, and when it occurred; do not send passwords or API keys.
+
 ### Sign in and get started
 
 - Use Continue with Google or Email me a sign-in link on the welcome page.
@@ -43,6 +103,8 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 - Set your public display name in My Profile & Activity.
 
 - Use the profile avatar to return there.
+
+- The public overview is available before sign-in; MS Journey and the reaction feed are available to signed-in members.
 
 ### My Feed: tabs, search, and sorting
 
@@ -134,7 +196,7 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 ### Following and Reactors
 
-Use **Reactors → Import YouTube subscriptions → Connect YouTube** to grant optional read-only permission. Review matching reactors and select **Follow selected reactors**. Existing follows and hidden reactors are preserved. This is a one-time import; new YouTube subscriptions require another import. If import is awaiting Google configuration, manual follows remain available.
+In Reactors, use Import YouTube subscriptions, then Connect YouTube. Grant optional read-only permission, review matching reactors, and choose Follow selected reactors. Existing follows and hidden reactors are preserved. This is a one-time import; run it again for new subscriptions. If Google setup is pending, follow reactors manually.
 
 - In Reactors, search channel names, compare community scores, open the channel on YouTube, and click + Follow or Following to toggle a channel follow.
 
@@ -244,7 +306,9 @@ Use **Reactors → Import YouTube subscriptions → Connect YouTube** to grant o
 
 - Contributor starts at 25 points, Reaction scout at 100, Catalog curator at 250, and Community champion at 1,000.
 
-- Badges confer recognition, not moderator permissions; points have no cash value.
+- Point badges appear before member display names in supported chats, comments, leaderboards, and member lists. Hover over a badge to see its level and point count. Points & Reputation includes the badge legend.
+
+- Badge levels are Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000+). Badges confer recognition, not moderator permissions; points have no cash value.
 
 - The page shows your history, total, and community leaderboard.
 
@@ -274,7 +338,9 @@ Use **Reactors → Import YouTube subscriptions → Connect YouTube** to grant o
 
 - Uploads examined measures processing work, not new reactions.
 
-- Imported statistics are dated snapshots, not real-time YouTube analytics.
+- Reactor subscriber statistics refresh in daily batches from YouTube. A count can be stale, rounded by YouTube, or unavailable when hidden; it is not a real-time measurement.
+
+- Imported statistics are dated snapshots, not real-time YouTube analytics. MS Journey’s official-upload scan and reaction discovery are separate catalogs and use separate progress reports.
 
 - Scheduled checks and YouTube notifications complement each other; neither guarantees immediate or complete discovery.
 
@@ -286,7 +352,9 @@ Use **Reactors → Import YouTube subscriptions → Connect YouTube** to grant o
 
 - If a favorite is missing, check Favorites and hidden reactors. A pending, rejected, excluded, or unavailable catalog record will not appear simply because its title was corrected. Contact a moderator with the direct video URL.
 
-- After an update, hard refresh with Ctrl+Shift+R on Windows.
+- After an update, hard refresh with Ctrl+Shift+R on Windows. My Feed loads independent account and catalog reads together and caches eligible catalog responses; filters still determine which videos appear.
+
+- If a member reports Already submitted or a contribution limit, moderators should search Reviewed submission history before asking them to submit the same video again.
 
 - If sign-in loops, use the latest email link and ask the administrator to check site/redirect URLs.
 
@@ -301,6 +369,48 @@ Use **Reactors → Import YouTube subscriptions → Connect YouTube** to grant o
 - YouTube Terms opens YouTube’s terms.
 
 - Reaction Journey is an independent fan community; no affiliation is implied.
+
+### Find reviewed submissions and reopen a rejection
+
+- Open Moderator Queue → Member contributions → Reviewed submission history. Choose Accepted and rejected, Rejected, or Accepted; search by direct YouTube link, video ID, explanation, or review note.
+
+- Use Search history and Previous history / Next history to browse reviewed records. A rejected submission may exist here even if it was never added to the catalog, so Correct video information cannot load it.
+
+- For a rejected submission, verify the video, enter Reason for reopening, and select Reopen for Review. The submission returns to Submitted reactions for metadata fetching and a new review.
+
+- Reopening does not publish a video, remove a catalog exclusion, or award points. Review the returned pending submission and choose Accept or Reject with a note. Existing catalog exclusions must be resolved separately.
+
+- For a saved catalog video that is rejected or excluded, use Correct video information and the deliberate Save Corrections & Restore workflow instead. Accepted submissions have no Reopen for Review button.
+
+### MS Journey: maintain videos and categories
+
+- Open MS Journey → Catalog updates & category review. Refresh official YouTube catalog starts an official-upload scan; repeat refresh to continue it. Scheduled batches continue initiated scans after reaction discovery, then refresh counts daily after a completed pass.
+
+- Each refresh scans up to 200 uploads and retains a continuation cursor. It needs the existing server-side YOUTUBE_API_KEY. Facebook and other sources require manual entries or imports; YouTube refresh cannot collect them.
+
+- Use Add Facebook / other video or Review categories & details. Edit title, dates, categories, availability, counts, Statistics recorded at, and Source / review note; select Categories reviewed after checking assignments. Keep the same video URL while editing; add a separate record for a different video.
+
+- Mark as Short and Remove Shorts tag deliberately set a persistent format choice. The editor’s This video is a Short checkbox does the same. Automatic refreshes retain that choice and reviewed categories; a short duration alone does not prove a Short.
+
+- Use Import catalog JSON for a video array or an object with videos, under 2 MB and 1–1,000 entries per import. Export catalog downloads the current archive for review or reuse. This JSON archive import is separate from the reaction master workbook import.
+
+- Under Categories, Add category creates a category; Rename changes its label; arrow buttons reorder it; Archive hides it from browse navigation; Restore makes it visible again. Existing video assignments are preserved.
+
+- Shorts is a fixed format category and cannot be renamed or archived. Existing archived assignments remain available when editing those videos. If another moderator changes categories concurrently, reload before retrying.
+
+- View-growth rankings need dated snapshots. Facebook/other-source counts must be entered or imported, and current totals alone do not establish historical growth.
+
+### YouTube import configuration and troubleshooting
+
+- Configure GOOGLE_YOUTUBE_CLIENT_ID for the Google OAuth Web application client. Authorize the exact member-site JavaScript origin, including scheme and hostname, in Google Cloud. Keep production configuration in sync with Workers Builds.
+
+- The subscription import uses a Google popup and separate read-only YouTube permission. It does not need a browser client secret and does not replace the existing member sign-in configuration.
+
+- Google may restrict the feature to test users until its app access/verification requirements are satisfied. Verified domain ownership alone does not establish approval of the OAuth application.
+
+- For origin_mismatch, compare the actual page origin with the authorized JavaScript origins. For access_denied or verification restrictions, check the selected account and Google app status. Follow the deployment guide docs/youtube-subscriptions.md for configuration details.
+
+- Keep the homepage purpose, public privacy policy, public terms, and contact address accurate. Subscription reads use the OAuth client project’s YouTube quota, which can be shared with discovery.
 
 ## Moderator & administrator guides
 
@@ -531,18 +641,3 @@ Use **Reactors → Import YouTube subscriptions → Connect YouTube** to grant o
 - Cloudflare database metrics show row reads/writes; database quota, worker capacity, YouTube quota, and sign-in provider limits are separate checks.
 
 - A successful deployment does not guarantee healthy discovery: verify recent runs, catalog loading, login, and moderation.
-
-## Automatic subscriber refresh
-
-Reactor subscriber counts refresh from YouTube automatically, using the existing 15-minute Cloudflare schedule. Each invocation updates up to 50 channels whose last successful update is at least 24 hours old. The first refresh of 500 channels takes roughly 2½ hours and normally uses 10 YouTube API requests. Opening pages does not make additional YouTube API requests.
-
-The Reactors table shows subscribers and the last successful update date. YouTube supplies rounded public counts; hidden or missing counts display as unknown. Missing channels retain their last known counts and show an unavailable notice. API failures preserve previous data and retry after at least one hour; channels missing from a successful response retry after a day. Moderator names, decisions, exclusions, follows and ratings are preserved.
-
-Discovery status also shows the last subscriber-refresh batch. Refresh requests are included in the existing endpoint request counters. No additional cron configuration or database migration is required. The scheduler must be active and the existing YouTube API key must be configured.
-
-
-### Reviewed submission history
-
-In Moderator Queue, Reviewed submission history lists accepted and rejected submissions, including rejected videos that never entered the catalog. Search by YouTube URL, video ID, explanation, or review note, and filter by status. Rejected submissions have Reopen for Review: enter a reason to return the submission to Submitted reactions, then fetch YouTube details and verify before approving. Reopening records the moderator, reason, and previous review in the audit history; it does not publish a video or clear catalog exclusions. Use Correct Video Information and Save Corrections & Restore for existing excluded catalog videos.
-
-The larger MS Journey logo remains at the top right of member pages. Privacy Policy and Terms of Service are linked in the page footer.
