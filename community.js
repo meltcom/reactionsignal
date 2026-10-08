@@ -13,12 +13,13 @@ function memberPointBadge(points){
 }
 const profileIcons={initials:'Initials',music:'♫',guitar:'🎸',headphones:'🎧',microphone:'🎤',wave:'🌊',sun:'☀',flower:'🌼',heart:'♥',bird:'🕊',record:'💿',piano:'🎹'};
 const profileColors=['teal','blue','purple','rose','gold','green'];
-function memberProfileIcon(name,icon='initials',color='teal'){
+function memberProfileIcon(name,icon='initials',color='teal',picture=null){
+  if(typeof picture==='string'&&/^\/api\/profile-pictures\/[a-f0-9-]{36}$/.test(picture))return `<img class="member-profile-icon profile-picture" src="${picture}" alt="" loading="lazy">`;
   const safeIcon=Object.hasOwn(profileIcons,icon)?icon:'initials',safeColor=profileColors.includes(color)?color:'teal';
   const symbol=safeIcon==='initials'?Array.from(String(name||'Member').trim()).slice(0,2).join('').toUpperCase():profileIcons[safeIcon];
   return `<span class="member-profile-icon profile-color-${safeColor}" aria-hidden="true">${escapeHtml(symbol)}</span>`;
 }
-function memberDisplayName(name,points,profile={}){return `<span class="member-display-name">${memberProfileIcon(name,profile.profile_icon,profile.profile_color)}${memberPointBadge(points)}<span>${escapeHtml(name||'Member')}</span></span>`;}
+function memberDisplayName(name,points,profile={}){return `<span class="member-display-name">${memberProfileIcon(name,profile.profile_icon,profile.profile_color,profile.profile_picture)}${memberPointBadge(points)}<span>${escapeHtml(name||'Member')}</span></span>`;}
 
 function memberBadgeLegend(){return `<div class="member-badge-legend" aria-label="Member point levels">${memberPointLevels.map((l,i)=>`<span>${memberPointBadge(l.min)} ${l.label} <small>${l.min.toLocaleString()}${memberPointLevels[i+1]?'–'+(memberPointLevels[i+1].min-1).toLocaleString():'+'} points</small></span>`).join('')}</div>`;}
 let communityState=null, scoreMap=new Map(), activeCommunityVideo=null, dialogRequest=0;
@@ -35,9 +36,9 @@ async function loadCommunity({deferSecondary=false}={}){
     $('displayName').value=communityState.name;
     $('profileIcon').value=communityState.profile_icon||'initials';
     $('profileColor').value=communityState.profile_color||'teal';
-    updateProfilePreview();
+    pendingProfilePicture=undefined;$('profilePictureUpload').value='';updateProfilePreview();
     const avatar=document.querySelector('.app-header .avatar');
-    if(avatar){avatar.innerHTML=memberProfileIcon(communityState.name,communityState.profile_icon,communityState.profile_color);avatar.title='Edit your community profile';avatar.setAttribute('aria-label','Edit your community profile');}
+    if(avatar){avatar.innerHTML=memberProfileIcon(communityState.name,communityState.profile_icon,communityState.profile_color,communityState.profile_picture);avatar.title='Edit your community profile';avatar.setAttribute('aria-label','Edit your community profile');}
     $('pointsBadge').innerHTML=`${memberDisplayName(communityState.name,communityState.points,communityState)} · ${communityState.points} points · ${escapeHtml(communityState.tier)}`;
     $('communityStatus').textContent=communityState.name?'Ready to contribute.':'Save a display name to start participating.';
     $('suggestPerformer').innerHTML=catalog.performers.map(p=>`<option value="${escapeHtml(p.id)}">${memberDisplayName(p.name,p.points,p)}</option>`).join('');
@@ -57,7 +58,7 @@ async function formAction(form,statusId,work){
   try{const result=await work();await loadCommunity();if(catalog)renderVideos();communityMessage(statusId,result?.message||'Saved.');}
   catch(e){communityMessage(statusId,e.message);}finally{if(button)button.disabled=false;}
 }
-$('profileForm').addEventListener('submit',e=>{e.preventDefault();formAction(e.currentTarget,'communityStatus',()=>communityApi('/profile',{name:$('displayName').value,icon:$('profileIcon').value,color:$('profileColor').value}));});
+$('profileForm').addEventListener('submit',e=>{e.preventDefault();formAction(e.currentTarget,'communityStatus',()=>communityApi('/profile',{name:$('displayName').value,icon:$('profileIcon').value,color:$('profileColor').value,...(pendingProfilePicture!==undefined?{picture:pendingProfilePicture}:{})}));});
 $('suggestForm').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;formAction(form,'communityStatus',async()=>{const r=await communityApi('/contribute',{kind:'submission',...Object.fromEntries(new FormData(form))});form.reset();return r;});});
 $('coverageForm').addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;formAction(form,'coverageStatus',async()=>{const result=await communityApi('/coverage',Object.fromEntries(new FormData(form)));form.reset();return result;});});
 $('coverageOpen').onclick=()=>{navigate('community');$('coverageForm').scrollIntoView({block:'start',behavior:'smooth'});$('coverageForm').elements.name.focus({preventScroll:true});};
@@ -132,6 +133,25 @@ $('submissionHistoryNext').onclick=()=>{submissionHistoryOffset+=50;loadSubmissi
 window.addEventListener('reaction-auth-change',()=>{submissionHistoryRequest++;submissionHistoryOffset=0;$('submissionHistoryItems').replaceChildren();$('submissionHistoryStatus').textContent='';});
 
 $('profileIcon').innerHTML=Object.entries(profileIcons).map(([key,label])=>`<option value="${key}">${label==='Initials'?label:key[0].toUpperCase()+key.slice(1)+' '+label}</option>`).join('');
-function updateProfilePreview(){ $('profilePreview').innerHTML=memberProfileIcon($('displayName').value,$('profileIcon').value,$('profileColor').value); }
+let pendingProfilePicture;
+function updateProfilePreview(){
+ const picture=pendingProfilePicture===undefined?communityState?.profile_picture:pendingProfilePicture;
+ $('profilePreview').innerHTML=typeof picture==='string'&&picture.startsWith('data:image/jpeg;base64,')?`<img class="member-profile-icon profile-picture" alt="Profile picture preview" src="${picture}">`:memberProfileIcon($('displayName').value,$('profileIcon').value,$('profileColor').value,picture);
+ $('removeProfilePicture').disabled=!picture;
+}
+let pictureUploadSequence=0;
+$('profilePictureUpload').addEventListener('change',async e=>{
+ const sequence=++pictureUploadSequence,file=e.target.files[0];if(!file)return;
+ try{
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw new Error('Choose a JPG, PNG, or WebP image under 10 MB.');
+  const bitmap=await createImageBitmap(file);const canvas=document.createElement('canvas');canvas.width=canvas.height=256;
+  const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,256,256);
+  const size=Math.min(bitmap.width,bitmap.height);ctx.drawImage(bitmap,(bitmap.width-size)/2,(bitmap.height-size)/2,size,size,0,0,256,256);bitmap.close();
+  let picture;for(const quality of [0.85,0.7,0.5,0.3]){picture=canvas.toDataURL('image/jpeg',quality);if(picture.length<=43714)break;}
+  if(picture.length>43714)throw new Error('This picture is too detailed. Try a simpler image.');
+  if(sequence!==pictureUploadSequence)return;pendingProfilePicture=picture;updateProfilePreview();communityMessage('communityStatus','Picture ready. Select Save profile to upload it.');
+ }catch(error){if(sequence===pictureUploadSequence)communityMessage('communityStatus',error.message);}
+});
+$('removeProfilePicture').onclick=()=>{pictureUploadSequence++;pendingProfilePicture=null;$('profilePictureUpload').value='';updateProfilePreview();communityMessage('communityStatus','Select Save profile to remove your picture.');};
 for(const id of ['profileIcon','profileColor','displayName'])$(id).addEventListener('input',updateProfilePreview);
 updateProfilePreview();

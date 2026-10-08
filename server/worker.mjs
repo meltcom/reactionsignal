@@ -2,7 +2,7 @@ import { missionedSouls, scheduledMissionedSouls } from './missioned-souls.mjs';
 import { database, seedDatabase, catalog, status } from './db.mjs';
 import { youtubeSubscriptions } from './youtube-subscriptions.mjs';
 import { social } from './social.mjs';
-import { community } from './community.mjs';
+import { community, profilePicture } from './community.mjs';
 import { runDiscovery } from './discovery.mjs';
 import { refreshChannelStats } from './channel-stats.mjs';
 import { authenticate, authConfig } from './auth.mjs';
@@ -23,6 +23,7 @@ export default {
   async fetch(request,env,ctx){
     const path=new URL(request.url).pathname;
     try{
+      if(path.startsWith('/api/profile-pictures/'))return await profilePicture(request,env);
       if(path==='/api/youtube/push')return await youtubePush(request,env,seed,ctx);
       if(path.startsWith('/api/youtube/subscriptions/')){
         const result=await authenticate(request,env);if(result.error)return result.error;

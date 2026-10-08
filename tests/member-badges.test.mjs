@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
-import {community,tier} from '../server/community.mjs';
+import {community,tier,profilePicture} from '../server/community.mjs';
 const helpers=readFileSync(new URL('../community.js',import.meta.url),'utf8').split('let communityState=')[0];
 const context=vm.createContext({escapeHtml:v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))});
 vm.runInContext(helpers,context);
@@ -82,4 +82,27 @@ test('profile icon markup escapes initials and falls back for invalid styling',(
  const html=context.memberProfileIcon('<img','unknown','evil');
  assert.match(html,/profile-color-teal/);assert.ok(!html.includes('<img'));assert.ok(!html.includes('evil'));
  assert.match(context.memberDisplayName('Fan',25,{profile_icon:'guitar',profile_color:'purple'}),/🎸/);
+});
+
+
+test('pictures upload, replace, render, and remove without affecting other accounts',async()=>{
+ const {sql,call,env}=await setup();
+ const picture='data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDi6KKK+ZP3EKKKKACiiigAooooA//Z';
+ assert.equal((await call('/profile',{name:'fan',picture})).status,200);
+ const first=(await call('/summary')).data.profile_picture;assert.match(first,/^\/api\/profile-pictures\//);
+ assert.equal((await call('/summary',null,'other')).data.profile_picture,null);
+ const response=await profilePicture(new Request('https://pilot.test'+first),env);
+ assert.equal(response.status,200);assert.equal(response.headers.get('Content-Type'),'image/jpeg');assert.ok((await response.arrayBuffer()).byteLength>0);
+ assert.equal((await call('/profile',{name:'renamed'})).status,200);assert.equal((await call('/summary')).data.profile_picture,first);
+ for(const bad of ['data:image/svg+xml;base64,PHN2Zz4=','data:image/jpeg;base64,AAAA',picture+'x'.repeat(44000)])assert.equal((await call('/profile',{name:'fan',picture:bad})).status,400);
+ assert.equal((await call('/summary')).data.profile_picture,first);
+ await call('/profile',{name:'fan',picture});const second=(await call('/summary')).data.profile_picture;assert.notEqual(first,second);
+ assert.equal((await profilePicture(new Request('https://pilot.test'+first),env)).status,404);
+ assert.equal(sql.prepare('SELECT COUNT(*) n FROM profile_pictures').get().n,1);
+ await call('/profile',{name:'fan',picture:null});assert.equal((await call('/summary')).data.profile_picture,null);
+ assert.equal((await profilePicture(new Request('https://pilot.test'+second),env)).status,404);sql.close();
+});
+test('picture rendering accepts only the site picture route',()=>{
+ assert.match(context.memberProfileIcon('fan','initials','teal','/api/profile-pictures/12345678-1234-1234-1234-123456789abc'),/<img/);
+ assert.ok(!context.memberProfileIcon('fan','initials','teal','https://evil.test/tracker').includes('<img'));
 });
