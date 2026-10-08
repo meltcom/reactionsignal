@@ -32,3 +32,7 @@ body.signed-out{background:var(--paper);margin:0}
 .welcome-card{max-width:850px}.welcome-card nav{font-size:14px;line-height:1.8}.welcome-card .public-tagline{font-size:20px;font-weight:600}.public-sign-in{max-width:480px;margin:32px auto 0;padding-top:12px;border-top:1px solid var(--line)}
 
 footer{flex-wrap:wrap}footer nav[aria-label="Policies"]{display:flex;flex-wrap:wrap;gap:10px}footer nav[aria-label="Policies"] a{text-decoration:underline;text-underline-offset:3px}
+
+.member-profile-icon{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;flex-shrink:0;border-radius:50%;font-size:16px;font-weight:700;line-height:1}.profile-color-teal{background:#d7eee4;color:#07584f}.profile-color-blue{background:#dbeafe;color:#1e40af}.profile-color-purple{background:#ede9fe;color:#5b21b6}.profile-color-rose{background:#ffe4e6;color:#9f1239}.profile-color-gold{background:#fef3c7;color:#78350f}.profile-color-green{background:#dcfce7;color:#166534}#profilePreview .member-profile-icon{width:56px;height:56px;font-size:26px}.app-header .avatar .member-profile-icon{width:40px;height:40px}
+
+.profile-picture{object-fit:cover;background:#fff}
