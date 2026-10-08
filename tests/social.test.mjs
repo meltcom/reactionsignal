@@ -64,3 +64,19 @@ test('Master Reset clears the four selected groups atomically and preserves othe
  const d=(await call('/dashboard')).data;assert.deepEqual(d.follows.map(f=>f.kind),['performer']);assert.equal(d.watch[0].favorite,1);assert.equal(d.watch[0].status,'watched');assert.equal(d.preferences.theme,'dark');
  assert.equal((await call('/master-reset',{confirm:true})).status,200);
 });
+
+test('direct comments use verified reputation above 15 and do not reward self publication',async()=>{
+ const {call,sql}=await setup();
+ sql.prepare("INSERT INTO reputation_events VALUES('earned','fan',15,'Verified discovery',?)").run(new Date().toISOString());
+ sql.prepare("INSERT INTO points VALUES('participation','fan','submission',1000,?)").run(new Date().toISOString());
+ const c={videoId:'abcdefghijk',performerId:'missioned-souls',body:'At fifteen this still needs review.'};
+ assert.equal((await call('/comment',c)).data.status,'pending');
+ sql.prepare("INSERT INTO reputation_events VALUES('extra','fan',1,'Verified help',?)").run(new Date().toISOString());
+ const r=await call('/comment',{...c,body:'At sixteen this publishes directly.'});assert.equal(r.data.status,'accepted');
+ const id=sql.prepare("SELECT id FROM contributions WHERE status='accepted'").get().id;
+ assert.equal((await call('/comments?video=abcdefghijk',null,'other')).data.items.length,1);
+ assert.equal((await call('/comment',{...c,id,body:'A trusted member edits directly.'})).data.status,'accepted');
+ assert.equal((await call('/dashboard')).data.reputationTotal,16);
+ sql.prepare("INSERT INTO reputation_events VALUES('reversal','fan',-2,'Removed contribution',?)").run(new Date().toISOString());
+ assert.equal((await call('/comment',{...c,body:'Lost reputation returns me to review.'})).data.status,'pending');
+});

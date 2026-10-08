@@ -89,3 +89,5 @@ Cloudflare documentation:
 - https://developers.cloudflare.com/workers/ci-cd/builds/configuration/
 - https://developers.cloudflare.com/d1/reference/migrations/
 - https://developers.cloudflare.com/workers/configuration/cron-triggers/
+
+Members with more than 15 verified reputation points (16+) publish reactions and comments, including replies and edits, directly. Members with 15 or fewer remain subject to moderator approval. Participation points do not unlock direct publishing. Direct reactions require successful YouTube metadata lookup and appear as Confirmed. Existing exclusions, duplicate checks, mutes, and daily posting limits apply. Reports and removal requests still require review. Direct publishing earns no verification rewards; moderators can hide published comments.

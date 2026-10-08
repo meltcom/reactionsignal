@@ -641,3 +641,5 @@ In Reactors, use Import YouTube subscriptions, then Connect YouTube. Grant optio
 - Cloudflare database metrics show row reads/writes; database quota, worker capacity, YouTube quota, and sign-in provider limits are separate checks.
 
 - A successful deployment does not guarantee healthy discovery: verify recent runs, catalog loading, login, and moderation.
+
+Members with more than 15 verified reputation points (16+) publish reactions and comments, including replies and edits, directly. Members with 15 or fewer remain subject to moderator approval. Participation points do not unlock direct publishing. Direct reactions require successful YouTube metadata lookup and appear as Confirmed. Existing exclusions, duplicate checks, mutes, and daily posting limits apply. Reports and removal requests still require review. Direct publishing earns no verification rewards; moderators can hide published comments.

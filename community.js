@@ -55,7 +55,7 @@ async function loadCommunity({deferSecondary=false}={}){
 async function formAction(form,statusId,work){
   const button=form.querySelector('button[type="submit"],button:not([type])');if(button)button.disabled=true;
   communityMessage(statusId,'Saving…');
-  try{const result=await work();await loadCommunity();if(catalog)renderVideos();communityMessage(statusId,result?.message||'Saved.');}
+  try{const result=await work();if(result?.published){const response=await reactionAuth.fetch('/data.json',{cache:'no-store'});if(response.ok)catalog=await response.json();}await loadCommunity();if(catalog)renderVideos();communityMessage(statusId,result?.message||'Saved.');}
   catch(e){communityMessage(statusId,e.message);}finally{if(button)button.disabled=false;}
 }
 $('profileForm').addEventListener('submit',e=>{e.preventDefault();formAction(e.currentTarget,'communityStatus',()=>communityApi('/profile',{name:$('displayName').value,icon:$('profileIcon').value,color:$('profileColor').value,...(pendingProfilePicture!==undefined?{picture:pendingProfilePicture}:{})}));});
