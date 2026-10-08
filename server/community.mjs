@@ -45,7 +45,7 @@ export async function community(request,env,seed,user){
     if(path==='/coverage'||path==='/coverage/queue'){if(request.method==='GET')return json({items:[]});fail('Reaction Journey covers Missioned Souls only.',400);}
     if(path==='/coverage/review')fail('Performer recommendations are closed.',400);
     if(path==='/summary'&&request.method==='GET')await db.prepare("INSERT INTO members(id,name,created_at,email,last_seen_at) VALUES(?,'',?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email,last_seen_at=excluded.last_seen_at WHERE members.last_seen_at IS NULL OR members.last_seen_at<? OR members.email IS NOT excluded.email").bind(user.id,new Date().toISOString(),user.email||null,new Date().toISOString(),new Date(Date.now()-3600000).toISOString()).run();
-    const me=await db.prepare('SELECT name FROM members WHERE id=?').bind(user.id).first();
+    const me=await db.prepare('SELECT name,profile_icon,profile_color FROM members WHERE id=?').bind(user.id).first();
     if(request.method==='GET'){
       if(path==='/coverage'){
         const rows=await db.prepare('SELECT id,name,url,body,status,created_at,review_note FROM coverage_requests WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(user.id).all();
@@ -53,7 +53,7 @@ export async function community(request,env,seed,user){
       }
       if(path==='/coverage/queue'){
         if(!user.moderator)fail('Moderator access required.',403);
-        const rows=await db.prepare("SELECT c.*,m.name member_name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM coverage_requests c JOIN members m ON m.id=c.user_id ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at DESC LIMIT 100").all();
+        const rows=await db.prepare("SELECT c.*,m.name member_name,m.profile_icon,m.profile_color,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM coverage_requests c JOIN members m ON m.id=c.user_id ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at DESC LIMIT 100").all();
         return json({items:rows.results});
       }
     if(path==='/reactor-requests'){
@@ -83,12 +83,12 @@ export async function community(request,env,seed,user){
         const offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0)),q=(u.searchParams.get('q')||'').slice(0,100),member=(u.searchParams.get('user')||'').slice(0,100),kind=u.searchParams.get('kind')||'all';
         if(!['all','rating','contribution','chat','follow','watch','contact','preferences','profile','video-click'].includes(kind))fail('Invalid activity filter.');
         const cutoff=new Date(Date.now()-30*86400000).toISOString();
-        const rows=await db.prepare("SELECT a.*,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM user_activity a LEFT JOIN members m ON m.id=a.user_id WHERE a.created_at>=? "+(member?"AND a.user_id=? ":"")+(kind!=='all'?"AND a.kind=? ":"")+"AND instr(lower(COALESCE(m.name,'')||' '||a.user_id),lower(?))>0 ORDER BY a.created_at DESC,a.id DESC LIMIT 101 OFFSET ?").bind(cutoff,...(member?[member]:[]),...(kind!=='all'?[kind]:[]),q,offset).all();
+        const rows=await db.prepare("SELECT a.*,m.name,m.profile_icon,m.profile_color,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM user_activity a LEFT JOIN members m ON m.id=a.user_id WHERE a.created_at>=? "+(member?"AND a.user_id=? ":"")+(kind!=='all'?"AND a.kind=? ":"")+"AND instr(lower(COALESCE(m.name,m.profile_icon,m.profile_color,'')||' '||a.user_id),lower(?))>0 ORDER BY a.created_at DESC,a.id DESC LIMIT 101 OFFSET ?").bind(cutoff,...(member?[member]:[]),...(kind!=='all'?[kind]:[]),q,offset).all();
         return json({items:rows.results.slice(0,100),hasMore:rows.results.length>100,windowDays:30});
       }
       if(path==='/contact'||path==='/contact/inbox'){
         const offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0));
-        const rows=await db.prepare("SELECT t.id,t.subject,t.category,t.status,t.created_at,t.updated_at,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM contact_tickets t LEFT JOIN members m ON m.id=t.user_id "+(path==='/contact'?"WHERE t.user_id=? ":"")+"ORDER BY t.updated_at DESC,t.id LIMIT 51 OFFSET ?").bind(...(path==='/contact'?[user.id,offset]:[offset])).all();
+        const rows=await db.prepare("SELECT t.id,t.subject,t.category,t.status,t.created_at,t.updated_at,m.name,m.profile_icon,m.profile_color,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM contact_tickets t LEFT JOIN members m ON m.id=t.user_id "+(path==='/contact'?"WHERE t.user_id=? ":"")+"ORDER BY t.updated_at DESC,t.id LIMIT 51 OFFSET ?").bind(...(path==='/contact'?[user.id,offset]:[offset])).all();
         return json({items:rows.results.slice(0,50),hasMore:rows.results.length>50});
       }
       if(path==='/contact/thread'){
@@ -99,22 +99,22 @@ export async function community(request,env,seed,user){
       }
       if(path==='/users'){
         const offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0)),q=(u.searchParams.get('q')||'').slice(0,100);
-        const rows=await db.prepare("SELECT m.id,m.name,m.email,m.created_at,m.last_seen_at,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points,(SELECT until FROM mutes WHERE user_id=m.id) muted_until FROM members m WHERE instr(lower(m.name||' '||COALESCE(m.email,'')),lower(?))>0 ORDER BY m.created_at DESC,m.id LIMIT 101 OFFSET ?").bind(q,offset).all();
+        const rows=await db.prepare("SELECT m.id,m.name,m.profile_icon,m.profile_color,m.email,m.created_at,m.last_seen_at,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points,(SELECT until FROM mutes WHERE user_id=m.id) muted_until FROM members m WHERE instr(lower(m.name||' '||COALESCE(m.email,'')),lower(?))>0 ORDER BY m.created_at DESC,m.id LIMIT 101 OFFSET ?").bind(q,offset).all();
         const moderators=String(env.COMMUNITY_MODERATOR_EMAILS||'').toLowerCase().split(',').map(x=>x.trim());
         return json({items:rows.results.slice(0,100).map(m=>({...m,tier:tier(m.points),moderator:moderators.includes(m.email?.toLowerCase())})),hasMore:rows.results.length>100,offset});
       }
       if(path==='/summary'){
         const totals=await db.prepare('SELECT COALESCE(SUM(amount),0) total FROM points WHERE user_id=?').bind(user.id).first();
         const scores=await db.prepare('SELECT video_id,COUNT(*) count,AVG(score) average,(SUM(score)+15.0)/(COUNT(*)+5) ranking FROM ratings GROUP BY video_id').all();
-        const leaders=await db.prepare('SELECT m.name,SUM(p.amount) points FROM points p JOIN members m ON m.id=p.user_id GROUP BY p.user_id HAVING SUM(p.amount)>0 ORDER BY points DESC,m.created_at ASC LIMIT 10').all();
+        const leaders=await db.prepare('SELECT m.name,m.profile_icon,m.profile_color,SUM(p.amount) points FROM points p JOIN members m ON m.id=p.user_id GROUP BY p.user_id HAVING SUM(p.amount)>0 ORDER BY points DESC,m.created_at ASC LIMIT 10').all();
         const mine=await db.prepare('SELECT id,kind,video_id,performer_id,body,status,review_note,created_at FROM contributions WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(user.id).all();
         const ledger=await db.prepare('SELECT kind,amount,created_at FROM points WHERE user_id=? ORDER BY created_at DESC LIMIT 30').bind(user.id).all();
-        return json({name:me?.name||'',moderator:user.moderator,points:totals.total,tier:tier(totals.total),scores:scores.results,leaders:leaders.results,mine:mine.results,ledger:ledger.results});
+        return json({name:me?.name||'',profile_icon:me?.profile_icon||'initials',profile_color:me?.profile_color||'teal',moderator:user.moderator,points:totals.total,tier:tier(totals.total),scores:scores.results,leaders:leaders.results,mine:mine.results,ledger:ledger.results});
       }
       if(path==='/video'){
         const video=u.searchParams.get('id');if(!/^[\w-]{11}$/.test(video||''))fail('Invalid video ID.');
         const rating=await db.prepare('SELECT score FROM ratings WHERE user_id=? AND video_id=?').bind(user.id,video).first();
-        const comments=await db.prepare("SELECT c.id,c.body,c.created_at,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM contributions c JOIN members m ON m.id=c.user_id WHERE c.kind='comment' AND c.video_id=? AND c.status='accepted' ORDER BY c.created_at DESC LIMIT 100").bind(video).all();
+        const comments=await db.prepare("SELECT c.id,c.body,c.created_at,m.name,m.profile_icon,m.profile_color,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM contributions c JOIN members m ON m.id=c.user_id WHERE c.kind='comment' AND c.video_id=? AND c.status='accepted' ORDER BY c.created_at DESC LIMIT 100").bind(video).all();
         return json({rating:rating?.score||0,comments:comments.results});
       }
       if(path==='/submission-history'){
@@ -122,14 +122,14 @@ export async function community(request,env,seed,user){
         const status=u.searchParams.get('status')||'all',q=(u.searchParams.get('q')||'').trim().slice(0,250),offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0));
         if(!['all','accepted','rejected'].includes(status))fail('Invalid submission status.');
         const id=youtubeId(q)||q;
-        const rows=await db.prepare("SELECT c.*,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=c.user_id),0) points FROM contributions c LEFT JOIN members m ON m.id=c.user_id WHERE c.kind='submission' AND c.status IN ('accepted','rejected') "+(status!=='all'?"AND c.status=? ":"")+"AND instr(lower(c.video_id||' '||c.body||' '||COALESCE(c.review_note,'')),lower(?))>0 ORDER BY c.reviewed_at DESC,c.id LIMIT 51 OFFSET ?").bind(...(status!=='all'?[status]:[]),id,offset).all();
+        const rows=await db.prepare("SELECT c.*,m.name,m.profile_icon,m.profile_color,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=c.user_id),0) points FROM contributions c LEFT JOIN members m ON m.id=c.user_id WHERE c.kind='submission' AND c.status IN ('accepted','rejected') "+(status!=='all'?"AND c.status=? ":"")+"AND instr(lower(c.video_id||' '||c.body||' '||COALESCE(c.review_note,'')),lower(?))>0 ORDER BY c.reviewed_at DESC,c.id LIMIT 51 OFFSET ?").bind(...(status!=='all'?[status]:[]),id,offset).all();
         return json({items:rows.results.slice(0,50),hasMore:rows.results.length>50});
       }
       if(path==='/queue'){
         if(!user.moderator)fail('Moderator access required.',403);
         const kind=u.searchParams.get('kind')||'all',offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0));
         if(!['all','submission','comment','flag'].includes(kind))fail('Invalid review category.');
-        const rows=await db.prepare("SELECT c.*,m.name,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM contributions c JOIN members m ON m.id=c.user_id WHERE (c.status='pending' OR (c.kind='comment' AND c.status='accepted')) "+(kind!=='all'?"AND c.kind=? ":"")+"ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at ASC,c.id LIMIT 51 OFFSET ?").bind(...(kind!=='all'?[kind,offset]:[offset])).all();return json({items:rows.results.slice(0,50),hasMore:rows.results.length>50});
+        const rows=await db.prepare("SELECT c.*,m.name,m.profile_icon,m.profile_color,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM contributions c JOIN members m ON m.id=c.user_id WHERE (c.status='pending' OR (c.kind='comment' AND c.status='accepted')) "+(kind!=='all'?"AND c.kind=? ":"")+"ORDER BY CASE WHEN c.status='pending' THEN 0 ELSE 1 END,c.created_at ASC,c.id LIMIT 51 OFFSET ?").bind(...(kind!=='all'?[kind,offset]:[offset])).all();return json({items:rows.results.slice(0,50),hasMore:rows.results.length>50});
       }
       return json({error:'Not found'},404);
     }
@@ -256,7 +256,10 @@ export async function community(request,env,seed,user){
     }
     if(path==='/profile'){
       const name=text(b.name,2,40,'Display name');
-      await db.prepare('INSERT INTO members(id,name,created_at) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name').bind(user.id,name,now).run();return json({ok:true});
+      const icon=b.icon??me?.profile_icon??'initials',color=b.color??me?.profile_color??'teal';
+      if(!['initials','music','guitar','headphones','microphone','wave','sun','flower','heart','bird','record','piano'].includes(icon))fail('Choose a valid profile icon.');
+      if(!['teal','blue','purple','rose','gold','green'].includes(color))fail('Choose a valid profile color.');
+      await db.prepare('INSERT INTO members(id,name,created_at,profile_icon,profile_color) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,profile_icon=excluded.profile_icon,profile_color=excluded.profile_color').bind(user.id,name,now,icon,color).run();return json({ok:true,message:'Profile saved.'});
     }
     if(!me?.name)fail('Save a community display name first.',409);
     if(path==='/coverage'){

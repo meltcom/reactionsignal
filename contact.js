@@ -4,7 +4,7 @@ async function loadContactPage(){
  if(contactCurrentPage!==page){contactOffset=0;contactCurrentPage=page;}
  const mount=$(page==='contact-inbox'?'contactInboxRequests':'contactRequests');
  try{const r=await communityApi((page==='contact-inbox'?'/contact/inbox':'/contact')+'?offset='+contactOffset);
- mount.innerHTML=r.items.map(t=>`<article class="panel"><h3>${escapeHtml(t.subject)}</h3><p>${escapeHtml(t.category)} · ${escapeHtml(t.status)} · ${prettyDate(t.updated_at)}${page==='contact-inbox'?' · '+memberDisplayName(t.name,t.points):''}</p><button class="outline-button" data-contact-open="${escapeHtml(t.id)}">Read / reply</button><div data-contact-thread="${escapeHtml(t.id)}"></div></article>`).join('')||'<p>No requests yet.</p>';
+ mount.innerHTML=r.items.map(t=>`<article class="panel"><h3>${escapeHtml(t.subject)}</h3><p>${escapeHtml(t.category)} · ${escapeHtml(t.status)} · ${prettyDate(t.updated_at)}${page==='contact-inbox'?' · '+memberDisplayName(t.name,t.points,t):''}</p><button class="outline-button" data-contact-open="${escapeHtml(t.id)}">Read / reply</button><div data-contact-thread="${escapeHtml(t.id)}"></div></article>`).join('')||'<p>No requests yet.</p>';
  mount.insertAdjacentHTML('beforeend',`<button class="outline-button" data-contact-prev ${contactOffset===0?'disabled':''}>Previous 50</button><button class="outline-button" data-contact-next ${!r.hasMore?'disabled':''}>Next 50</button><p role="status" class="contact-list-status"></p>`);
  mount.querySelector('[data-contact-prev]').onclick=()=>{contactOffset=Math.max(0,contactOffset-50);loadContactPage();};
  mount.querySelector('[data-contact-next]').onclick=()=>{contactOffset+=50;loadContactPage();};

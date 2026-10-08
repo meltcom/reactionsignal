@@ -43,6 +43,7 @@ async function setup(){
 
 test('comment, chat, mention, leaderboard and moderator APIs return current ledger totals',async()=>{
  const {sql,call,video,env}=await setup();video();
+ await call('/profile',{name:'fan',icon:'headphones',color:'blue'});
  const now=new Date().toISOString();
  sql.prepare('INSERT INTO points VALUES(?,?,?,?,?)').run('badge-award','fan','test',250,now);
  sql.prepare("INSERT INTO contributions(id,user_id,kind,video_id,performer_id,body,status,created_at) VALUES('badge-comment','fan','comment','abcdefghijk','missioned-souls','@other Great reaction','accepted',?)").run(now);
@@ -55,9 +56,30 @@ test('comment, chat, mention, leaderboard and moderator APIs return current ledg
   assert.equal((await call('/summary')).data.leaders.find(m=>m.name==='fan').points,expected);
   assert.equal((await socialGet('/comments?video=abcdefghijk')).items[0].points,expected);
   assert.equal((await socialGet('/chat?room=missioned-souls')).messages[0].points,expected);
+  assert.equal((await socialGet('/chat?room=missioned-souls')).messages[0].profile_icon,'headphones');
+  assert.equal((await socialGet('/comments?video=abcdefghijk')).items[0].profile_color,'blue');
+  assert.equal((await call('/summary')).data.leaders.find(m=>m.name==='fan').profile_icon,'headphones');
   const mentions=await socialGet('/mentions');assert.equal(mentions.items[0].points,expected);assert.equal(mentions.comments[0].points,expected);
  };
  await verify(250);
  sql.prepare('INSERT INTO points VALUES(?,?,?,?,?)').run('badge-deduction','fan','reversal',-151,now);
  await verify(99);sql.close();
+});
+
+
+test('profile icons persist per account, reject unsafe values, and preserve choices on name-only edits',async()=>{
+ const {sql,call}=await setup();
+ assert.equal((await call('/profile',{name:'Music Fan',icon:'guitar',color:'purple'})).status,200);
+ let me=(await call('/summary')).data;assert.equal(me.profile_icon,'guitar');assert.equal(me.profile_color,'purple');
+ assert.equal((await call('/summary',null,'other')).data.profile_icon,'initials');
+ assert.equal((await call('/profile',{name:'Renamed Fan'})).status,200);
+ assert.equal((await call('/summary')).data.profile_icon,'guitar');
+ for(const body of [{icon:'<script>'},{color:'red; background:url(https://evil.test)'}])assert.equal((await call('/profile',{name:'Music Fan',...body})).status,400);
+ assert.equal((await call('/profile',{name:'Music Fan',icon:'initials',color:'teal'})).status,200);
+ assert.equal((await call('/summary')).data.profile_icon,'initials');sql.close();
+});
+test('profile icon markup escapes initials and falls back for invalid styling',()=>{
+ const html=context.memberProfileIcon('<img','unknown','evil');
+ assert.match(html,/profile-color-teal/);assert.ok(!html.includes('<img'));assert.ok(!html.includes('evil'));
+ assert.match(context.memberDisplayName('Fan',25,{profile_icon:'guitar',profile_color:'purple'}),/🎸/);
 });
