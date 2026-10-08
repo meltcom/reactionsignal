@@ -1,3 +1,4 @@
+import {canPublishDirectly} from './reputation.mjs';
 import { database, seedDatabase } from './db.mjs';
 import {YouTube,seconds} from './discovery.mjs';
 export async function submissionMetadata(db,env,videoId,fetcher=fetch){
@@ -315,10 +316,21 @@ export async function community(request,env,seed,user){
         if(await db.prepare('SELECT 1 FROM matches WHERE performer_id=? AND video_id=? UNION ALL SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?').bind(b.performerId,video,b.performerId,video).first())fail('This video is already cataloged, pending review, or excluded for this performer.',409);
       }else await known(db,b.performerId,video);
       const id=b.kind==='submission'?`submission:${b.performerId}:${video}`:b.kind==='comment'?`comment:${user.id}:${video}`:`flag:${user.id}:${b.performerId}:${video}`;
-      const result=await db.prepare(`INSERT OR IGNORE INTO contributions(id,user_id,kind,performer_id,video_id,body,reason,status,created_at)
-        SELECT ?,?,?,?,?,?,?,'pending',? WHERE (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=?)<20`).bind(id,user.id,b.kind,b.performerId,video,body,reason,now,user.id,now.slice(0,10)).run();
-      if(!result.meta.changes)fail('Already submitted, or your daily limit of 20 contributions has been reached.',409);
-      return json({ok:true,message:b.kind==='flag'?'Removal request sent to moderators. The video remains listed while they review it.':'Saved for review. Points are awarded only after approval, within daily limits.'});
+      const direct=b.kind!=='flag'&&await canPublishDirectly(db,user.id);
+      const metadata=direct&&b.kind==='submission'?await submissionMetadata(db,env,video):null;
+      const status=direct?'accepted':'pending',note=direct?'Published directly: verified reputation above 15; no verification rewards awarded.':null;
+      const insert=db.prepare(`INSERT OR IGNORE INTO contributions(id,user_id,kind,performer_id,video_id,body,reason,status,created_at,review_note)
+        SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=?)<20`).bind(id,user.id,b.kind,b.performerId,video,body,reason,status,now,note,user.id,now.slice(0,10));
+      const statements=[insert];
+      if(metadata){
+        const guard="EXISTS(SELECT 1 FROM contributions WHERE id=? AND status='accepted' AND created_at=?)";
+        statements.push(db.prepare(`INSERT OR IGNORE INTO channels(id,name) SELECT ?,? WHERE ${guard}`).bind(metadata.channelId,metadata.channelName,id,now));
+        statements.push(db.prepare(`INSERT INTO videos(id,channel_id,title,published_at,discovered_at,format,available) SELECT ?,?,?,?,?,?,1 WHERE ${guard} ON CONFLICT(id) DO NOTHING`).bind(video,metadata.channelId,metadata.title,metadata.publishedAt,now,metadata.format,id,now));
+        statements.push(db.prepare(`INSERT INTO matches(performer_id,video_id,status,source) SELECT ?,?,'CONFIRMED','Direct submission by trusted member' WHERE ${guard} AND NOT EXISTS(SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?) ON CONFLICT(performer_id,video_id) DO NOTHING`).bind(b.performerId,video,id,now,b.performerId,video));
+      }
+      const results=await db.batch(statements);
+      if(!results[0].meta.changes)fail('Already submitted, or your daily limit of 20 contributions has been reached.',409);
+      return json({ok:true,status,published:direct,message:direct?(b.kind==='submission'?'Reaction published directly to the confirmed catalog.':'Comment published directly.') : b.kind==='flag'?'Removal request sent to moderators. The video remains listed while they review it.':'Saved for review. Points are awarded only after approval, within daily limits.'});
     }
     if(path==='/moderate'){
       if(!user.moderator)fail('Moderator access required.',403);

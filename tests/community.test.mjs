@@ -172,3 +172,16 @@ test('accepted submissions and rejected comments cannot be reopened as submissio
  const {call,sql}=await setup();
  for(const [id,kind,status] of [['accepted-test','submission','accepted'],['comment-test','comment','rejected']]){sql.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,status,created_at) VALUES(?,'fan',?,'missioned-souls','KYI8i2_v8nU','Test contribution',?,'2026-01-01')").run(id,kind,status);assert.equal((await call('/submission/reopen',{id,note:'Review this item again'},'owner')).status,409);}
 });
+
+test('trusted reaction submissions publish fetched metadata without rewards and preserve exclusions',async()=>{
+ const {sql,call,env,points}=await setup();
+ const now=new Date().toISOString();sql.prepare("INSERT INTO reputation_events VALUES('earned','fan',16,'Verified help',?)").run(now);
+ const id='newvideo123';sql.prepare('INSERT INTO state(key,value) VALUES(?,?)').run('submission-metadata:'+id,JSON.stringify({title:'Missioned Souls reaction',channelName:'Trusted reactor',channelId:channel,publishedAt:'2026-09-01T00:00:00Z',format:'FULL_LENGTH',fetchedAt:Date.now()}));
+ const b={kind:'submission',performerId:'missioned-souls',url:'https://youtu.be/'+id,body:'A verified reaction to Missioned Souls.'};
+ const r=await call('/contribute',b);assert.equal(r.status,200);assert.equal(r.data.published,true);
+ assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(id).status,'CONFIRMED');assert.equal(points('fan'),0);
+ assert.equal((await call('/contribute',b)).status,409);
+ assert.equal((await call('/contribute',{...b,url:'https://youtu.be/pwNtcFZ_59I'})).status,409);
+ assert.equal((await call('/contribute',{...b,url:'https://youtu.be/unavailable'})).status,503);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM contributions WHERE video_id='unavailable'").get().n,0);
+});
