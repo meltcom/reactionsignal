@@ -18,6 +18,14 @@ const follows=(kind,target)=>dashboard.follows.some(f=>f.kind===kind&&f.target==
 const commentsFor=id=>dashboard.scores.find(s=>s.video_id===id)?.comments||0;
 const num=v=>v==null?'Unknown':Number(v).toLocaleString();
 let followingScope='specific';
+function isNewToday(video,now=new Date()){
+ const today=now.toDateString();
+ return [video.discoveredAt,video.publishedAt].some(value=>{
+  if(!value)return false;
+  const date=new Date(value);
+  return Number.isFinite(date.getTime())&&date<=now&&date.toDateString()===today;
+ });
+}
 function followed(v){
  const specific=dashboard.follows.filter(f=>f.kind==='reactor'||f.kind==='song');
  const matchesSpecific=specific.some(f=>f.kind==='reactor'?f.target===v.channelId:`${v.song||''} ${v.title||''}`.toLowerCase().includes(f.target.toLowerCase()));
@@ -31,7 +39,7 @@ $('followingScope').onchange=e=>{followingScope=e.target.value;state.visible=24;
 
 renderPerformers=function(){$('performerTabs').innerHTML=[{id:'all',name:'All performers'},...catalog.performers].map(p=>`<button class="performer-tab ${p.id===state.performer?'active':''}" data-performer="${escapeHtml(p.id)}">${escapeHtml(p.name)}</button>`).join('');document.querySelectorAll('[data-performer]').forEach(b=>b.onclick=()=>{state.performer=b.dataset.performer;prefs.performer=state.performer;state.visible=24;renderAll();});$('followButton').textContent=state.performer==='all'?'Manage follows':follows('performer',state.performer)?'✓ Following':'＋ Follow performer';};
 performerVideos=function(){let list=catalog.videos.filter(v=>!(dashboard.hiddenReactors||[]).some(h=>h.channel_id===v.channelId)).filter(v=>state.performer==='all'||v.performerId===state.performer).filter(v=>!state.query||`${v.title} ${v.channelName} ${v.song||''}`.toLowerCase().includes(state.query.toLowerCase())).filter(v=>state.format==='all'||v.format===state.format).filter(v=>state.confidence==='all'||v.confidence===state.confidence).filter(v=>state.format==='SHORT'||!prefs.hideShorts||v.format!=='SHORT').filter(v=>state.confidence==='PROBABLE'||!prefs.verifiedOnly||v.confidence==='CONFIRMED').filter(v=>!prefs.hideWatched||watchFor(v.id).status!=='watched').filter(v=>!prefs.favoritesOnly||follows('reactor',v.channelId)).filter(v=>!prefs.minSubscribers||(channelFor(v).subscribers!=null&&channelFor(v).subscribers>=prefs.minSubscribers)).filter(v=>!prefs.minRating||(scoreMap.get(v.id)?.average||0)>=prefs.minRating).filter(v=>!prefs.days||(v.publishedAt&&Date.now()-Date.parse(v.publishedAt)<=prefs.days*86400000)).filter(v=>!prefs.startDate||(v.publishedAt&&v.publishedAt.slice(0,10)>=prefs.startDate)).filter(v=>!prefs.endDate||(v.publishedAt&&v.publishedAt.slice(0,10)<=prefs.endDate)).filter(v=>!prefs.song||`${v.song||''} ${v.title}`.toLowerCase().includes(prefs.song.toLowerCase())).filter(v=>!prefs.genre||(v.genre||'').toLowerCase().includes(prefs.genre.toLowerCase())).filter(v=>!prefs.reactor||v.channelName.toLowerCase().includes(prefs.reactor.toLowerCase()));
- followingControls.hidden=feedMode!=='following';if(feedMode==='favorites')list=list.filter(v=>watchFor(v.id).favorite);if(feedMode==='following')list=list.filter(followed);if(feedMode==='community')list=list.filter(v=>v.source?.startsWith('Community'));if(feedMode==='today')list=list.filter(v=>v.discoveredAt&&new Date(v.discoveredAt).toDateString()===new Date().toDateString());
+ followingControls.hidden=feedMode!=='following';if(feedMode==='favorites')list=list.filter(v=>watchFor(v.id).favorite);if(feedMode==='following')list=list.filter(followed);if(feedMode==='community')list=list.filter(v=>v.source?.startsWith('Community'));if(feedMode==='today'){const now=new Date();list=list.filter(v=>isNewToday(v,now));}
  const channelDiscovered=new Map();for(const v of catalog.videos)if(v.discoveredAt)channelDiscovered.set(v.channelId,Math.min(channelDiscovered.get(v.channelId)||Infinity,Date.parse(v.discoveredAt)));
  const value=v=>({'reactor-ranked':reactorRankValue(v.channelId),rated:communityRank(v.id),views:v.views??-1,comments:commentsFor(v.id),subscribers:channelFor(v).subscribers??-1,discovered:Date.parse(v.discoveredAt)||0,'new-reactor':channelDiscovered.get(v.channelId)||0,latest:Date.parse(v.publishedAt)||0}[state.sort]??0);
  list.sort((a,b)=>value(b)-value(a)||(Date.parse(b.publishedAt)||0)-(Date.parse(a.publishedAt)||0));return list;
