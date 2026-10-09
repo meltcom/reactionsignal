@@ -83,10 +83,13 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
     // Fresh uploads get the first allocation. Historical cursors are independent.
     const batchSize=Math.max(1,Math.min(14,Number.parseInt(env.DISCOVERY_RECENT_BATCH_SIZE,10)||7));
     const historyLimit=Math.max(0,Math.min(2,Number.parseInt(env.DISCOVERY_HISTORY_PAGES??'1',10)||0));
-    const due=options.performerId?[]:(await db.prepare("SELECT * FROM channels WHERE discovery_scope='eligible' AND (recent_retry_at IS NULL OR recent_retry_at<=?) AND (recent_checked_at IS NULL OR recent_checked_at<?) ORDER BY recent_attempted_at ASC,recent_checked_at ASC,id LIMIT ?").bind(now,new Date(Date.now()-86400000).toISOString(),batchSize).all()).results;
-    // Reserve up to two remaining slots for channels with recent confirmed reactions.
-    const prioritySlots=Math.min(2,Math.max(0,batchSize-due.length));
-    if(!options.performerId&&prioritySlots){const extra=(await db.prepare("SELECT c.* FROM channels c WHERE c.discovery_scope='eligible' AND (c.recent_retry_at IS NULL OR c.recent_retry_at<=?) AND c.recent_checked_at<? AND c.id IN (SELECT DISTINCT v.channel_id FROM videos v INDEXED BY journey_videos_published_channel JOIN matches m ON m.video_id=v.id WHERE v.published_at>? AND m.performer_id='missioned-souls' AND m.status='CONFIRMED') ORDER BY c.recent_attempted_at ASC LIMIT ?").bind(now,new Date(Date.now()-2*3600000).toISOString(),new Date(Date.now()-14*86400000).toISOString(),prioritySlots).all()).results;due.push(...extra.filter(c=>!due.some(d=>d.id===c.id)));}
+    // Active reactors have reserved capacity even while daily coverage is overdue.
+    // At least half the batch remains available for oldest-first daily coverage.
+    const prioritySlots=Math.floor(batchSize/2);
+    const priority=options.performerId||!prioritySlots?[]:(await db.prepare("SELECT c.* FROM channels c WHERE c.discovery_scope='eligible' AND (c.recent_retry_at IS NULL OR c.recent_retry_at<=?) AND (c.recent_checked_at IS NULL OR c.recent_checked_at<?) AND c.id IN (SELECT DISTINCT v.channel_id FROM videos v INDEXED BY journey_videos_published_channel JOIN matches m ON m.video_id=v.id WHERE v.published_at>? AND m.performer_id='missioned-souls' AND m.status='CONFIRMED') ORDER BY c.recent_attempted_at ASC,c.recent_checked_at ASC,c.id LIMIT ?").bind(now,new Date(Date.now()-3600000).toISOString(),new Date(Date.now()-14*86400000).toISOString(),prioritySlots).all()).results;
+    const exclude=priority.length?` AND id NOT IN (${priority.map(()=>'?').join(',')})`:'';
+    const regular=options.performerId?[]:(await db.prepare("SELECT * FROM channels WHERE discovery_scope='eligible' AND (recent_retry_at IS NULL OR recent_retry_at<=?) AND (recent_checked_at IS NULL OR recent_checked_at<?)"+exclude+" ORDER BY recent_attempted_at ASC,recent_checked_at ASC,id LIMIT ?").bind(now,new Date(Date.now()-86400000).toISOString(),...priority.map(c=>c.id),batchSize-priority.length).all()).results;
+    const due=[...priority,...regular];
 
     if(due.length)await db.batch(due.map(c=>db.prepare('UPDATE channels SET recent_attempted_at=? WHERE id=?').bind(now,c.id)));
     const missing=due.filter(c=>!c.uploads);
@@ -135,19 +138,6 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
     }
     await checkpointRecent();
     if(pageError)throw pageError;
-    // Rotate historical work separately, at most two pages from distinct channels.
-    const backlog=options.performerId?[]:(await db.prepare('SELECT * FROM channels WHERE discovery_scope=\'eligible\' AND uploads IS NOT NULL AND (recent_retry_at IS NULL OR recent_retry_at<=?) AND next_page IS NOT NULL ORDER BY history_checked_at ASC,id LIMIT ?').bind(now,historyLimit).all()).results;
-    for(const channel of backlog){
-      if(api.calls>22||Date.now()>api.deadline-6000)break;
-      let page;try{page=await api.get('playlistItems',{part:'contentDetails',playlistId:channel.uploads,maxResults:50,pageToken:channel.next_page});}catch(error){if(error.message.includes('playlistNotFound')){await unavailable(channel,'Unavailable uploads playlist');continue;}throw error;}
-      const ids=(page.items||[]).map(x=>x.contentDetails?.videoId).filter(Boolean);
-      if(ids.length){const data=await api.get('videos',{part:'snippet,contentDetails,status',id:ids.join(',')});const n=await saveVideos(db,data.items||[],performers,now,'Historical upload scan');added+=n;historyAdded+=n;metrics.examined+=ids.length;}
-      const reached=(page.items||[]).some(x=>x.contentDetails?.videoPublishedAt&&x.contentDetails.videoPublishedAt<channel.scan_before);
-      const next=!reached?page.nextPageToken:null;
-      await db.prepare('UPDATE channels SET next_page=?,scan_before=?,scan_started=?,checked_at=?,history_checked_at=? WHERE id=?').bind(next||null,next?channel.scan_before:null,next?channel.scan_started:null,next?channel.checked_at:channel.scan_started,now,channel.id).run();
-      historyPages++;
-      if(next){final='partial';detail+='Historical upload continuation retained; ';}
-    }
     // Resume a fixed-window search one page at a time; completed windows become incremental.
     let searched=0;
     for(const p of performers){
@@ -156,7 +146,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
       const key=`search:${p.id}`,progressKey=`search-progress:${p.id}`;
       const prev=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();
       const pending=await db.prepare('SELECT value FROM state WHERE key=?').bind(progressKey).first();
-      if(!pending&&prev?.value.slice(0,10)===now.slice(0,10))continue;
+      if(!pending&&prev&&Date.parse(now)-Date.parse(prev.value)<2*3600000)continue;
       const terms=JSON.parse(p.aliases);
       const cursor=pending?JSON.parse(pending.value):{term:0,page:null,startedAt:now,after:prev?new Date(Date.parse(prev.value)-48*3600000).toISOString():p.lookback_days===0?null:new Date(Date.now()-p.lookback_days*86400000).toISOString()};
       const quotaKey=`search-budget:${now.slice(0,10)}`;
@@ -184,6 +174,19 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
         await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(`search-error:${p.id}`,error.message).run();
         throw error;
       }
+    }
+    // Rotate historical work separately, at most two pages from distinct channels.
+    const backlog=options.performerId?[]:(await db.prepare('SELECT * FROM channels WHERE discovery_scope=\'eligible\' AND uploads IS NOT NULL AND (recent_retry_at IS NULL OR recent_retry_at<=?) AND next_page IS NOT NULL ORDER BY history_checked_at ASC,id LIMIT ?').bind(now,historyLimit).all()).results;
+    for(const channel of backlog){
+      if(api.calls>22||Date.now()>api.deadline-6000)break;
+      let page;try{page=await api.get('playlistItems',{part:'contentDetails',playlistId:channel.uploads,maxResults:50,pageToken:channel.next_page});}catch(error){if(error.message.includes('playlistNotFound')){await unavailable(channel,'Unavailable uploads playlist');continue;}throw error;}
+      const ids=(page.items||[]).map(x=>x.contentDetails?.videoId).filter(Boolean);
+      if(ids.length){const data=await api.get('videos',{part:'snippet,contentDetails,status',id:ids.join(',')});const n=await saveVideos(db,data.items||[],performers,now,'Historical upload scan');added+=n;historyAdded+=n;metrics.examined+=ids.length;}
+      const reached=(page.items||[]).some(x=>x.contentDetails?.videoPublishedAt&&x.contentDetails.videoPublishedAt<channel.scan_before);
+      const next=!reached?page.nextPageToken:null;
+      await db.prepare('UPDATE channels SET next_page=?,scan_before=?,scan_started=?,checked_at=?,history_checked_at=? WHERE id=?').bind(next||null,next?channel.scan_before:null,next?channel.scan_started:null,next?channel.checked_at:channel.scan_started,now,channel.id).run();
+      historyPages++;
+      if(next){final='partial';detail+='Historical upload continuation retained; ';}
     }
     // Refresh a bounded oldest-first batch, including items no longer publicly available.
     if(!options.performerId&&api.calls<27&&Date.now()<api.deadline-4000){
