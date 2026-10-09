@@ -132,3 +132,39 @@ test('performer onboarding resumes history pages, honors daily budgets, and keep
 test('unknown durations remain held for review even with a clear title',()=>{
  assert.equal(classify('New Act reaction',['New Act'],null),'PENDING');
 });
+
+async function isolatedDiscovery(){
+ const d=db();await seedDatabase(d,seed);
+ await d.prepare("UPDATE channels SET discovery_scope='other'").run();
+ await d.prepare("UPDATE channels SET discovery_scope='eligible',uploads='active-uploads',recent_checked_at=? WHERE id=?").bind(new Date(Date.now()-2*3600000).toISOString(),channel).run();
+ const performers=(await d.prepare("SELECT * FROM performers WHERE id='missioned-souls'").all()).results;
+ const video=item();video.snippet.publishedAt=new Date(Date.now()-86400000).toISOString();
+ await saveVideo(d,video,performers,new Date().toISOString(),'fixture');
+ return d;
+}
+test('active reactors retain reserved slots during a daily backlog, and search precedes history',async()=>{
+ const d=await isolatedDiscovery();
+ for(let i=0;i<8;i++)await d.prepare("INSERT INTO channels(id,name,uploads,discovery_scope) VALUES(?,?,?,'eligible')").bind('backlog-'+i,'Backlog','backlog-uploads-'+i).run();
+ await d.prepare("UPDATE channels SET next_page='older',scan_before='2020-01-01' WHERE id=?").bind(channel).run();
+ const requests=[];const fake=async url=>{requests.push({endpoint:url.pathname.split('/').pop(),playlist:url.searchParams.get('playlistId'),page:url.searchParams.get('pageToken')});return Response.json({items:[]});};
+ await runDiscovery({DB:d,YOUTUBE_API_KEY:'fixture-only',DISCOVERY_RECENT_BATCH_SIZE:4},seed,fake);
+ const recent=requests.filter(r=>r.endpoint==='playlistItems'&&!r.page);
+ assert.equal(recent.length,4);assert.equal(recent[0].playlist,'active-uploads');
+ assert.equal(new Set(recent.map(r=>r.playlist)).size,4);
+ assert.ok(requests.findIndex(r=>r.endpoint==='search')<requests.findIndex(r=>r.page==='older'));
+});
+test('completed searches repeat after two hours within the daily cap',async()=>{
+ const d=await isolatedDiscovery();
+ await d.prepare("UPDATE channels SET discovery_scope='other'").run();
+ const now=new Date().toISOString();
+ await d.prepare("INSERT INTO state(key,value) VALUES('search:missioned-souls',?)").bind(now).run();
+ let searches=0;const fake=async url=>{if(url.pathname.endsWith('/search'))searches++;return Response.json({items:[]});};
+ const env={DB:d,YOUTUBE_API_KEY:'fixture-only',DISCOVERY_DAILY_SEARCH_LIMIT:1};
+ await runDiscovery(env,seed,fake);assert.equal(searches,0);
+ await d.prepare("DELETE FROM state WHERE key='discovery-lease'").run();
+ await d.prepare("UPDATE state SET value=? WHERE key='search:missioned-souls'").bind(new Date(Date.now()-3*3600000).toISOString()).run();
+ await runDiscovery(env,seed,fake);assert.equal(searches,1);
+ await d.prepare("DELETE FROM state WHERE key='discovery-lease'").run();
+ await d.prepare("UPDATE state SET value=? WHERE key='search:missioned-souls'").bind(new Date(Date.now()-3*3600000).toISOString()).run();
+ const capped=await runDiscovery(env,seed,fake);assert.equal(searches,1);assert.match(capped.detail,/Daily search budget/);
+});

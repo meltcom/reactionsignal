@@ -91,3 +91,9 @@ Cloudflare documentation:
 - https://developers.cloudflare.com/workers/configuration/cron-triggers/
 
 Members with more than 15 verified reputation points (16+) publish reactions and comments, including replies and edits, directly. Members with 15 or fewer remain subject to moderator approval. Participation points do not unlock direct publishing. Direct reactions require successful YouTube metadata lookup and appear as Confirmed. Existing exclusions, duplicate checks, mutes, and daily posting limits apply. Reports and removal requests still require review. Direct publishing earns no verification rewards; moderators can hide published comments.
+
+### Recent reaction discovery scheduling
+
+Every 15-minute run reserves up to half the recent-upload batch for eligible reactors with a confirmed Missioned Souls reaction published in the last 14 days. Those reactors become due after one hour; selection rotates oldest attempts first. The remaining slots check eligible channels overdue for daily coverage, and unused priority slots return to that queue. These are scheduling thresholds, not guaranteed discovery times; backlog, retries and the bounded run budget can delay a check.
+
+Completed performer searches become eligible again after two hours rather than waiting until the next UTC day. Existing search cursors and the daily search-call cap remain intact. Search runs after latest uploads and before historical upload pages, so historical work uses the remaining budget. Existing discovery observations continue to record publication-to-discovery delay for comparing results after deployment.
