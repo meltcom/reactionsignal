@@ -13,7 +13,7 @@ async function setup(){
  const sql=new DatabaseSync(':memory:');
  for(const file of readdirSync(new URL('../drizzle/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync(new URL('../drizzle/'+file,import.meta.url),'utf8'));
  const db={prepare(q){let values=[];return {bind(...v){values=v;return this;},async first(){return sql.prepare(q).get(...values)||null;},async all(){return {results:sql.prepare(q).all(...values)};},async run(){return {meta:{changes:Number(sql.prepare(q).run(...values).changes)}};}}},async batch(stmts){sql.exec('BEGIN');try{const results=[];for(const s of stmts)results.push(await s.run());sql.exec('COMMIT');return results;}catch(e){sql.exec('ROLLBACK');throw e;}}};
- await seedDatabase(db,seed);const env={DB:db,YOUTUBE_API_KEY:'fixture-only',YOUTUBE_PUSH_CALLBACK_URL:'https://relay.test/api/youtube/push'};
+ await seedDatabase(db,seed);sql.exec('DELETE FROM matches; DELETE FROM videos; DELETE FROM channels; DELETE FROM discovery_notifications; DELETE FROM discovery_observations;');sql.prepare("INSERT INTO channels(id,name,discovery_scope) VALUES(?,?,'eligible')").run(channel,'Reactor');const env={DB:db,YOUTUBE_API_KEY:'fixture-only',YOUTUBE_PUSH_CALLBACK_URL:'https://relay.test/api/youtube/push'};
  const call=async(path,body,moderator=true,origin='https://site.test')=>{const response=await managePerformers(new Request('https://site.test/api/performers'+path,{method:body?'POST':'GET',headers:{Origin:origin,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,seed,{id:moderator?'mod':'fan',moderator});return {status:response.status,data:await response.json()};};
  return {sql,db,env,call};
 }
@@ -40,10 +40,10 @@ test('verified signed uploads publish immediately and notify once; duplicate del
  assert.equal((await delivery(callback,env,db)).status,202);let calls=0;
  const fetcher=async url=>{calls++;assert.ok(url.pathname.endsWith('/videos'));assert.equal(url.searchParams.has('key'),false);return Response.json({items:[item()]});};
  assert.equal((await processPushJobs(env,seed,fetcher)).added,1);assert.equal((await catalog(db,seed,env)).videos.length,1);
- assert.equal((await call('/notifications')).data.count,1);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM discovery_notifications WHERE status='new'").get().n,1);
  assert.equal((await delivery(callback,env,db)).status,202);await processPushJobs(env,seed,fetcher);assert.equal(calls,1);
- assert.equal((await call('/notifications')).data.count,1);
- const p=(await db.prepare('SELECT * FROM performers').all()).results;await saveVideo(db,item(),p,new Date().toISOString(),'backup scan');assert.equal((await call('/notifications')).data.count,1);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM discovery_notifications WHERE status='new'").get().n,1);
+ const p=(await db.prepare('SELECT * FROM performers').all()).results;await saveVideo(db,item(),p,new Date().toISOString(),'backup scan');assert.equal(sql.prepare("SELECT COUNT(*) n FROM discovery_notifications WHERE status='new'").get().n,1);
 });
 test('invalid challenges, expired subscriptions, mixed-channel feeds and unsupported XML cannot enqueue work',async()=>{
  const {env,db,sql}=await setup();const callback=await subscribe(env,db);
@@ -70,14 +70,14 @@ test('keep clears notification without hiding; members can request removal witho
  const {env,db,sql,call}=await setup();const callback=await subscribe(env,db);await delivery(callback,env,db);await processPushJobs(env,seed,async()=>Response.json({items:[item()]}));
  assert.equal((await call('/notifications/review',{performerId:'missioned-souls',videoId:video,action:'keep'})).status,200);
  assert.equal((await catalog(db,seed,env)).videos.length,1);
- sql.prepare("INSERT INTO members VALUES('fan','Fan',?)").run(new Date().toISOString());
+ sql.prepare("INSERT INTO members(id,name,created_at) VALUES('fan','Fan',?)").run(new Date().toISOString());
  const body={kind:'flag',performerId:'missioned-souls',videoId:video,reason:'not-reaction',body:'Please check whether this is a full reaction.'};
  const request=new Request('https://site.test/api/community/contribute',{method:'POST',headers:{Origin:'https://site.test','Content-Type':'application/json'},body:JSON.stringify(body)});
  assert.equal((await community(request,env,seed,{id:'fan',moderator:false})).status,200);
  assert.equal((await call('/notifications')).data.reports,1);assert.equal((await catalog(db,seed,env)).videos.length,1);
  const report=sql.prepare('SELECT id FROM contributions').get().id;
  const review=new Request('https://site.test/api/community/moderate',{method:'POST',headers:{Origin:'https://site.test','Content-Type':'application/json'},body:JSON.stringify({id:report,decision:'accept',note:'Confirmed this is not a reaction'})});
- sql.prepare("INSERT INTO members VALUES('mod','Moderator',?)").run(new Date().toISOString());
+ sql.prepare("INSERT INTO members(id,name,created_at) VALUES('mod','Moderator',?)").run(new Date().toISOString());
  assert.equal((await community(review,env,seed,{id:'mod',moderator:true})).status,200);
  assert.equal((await catalog(db,seed,env)).videos.length,0);assert.equal(sql.prepare('SELECT status FROM discovery_notifications').get().status,'removed');
 });
