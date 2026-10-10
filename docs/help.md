@@ -1,6 +1,6 @@
 # Reaction Journey Help
 
-Choose a topic to expand its guide. Guides for members, moderators, and administrators. Updated October 7, 2026, for the current Missioned Souls service.
+Choose a topic to expand its guide. Guides for members, moderators, and administrators. Updated October 9, 2026, for the current Missioned Souls service.
 
 - Sign in and get started
 
@@ -24,7 +24,7 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - My Profile & Activity and submitting reactions
 
-- Points & Reputation
+- Points & Trust
 
 - Discovery status & catalog coverage
 
@@ -282,35 +282,32 @@ In Reactors, use Import YouTube subscriptions, then Connect YouTube. Grant optio
 
 - Paste a direct YouTube video URL, choose Missioned Souls, explain why it belongs, and click Suggest video.
 
-- Submissions await moderator verification; duplicates, already pending records, and exclusions can be rejected.
+- Trusted members publish valid submissions directly and earn points within daily limits. Other submissions await moderator verification. Duplicates, already pending records, and exclusions can be rejected.
 
 - Your contributions and review decisions shows outcomes and moderator notes; Your recent points shows awards.
 
 - Performer recommendations are closed because Reaction Journey is dedicated to Missioned Souls.
 
-### Points & Reputation
+### Contribution Points & Trusted Member status
 
-- First rating of a video earns +1, up to 10 awards/day.
+Contribution Points recognize helpful activity and determine your badge. Trusted Member is a separate posting status granted by moderators.
 
-- Approved comments earn +3, up to 3/day.
+| Activity | Points | Maximum awards per UTC day |
+| --- | ---: | ---: |
+| First video rating | +1 | 10 |
+| Useful comment or reply | +3 | 3 combined |
+| Valid missing reaction submission | +20 | 5 |
+| Verified catalog correction/removal report | +10 | 5 |
 
-- Accepted new reaction submissions earn +20, up to 5/day.
-
-- The first confirmed relevance correction earns +5, up to 5/day.
-
-- Daily award limits reset at midnight UTC; reviewed contributions count on the approval date.
-
-- Duplicate discoveries, unconfirmed reports, rating changes, chat, and moderator self-approvals do not earn additional points.
-
-- Hidden/reversed contributions can reverse their awards.
-
-- Contributor starts at 25 points, Reaction scout at 100, Catalog curator at 250, and Community champion at 1,000.
-
-- Point badges appear before member display names in supported chats, comments, leaderboards, and member lists. Hover over a badge to see its level and point count. Points & Reputation includes the badge legend.
-
-- Badge levels are Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000+). Badges confer recognition, not moderator permissions; points have no cash value.
-
-- The page shows your history, total, and community leaderboard.
+- Trusted members publish reactions, comments and replies directly and earn points immediately. Other members earn points after moderator approval. Correction/removal reports always require moderator verification, including trusted members’ reports.
+- The +10 correction rate applies to new awards. Earlier awards retain their original amounts.
+- Daily limits reset at midnight UTC. Direct posts count on posting date; reviewed contributions count on approval date. Each contribution earns at most one award. Duplicate discoveries, unconfirmed reports, rating changes, chat and moderator self-approvals earn no additional points.
+- Trusted edits retain earned points and cannot earn a second award. Removed comments reverse their awards. Editing a comment while approval is required returns it to review and reverses its existing award.
+- After three separate currently accepted contributions verified by another moderator, a member is flagged for trust review. Ratings, direct unreviewed posts, hidden/rejected items and self-approvals do not count. Three approvals do not grant trust automatically: a moderator checks quality and accuracy.
+- Existing trusted members keep their access. Moderators can revoke trust with a reason; previously published posts and badges remain. A posting mute prevents posting even for trusted members.
+- No separate reputation score or Verify for Reputation step is required. Previous reputation history is available in Historical reputation archive and no longer controls access or earns new awards.
+- Badge levels remain Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000+). Badges confer recognition; they do not grant trust or moderator powers. Points have no cash value and do not weight video ratings.
+- Open Points & Trust for your posting status, moderator-approved contribution count, point weights, badge legend and leaderboard. My Profile & Activity shows recent point awards.
 
 ### Discovery status & catalog coverage
 
@@ -518,9 +515,18 @@ In Reactors, use Import YouTube subscriptions, then Connect YouTube. Grant optio
 
 - Use Member Review under Moderator to search names or email, correct display names, adjust points with a reason, or mute and unmute posting.
 
-- New members are Novice until 25 points, then Contributor. Badges appear before member display names: Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000+). Hover over a badge to see its level and current points. The Reputation page shows the badge legend. Badges use participation points, not verified reputation, and reflect point adjustments or reversals on refresh.
+- New members are Novice until 25 points, then Contributor. Badges appear before member display names: Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000+). Hover over a badge to see its level and current points. The Points & Trust page shows the badge legend. Badges use Contribution Points, separate from Trusted Member status, and reflect point adjustments or reversals on refresh.
 
 ## Moderator & administrator help
+
+### Member Review: grant, defer or revoke trust
+
+1. Open **Moderator → Member Review**. Select **Ready for trust review** to see unreviewed members with at least three independent moderator-approved contributions. Use **All members** to revisit deferred or revoked members, or **Trusted members** for existing access.
+2. Expand **Review contributions and trust history**, then select **Load evidence**. Check accuracy, quality and conduct using the contribution text, video links and moderator notes. The count includes all qualifying records; the evidence list shows the latest 100 contributions.
+3. Select **Grant Trusted Member status**, enter a reason, then **Save member change**. The server requires three accepted contributions verified by another moderator and rejects changing your own trust.
+4. Select **Reviewed: keep approval required** to defer trust, or **Revoke Trusted Member status** to remove direct posting. Reasons and moderator identities are saved in trust history. A later review can grant trust again if the three-approval condition is met.
+5. Continue reviewing uncertain reactions, correction/removal requests and content reports. Trusted posts require no separate reputation verification. Mutes remain available for temporary posting restrictions.
+
 
 ### Moderator Queue: review safely
 
@@ -642,4 +648,4 @@ In Reactors, use Import YouTube subscriptions, then Connect YouTube. Grant optio
 
 - A successful deployment does not guarantee healthy discovery: verify recent runs, catalog loading, login, and moderation.
 
-Members with more than 15 verified reputation points (16+) publish reactions and comments, including replies and edits, directly. Members with 15 or fewer remain subject to moderator approval. Participation points do not unlock direct publishing. Direct reactions require successful YouTube metadata lookup and appear as Confirmed. Existing exclusions, duplicate checks, mutes, and daily posting limits apply. Reports and removal requests still require review. Direct publishing earns no verification rewards; moderators can hide published comments.
+Trusted Member is a moderator-managed status, separate from Contribution Points and badges. After three currently accepted contributions verified by another moderator, members are flagged for trust review. A moderator checks quality and accuracy before granting trust; access is not automatic. Existing trusted members retain access during migration. Moderators can defer or revoke trust with a recorded reason. Trusted reactions, comments and replies publish directly and earn Contribution Points immediately within daily limits. Other members require approval. Corrections and removal reports always require verification. Direct reactions require successful YouTube metadata lookup and appear as Confirmed. Existing exclusions, duplicate checks, mutes and daily posting limits remain in force. The former reputation ledger is retained as history and no longer earns new awards or controls access.

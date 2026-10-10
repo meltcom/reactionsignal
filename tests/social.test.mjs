@@ -14,7 +14,7 @@ async function setup(){
  const call=async(path,body,user='fan',origin='https://pilot.test',service=social)=>{const r=await service(new Request('https://pilot.test/api/'+(service===social?'social':'community')+path,{method:body?'POST':'GET',headers:{...(user?{'oai-authenticated-user-id':user,'oai-authenticated-user-email':user+'@test.com'}:{}),Origin:origin,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,seed,user?{id:user,moderator:user==='owner'}:null);return {status:r.status,data:await r.json()};};return {sql,call,db};
 }
 test('preferences, saved views, follows and watch lists are account isolated and persistent',async()=>{const {call}=await setup();assert.equal((await call('/dashboard',null,null)).status,401);assert.equal((await call('/preferences',{theme:'dark'},'fan','https://evil.test')).status,403);assert.equal((await call('/preferences',{theme:'dark',layout:'table',fields:['rating'],hideWatched:true})).status,200);assert.equal((await call('/dashboard')).data.preferences.theme,'dark');assert.deepEqual((await call('/dashboard',null,'other')).data.preferences,{});await call('/view',{name:'My favorites',settings:{landing:'favorites',layout:'compact'}});const id=(await call('/dashboard')).data.views[0].id;await call('/view',{id,remove:true},'other');assert.equal((await call('/dashboard')).data.views.length,1);await call('/follow',{kind:'performer',target:'missioned-souls'});await call('/watch',{videoId:'abcdefghijk',status:'watched',favorite:true});const d=(await call('/dashboard')).data;assert.equal(d.follows.length,1);assert.equal(d.watch[0].favorite,1);assert.equal(d.watch[0].status,'watched');assert.equal((await call('/dashboard',null,'other')).data.watch.length,0);assert.equal((await call('/preferences',{layout:'hacked'})).status,400);});
-test('threaded comments are reviewed, ownership enforced, likes deduplicated and rewards reversed',async()=>{const {call,sql}=await setup();const c={videoId:'abcdefghijk',performerId:'missioned-souls',body:'A thoughtful and detailed comment.'};assert.equal((await call('/comment',c)).status,200);const id=sql.prepare("SELECT id FROM contributions WHERE user_id='fan'").get().id;assert.equal((await call('/comments?video=abcdefghijk',null,'other')).data.items.length,0);assert.equal((await call('/comments?video=abcdefghijk')).data.items.length,1);assert.equal((await call('/moderate',{id,decision:'accept',note:'Helpful discussion'},'owner','https://pilot.test',community)).status,200);assert.equal((await call('/dashboard')).data.reputationTotal,2);assert.equal((await call('/comment',{...c,body:'A useful reply to that comment.',parentId:id},'other')).status,200);await call('/like',{id},'other');await call('/like',{id},'other');assert.equal((await call('/comments?video=abcdefghijk')).data.items[0].likes,1);assert.equal((await call('/comment',{...c,id},'other')).status,403);assert.equal((await call('/delete',{id,kind:'comment'},'other')).status,403);assert.equal((await call('/delete',{id,kind:'comment'})).status,200);assert.equal((await call('/dashboard')).data.reputationTotal,0);assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,0);});
+test('threaded comments are reviewed, ownership enforced, likes deduplicated and rewards reversed',async()=>{const {call,sql}=await setup();const c={videoId:'abcdefghijk',performerId:'missioned-souls',body:'A thoughtful and detailed comment.'};assert.equal((await call('/comment',c)).status,200);const id=sql.prepare("SELECT id FROM contributions WHERE user_id='fan'").get().id;assert.equal((await call('/comments?video=abcdefghijk',null,'other')).data.items.length,0);assert.equal((await call('/comments?video=abcdefghijk')).data.items.length,1);assert.equal((await call('/moderate',{id,decision:'accept',note:'Helpful discussion'},'owner','https://pilot.test',community)).status,200);assert.equal((await call('/dashboard')).data.reputationTotal,0);assert.equal((await call('/comment',{...c,body:'A useful reply to that comment.',parentId:id},'other')).status,200);await call('/like',{id},'other');await call('/like',{id},'other');assert.equal((await call('/comments?video=abcdefghijk')).data.items[0].likes,1);assert.equal((await call('/comment',{...c,id},'other')).status,403);assert.equal((await call('/delete',{id,kind:'comment'},'other')).status,403);assert.equal((await call('/delete',{id,kind:'comment'})).status,200);assert.equal((await call('/dashboard')).data.reputationTotal,0);assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,0);});
 test('chat messages, unread counts, mentions, blocking, reports and moderator mutes work together',async()=>{const {call,sql}=await setup();assert.equal((await call('/chat',{room:'missioned-souls',body:'Hello @other, what a great performance!'})).status,200);assert.equal((await call('/chat',{room:'missioned-souls',body:'Too fast'})).status,429);assert.equal((await call('/rooms',null,'other')).data.rooms[0].unread,1);assert.equal((await call('/mentions',null,'other')).data.items.length,1);await call('/presence',{room:'missioned-souls'},'other');assert.equal((await call('/rooms',null,'other')).data.rooms[0].unread,0);await call('/block',{target:'fan'},'other');assert.equal((await call('/chat?room=missioned-souls',null,'other')).data.messages.length,0);await call('/block',{target:'fan',remove:true},'other');const id=(await call('/chat?room=missioned-souls',null,'other')).data.messages[0].id;assert.equal((await call('/delete',{kind:'chat',id},'other')).status,403);await call('/report',{kind:'chat',target:id,body:'Please review this message.'},'other');assert.equal((await call('/queue',null,'fan')).status,403);const report=(await call('/queue',null,'owner')).data.reports[0];assert.equal((await call('/moderate',{id:report.id,action:'mute'},'fan')).status,403);assert.equal((await call('/moderate',{id:report.id,action:'mute'},'owner')).status,200);assert.equal((await call('/chat?room=missioned-souls')).data.messages.length,0);assert.equal((await call('/comment',{videoId:'abcdefghijk',performerId:'missioned-souls',body:'A muted member tries posting.'})).status,403);await call('/unmute',{id:'fan'},'owner');assert.equal(sql.prepare('SELECT COUNT(*) n FROM mutes').get().n,0);});
 test('settings reject invalid fields and numbers',()=>{assert.throws(()=>settings({minRating:8}));assert.throws(()=>settings({fields:['admin']}));assert.throws(()=>settings({hideWatched:'yes'}));assert.equal(settings({startDate:'2026-09-01'}).startDate,'2026-09-01');});
 
@@ -65,25 +65,22 @@ test('Master Reset clears the four selected groups atomically and preserves othe
  assert.equal((await call('/master-reset',{confirm:true})).status,200);
 });
 
-test('direct comments use verified reputation above 15 without adding unverified reputation',async()=>{
+test('direct comments depend on moderator-managed trust, not contribution points or archived reputation',async()=>{
  const {call,sql}=await setup();
- sql.prepare("INSERT INTO reputation_events VALUES('earned','fan',15,'Verified discovery',?)").run(new Date().toISOString());
+ sql.prepare("INSERT INTO reputation_events VALUES('earned','fan',100,'Archived reputation',?)").run(new Date().toISOString());
  sql.prepare("INSERT INTO points VALUES('participation','fan','submission',1000,?)").run(new Date().toISOString());
- const c={videoId:'abcdefghijk',performerId:'missioned-souls',body:'At fifteen this still needs review.'};
+ const c={videoId:'abcdefghijk',performerId:'missioned-souls',body:'High scores still require a moderator trust decision.'};
  assert.equal((await call('/comment',c)).data.status,'pending');
- sql.prepare("INSERT INTO reputation_events VALUES('extra','fan',1,'Verified help',?)").run(new Date().toISOString());
- const r=await call('/comment',{...c,body:'At sixteen this publishes directly.'});assert.equal(r.data.status,'accepted');
- const id=sql.prepare("SELECT id FROM contributions WHERE status='accepted'").get().id;
- assert.equal((await call('/comments?video=abcdefghijk',null,'other')).data.items.length,1);
- assert.equal((await call('/comment',{...c,id,body:'A trusted member edits directly.'})).data.status,'accepted');
- assert.equal((await call('/dashboard')).data.reputationTotal,16);
- sql.prepare("INSERT INTO reputation_events VALUES('reversal','fan',-2,'Removed contribution',?)").run(new Date().toISOString());
- assert.equal((await call('/comment',{...c,body:'Lost reputation returns me to review.'})).data.status,'pending');
+ sql.prepare("UPDATE members SET trusted=1 WHERE id='fan'").run();
+ assert.equal((await call('/comment',{...c,body:'Trusted status publishes directly.'})).data.status,'accepted');
+ sql.prepare("UPDATE members SET trusted=0 WHERE id='fan'").run();
+ assert.equal((await call('/comment',{...c,body:'Revoked trust returns posting to approval.'})).data.status,'pending');
+ assert.equal((await call('/dashboard')).data.reputationTotal,100);
 });
 
 test('trusted comments and replies share daily awards across routes; edits retain points and removal reverses once',async()=>{
  const {sql,call}=await setup();
- sql.prepare("INSERT INTO reputation_events VALUES('trusted','fan',16,'Verified help',?)").run(new Date().toISOString());
+ sql.prepare("UPDATE members SET trusted=1 WHERE id='fan'").run();
  const b={videoId:'abcdefghijk',performerId:'missioned-souls',body:'A useful trusted comment about this reaction.'};
  assert.equal((await call('/comment',b)).data.status,'accepted');
  const id=sql.prepare("SELECT id FROM contributions WHERE body=?").get(b.body).id;
@@ -94,7 +91,7 @@ test('trusted comments and replies share daily awards across routes; edits retai
  assert.equal((await call('/comment',{...b,parentId:id,body:'A useful reply discussing the performance.'})).status,200);assert.equal(points(),6);
  assert.equal((await call('/contribute',{kind:'comment',...b,body:'A comment through the original contribution form.'},'fan','https://pilot.test',community)).status,200);assert.equal(points(),9);
  assert.equal((await call('/comment',{...b,body:'Another useful comment above the daily reward limit.'})).status,200);assert.equal(points(),9);
- assert.equal((await call('/dashboard')).data.reputationTotal,16);
+ assert.equal((await call('/dashboard')).data.reputationTotal,0);
  assert.equal((await call('/delete',{id,kind:'comment'})).status,200);assert.equal(points(),6);
  assert.equal((await call('/delete',{id,kind:'comment'})).status,200);assert.equal(points(),6);
 });
@@ -127,7 +124,7 @@ test('first trusted publication of an edited pending comment earns one award',as
  const b={videoId:'abcdefghijk',performerId:'missioned-souls',body:'Initially this comment needs review.'};
  assert.equal((await call('/comment',b)).data.status,'pending');
  const id=sql.prepare('SELECT id FROM contributions').get().id;
- sql.prepare("INSERT INTO reputation_events VALUES('trusted','fan',16,'Verified help',?)").run(new Date().toISOString());
+ sql.prepare("UPDATE members SET trusted=1 WHERE id='fan'").run();
  for(let i=0;i<2;i++)assert.equal((await call('/comment',{...b,id,body:'Now trusted, this comment publishes directly.'})).data.status,'accepted');
  assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,3);
 });

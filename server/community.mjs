@@ -1,4 +1,4 @@
-import {canPublishDirectly} from './reputation.mjs';
+import {canPublishDirectly,approvedContributionCount} from './reputation.mjs';
 import { database, seedDatabase } from './db.mjs';
 import {YouTube,seconds} from './discovery.mjs';
 export async function submissionMetadata(db,env,videoId,fetcher=fetch){
@@ -46,7 +46,7 @@ export async function community(request,env,seed,user){
     if(path==='/coverage'||path==='/coverage/queue'){if(request.method==='GET')return json({items:[]});fail('Reaction Journey covers Missioned Souls only.',400);}
     if(path==='/coverage/review')fail('Performer recommendations are closed.',400);
     if(path==='/summary'&&request.method==='GET')await db.prepare("INSERT INTO members(id,name,created_at,email,last_seen_at) VALUES(?,'',?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email,last_seen_at=excluded.last_seen_at WHERE members.last_seen_at IS NULL OR members.last_seen_at<? OR members.email IS NOT excluded.email").bind(user.id,new Date().toISOString(),user.email||null,new Date().toISOString(),new Date(Date.now()-3600000).toISOString()).run();
-    const me=await db.prepare('SELECT name,profile_icon,profile_color,profile_picture FROM members WHERE id=?').bind(user.id).first();
+    const me=await db.prepare('SELECT name,profile_icon,profile_color,profile_picture,trusted FROM members WHERE id=?').bind(user.id).first();
     if(request.method==='GET'){
       if(path==='/coverage'){
         const rows=await db.prepare('SELECT id,name,url,body,status,created_at,review_note FROM coverage_requests WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(user.id).all();
@@ -98,11 +98,18 @@ export async function community(request,env,seed,user){
         const messages=await db.prepare('SELECT body,moderator,created_at FROM contact_messages WHERE ticket_id=? ORDER BY created_at,id').bind(ticket.id).all();
         return json({ticket,messages:messages.results});
       }
+      if(path==='/users/contributions'){
+        const id=text(u.searchParams.get('id'),1,100,'Member ID');
+        const items=await db.prepare("SELECT id,kind,video_id,body,status,reviewed_at,reviewed_by,review_note FROM contributions WHERE user_id=? ORDER BY created_at DESC LIMIT 100").bind(id).all();
+        const history=await db.prepare('SELECT trusted,reason,moderator_id,created_at FROM member_trust_history WHERE user_id=? ORDER BY created_at DESC LIMIT 20').bind(id).all();
+        return json({items:items.results,trustHistory:history.results});
+      }
       if(path==='/users'){
-        const offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0)),q=(u.searchParams.get('q')||'').slice(0,100);
-        const rows=await db.prepare("SELECT m.id,m.name,m.profile_icon,m.profile_color,m.profile_picture,m.email,m.created_at,m.last_seen_at,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points,(SELECT until FROM mutes WHERE user_id=m.id) muted_until FROM members m WHERE instr(lower(m.name||' '||COALESCE(m.email,'')),lower(?))>0 ORDER BY m.created_at DESC,m.id LIMIT 101 OFFSET ?").bind(q,offset).all();
+        const offset=Math.max(0,Math.min(100000,Number(u.searchParams.get('offset'))||0)),q=(u.searchParams.get('q')||'').slice(0,100),filter=u.searchParams.get('trust')||'all';
+        if(!['all','ready','trusted'].includes(filter))fail('Invalid trust filter.');
+        const rows=await db.prepare(`SELECT * FROM (SELECT m.id,m.name,m.profile_icon,m.profile_color,m.profile_picture,m.email,m.created_at,m.last_seen_at,m.trusted,m.trust_reviewed_at,${approvedContributionCount} approved_count,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points,(SELECT until FROM mutes WHERE user_id=m.id) muted_until FROM members m WHERE instr(lower(m.name||' '||COALESCE(m.email,'')),lower(?))>0) WHERE ${filter==='ready'?'trusted=0 AND approved_count>=3 AND trust_reviewed_at IS NULL':filter==='trusted'?'trusted=1':'1'} ORDER BY created_at DESC,id LIMIT 101 OFFSET ?`).bind(q,offset).all();
         const moderators=String(env.COMMUNITY_MODERATOR_EMAILS||'').toLowerCase().split(',').map(x=>x.trim());
-        return json({items:rows.results.slice(0,100).map(m=>({...m,tier:tier(m.points),moderator:moderators.includes(m.email?.toLowerCase())})),hasMore:rows.results.length>100,offset});
+        return json({items:rows.results.slice(0,100).map(m=>({...m,trusted:m.trusted===1,trustReviewReady:m.trusted===0&&m.approved_count>=3&&!m.trust_reviewed_at,tier:tier(m.points),moderator:moderators.includes(m.email?.toLowerCase())})),hasMore:rows.results.length>100,offset});
       }
       if(path==='/summary'){
         const totals=await db.prepare('SELECT COALESCE(SUM(amount),0) total FROM points WHERE user_id=?').bind(user.id).first();
@@ -110,7 +117,8 @@ export async function community(request,env,seed,user){
         const leaders=await db.prepare('SELECT m.name,m.profile_icon,m.profile_color,m.profile_picture,SUM(p.amount) points FROM points p JOIN members m ON m.id=p.user_id GROUP BY p.user_id HAVING SUM(p.amount)>0 ORDER BY points DESC,m.created_at ASC LIMIT 10').all();
         const mine=await db.prepare('SELECT id,kind,video_id,performer_id,body,status,review_note,created_at FROM contributions WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(user.id).all();
         const ledger=await db.prepare('SELECT kind,amount,created_at FROM points WHERE user_id=? ORDER BY created_at DESC LIMIT 30').bind(user.id).all();
-        return json({name:me?.name||'',profile_icon:me?.profile_icon||'initials',profile_color:me?.profile_color||'teal',profile_picture:me?.profile_picture||null,moderator:user.moderator,points:totals.total,tier:tier(totals.total),scores:scores.results,leaders:leaders.results,mine:mine.results,ledger:ledger.results});
+        const approvals=await db.prepare(`SELECT ${approvedContributionCount} count FROM members m WHERE m.id=?`).bind(user.id).first();
+        return json({trusted:me?.trusted===1,approvedCount:approvals?.count||0,name:me?.name||'',profile_icon:me?.profile_icon||'initials',profile_color:me?.profile_color||'teal',profile_picture:me?.profile_picture||null,moderator:user.moderator,points:totals.total,tier:tier(totals.total),scores:scores.results,leaders:leaders.results,mine:mine.results,ledger:ledger.results});
       }
       if(path==='/video'){
         const video=u.searchParams.get('id');if(!/^[\w-]{11}$/.test(video||''))fail('Invalid video ID.');
@@ -247,13 +255,21 @@ export async function community(request,env,seed,user){
       else if(b.action==='points'){
         if(!Number.isInteger(b.amount)||b.amount===0||Math.abs(b.amount)>1000)fail('Choose a nonzero adjustment from -1000 to 1000.');
         ops.push(db.prepare('INSERT INTO points(id,user_id,kind,amount,created_at) VALUES(?,?,?,?,?)').bind('moderator-adjustment:'+crypto.randomUUID(),id,'Moderator adjustment: '+note,b.amount,now));
+      }else if(['grant-trust','revoke-trust','defer-trust'].includes(b.action)){
+        if(id===user.id)fail('Another moderator must review your trusted status.',403);
+        const member=await db.prepare(`SELECT m.trusted,${approvedContributionCount} approved_count FROM members m WHERE id=?`).bind(id).first();
+        const trusted=b.action==='grant-trust'?1:0;
+        if(trusted&&member.approved_count<3)fail('At least three currently accepted contributions verified by another member are required.',409);
+        if(b.action==='defer-trust'&&member.trusted===1)fail('Revoke trusted status to remove existing access.',409);
+        ops.push(db.prepare('UPDATE members SET trusted=?,trust_reviewed_at=? WHERE id=?').bind(trusted,now,id));
+        ops.push(db.prepare('INSERT INTO member_trust_history(id,user_id,moderator_id,trusted,reason,created_at) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),id,user.id,trusted,note,now));
       }else if(b.action==='mute'){
         if(id===user.id)fail('Choose another member.');
         ops.push(db.prepare('INSERT INTO mutes(user_id,until,reason) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET until=excluded.until,reason=excluded.reason').bind(id,new Date(Date.now()+86400000).toISOString(),note));
       }else if(b.action==='unmute')ops.push(db.prepare('DELETE FROM mutes WHERE user_id=?').bind(id));
       else fail('Choose a valid member action.');
       ops.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('member-audit:'+crypto.randomUUID(),JSON.stringify({actor:user.id,member:id,action:b.action,amount:b.amount,name:b.name,note,at:now})));
-      await db.batch(ops);return json({ok:true,message:'Member updated. Badge follows the current point total.'});
+      await db.batch(ops);return json({ok:true,message:'Member updated. Trusted status controls direct posting; badges follow contribution points.'});
     }
     if(path==='/profile'){
       const name=text(b.name,2,40,'Display name');
@@ -318,7 +334,7 @@ export async function community(request,env,seed,user){
       const id=b.kind==='submission'?`submission:${b.performerId}:${video}`:b.kind==='comment'?`comment:${user.id}:${video}`:`flag:${user.id}:${b.performerId}:${video}`;
       const direct=b.kind!=='flag'&&await canPublishDirectly(db,user.id);
       const metadata=direct&&b.kind==='submission'?await submissionMetadata(db,env,video):null;
-      const status=direct?'accepted':'pending',note=direct?'Published directly: verified reputation above 15; points awarded within daily limits.':null;
+      const status=direct?'accepted':'pending',note=direct?'Published directly: Trusted Member; points awarded within daily limits.':null;
       const insert=db.prepare(`INSERT OR IGNORE INTO contributions(id,user_id,kind,performer_id,video_id,body,reason,status,created_at,review_note)
         SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=?)<20`).bind(id,user.id,b.kind,b.performerId,video,body,reason,status,now,note,user.id,now.slice(0,10));
       const statements=[insert];
@@ -344,7 +360,6 @@ export async function community(request,env,seed,user){
       if(b.decision==='hide'&&c.kind==='comment'&&c.status==='accepted'){
         await db.batch([
           db.prepare("INSERT OR IGNORE INTO points(id,user_id,kind,amount,created_at) SELECT ?,user_id,'reversal',-amount,? FROM points WHERE id=? AND amount>0").bind(`revoke:${c.id}`,now,c.id),
-          db.prepare("INSERT OR IGNORE INTO reputation_events SELECT ?,user_id,-amount,'Comment removed',? FROM reputation_events WHERE id=? AND amount>0").bind(`revoke:${c.id}`,now,c.id),
           db.prepare("UPDATE contributions SET status='hidden',review_note=?,reviewed_by=?,reviewed_at=? WHERE id=? AND status='accepted'").bind(note,user.id,now,c.id)
         ]);return json({ok:true,message:'Comment hidden; any associated points reversed.'});
       }
@@ -372,8 +387,7 @@ export async function community(request,env,seed,user){
           statements.push(db.prepare(`UPDATE matches SET status='REJECTED' WHERE performer_id=? AND video_id=? AND ${pending}`).bind(c.performer_id,c.video_id,c.id));
         }
         if(c.user_id!==user.id){
-          statements.push(db.prepare(`INSERT OR IGNORE INTO reputation_events(id,user_id,amount,reason,created_at) SELECT ?,?,?,?,? WHERE ${pending}`).bind(c.id,c.user_id,{comment:2,submission:10,flag:5}[c.kind],`Verified ${c.kind}`,now,c.id));
-          const rule={comment:[3,3],submission:[20,5],flag:[5,5]}[c.kind];
+          const rule={comment:[3,3],submission:[20,5],flag:[10,5]}[c.kind];
           const key=c.kind==='flag'?`correction:${c.performer_id}:${c.video_id}`:c.id;
           const extra=c.kind==='submission'?" AND NOT EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?)":c.kind==='flag'?" AND NOT EXISTS(SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?)":"";
           statements.unshift(award(db,key,c.user_id,c.kind,rule[0],rule[1],now,pending+extra,extra?[c.id,c.performer_id,c.video_id]:[c.id]));
