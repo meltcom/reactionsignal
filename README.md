@@ -106,3 +106,9 @@ Point weights: first video rating +1 (10 awards/day), useful comment/reply +3 (3
 Migration `0035_simple_member_trust_20261010.sql` preserves existing members with more than 15 net historical reputation as Trusted Members. After migration, `members.trusted` is the only direct-post gate. Historical reputation stays unchanged; new awards use only the contribution-point ledger. Trust grant/defer/revoke actions are moderator-only, cannot target the acting moderator, require a reason and are recorded in `member_trust_history`. New grants require three currently accepted contributions with another moderator’s review recorded. This condition flags a candidate for human review; it does not automatically grant access. Revocation returns new posts to approval and does not remove existing posts or badges.
 
 Use Member Review → Ready for trust review, inspect contributions and trust history, then grant or defer. Refer to [the complete Help guide](docs/help.md) for member and moderator workflows.
+
+### Test workflow
+
+Run `npm ci` followed by `npm test`. The pretest script builds the packaged Worker before integration tests run. Discovery unit fixtures apply the full schema migration chain, then clear historical catalog rows only inside their private in-memory database. Dedicated historical-seed/import and packaged-Worker tests retain the migrated catalog. Production data is never cleared by tests.
+
+Migration `0036_restore_import_candidate_hold_20261010.sql` restores the original Pending hold for `gXWQQNUpKcA` only when its Probable status still belongs to one of the original historical imports. It retains the video, records the repair, and skips confirmed/rejected decisions, correction audits, accepted contributions and exclusions. Review the retained candidate through the normal moderator queue.
