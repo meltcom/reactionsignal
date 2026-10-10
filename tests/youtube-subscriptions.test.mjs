@@ -2,12 +2,14 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {youtubeSubscriptions} from '../server/youtube-subscriptions.mjs';
 import {matchSubscriptions,readSubscriptions} from '../youtube-subscriptions-core.js';
 const id=n=>'UC'+String(n).padStart(22,'0');
 function setup(){
  const sql=new DatabaseSync(':memory:');for(const f of readdirSync(new URL('../drizzle/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync(new URL('../drizzle/'+f,import.meta.url),'utf8'));
- const db={prepare(q){let v=[];return {bind(...a){v=a;return this;},async first(){return sql.prepare(q).get(...v)||null;},async all(){return {results:sql.prepare(q).all(...v)};},async run(){return {meta:{changes:Number(sql.prepare(q).run(...v).changes)}};}}},async batch(ss){sql.exec('BEGIN');try{const r=[];for(const s of ss)r.push(await s.run());sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}};
+ // Model D1 metadata, including writes made by activity triggers.
+ const db={prepare(q){let v=[];return {bind(...a){v=a;return this;},async first(){return sql.prepare(q).get(...v)||null;},async all(){return {results:sql.prepare(q).all(...v)};},async run(){const before=sql.prepare('SELECT total_changes() n').get().n;const results=sql.prepare(q).all(...v);return {results,meta:{changes:Number(sql.prepare('SELECT total_changes() n').get().n-before)}};}}},async batch(ss){sql.exec('BEGIN');try{const r=[];for(const s of ss)r.push(await s.run());sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}};
  const seed={performers:[{id:'missioned-souls',name:'Missioned Souls'}],channels:[1,2,3].map(n=>({id:id(n),name:'Reactor '+n,performerId:'missioned-souls'})),videos:[]};
  const call=async(body,user={id:'member-a'},origin='https://reactionjourney.com',method='POST',path='import',extra={})=>{const r=await youtubeSubscriptions(new Request('https://reactionjourney.com/api/youtube/subscriptions/'+path,{method,headers:{Origin:origin,'Content-Type':'application/json'},...(method==='POST'?{body:JSON.stringify(body)}:{})}),{DB:db,...extra},seed,user);return {status:r.status,data:await r.json()};};return {sql,call};
 }
@@ -24,6 +26,14 @@ test('errors for expired permission, quota, malformed pagination, cancellation; 
  await assert.rejects(()=>readSubscriptions('x',{fetcher:async()=>Response.json({})}),/invalid/);
  const c=new AbortController();c.abort();await assert.rejects(()=>readSubscriptions('x',{signal:c.signal,fetcher:async(u,o)=>{o.signal.throwIfAborted();}}),{name:'AbortError'});
 });
+test('import counts follows rather than trigger writes and remains idempotent',async()=>{
+ const {sql,call}=setup();
+ assert.deepEqual((await call({channelIds:[id(1),id(2),id(3)]})).data,{added:3,skipped:0});
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-a' AND kind='reactor'").get().n,3);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM user_activity WHERE user_id='member-a' AND kind='follow'").get().n,3);
+ assert.deepEqual((await call({channelIds:[id(1),id(2),id(3)]})).data,{added:0,skipped:3});
+});
+
 test('import is add-only, duplicate safe, account isolated and rechecks hidden state',async()=>{
  const {sql,call}=setup();await call({channelIds:[id(1)]});sql.prepare('INSERT INTO hidden_reactors VALUES(?,?,?)').run('member-a',id(2),'now');sql.prepare('INSERT INTO follows VALUES(?,?,?)').run('member-a','song','existing');
  const r=await call({channelIds:[id(1),id(1),id(2),id(3)],userId:'member-b'});assert.deepEqual(r.data,{added:1,skipped:2});assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-a'").get().n,3);assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-b'").get().n,0);assert.equal((await call({channelIds:[id(3)]})).data.added,0);assert.equal((await call({channelIds:[id(2)]},{id:'member-b'})).data.added,1);assert.equal(sql.prepare('SELECT COUNT(*) n FROM hidden_reactors').get().n,1);
@@ -37,7 +47,7 @@ test('only public OAuth client ID returned; missing/invalid config disabled',asy
 
 test('built interface requires consent and selection, posts IDs only, and ignores cancelled callbacks',async()=>{
  const {build}=await import('esbuild');const {runInNewContext}=await import('node:vm');
- const bundle=(await build({entryPoints:[new URL('../youtube-subscriptions.js',import.meta.url).pathname],bundle:true,format:'iife',platform:'browser',write:false})).outputFiles[0].text;
+ const bundle=(await build({entryPoints:[fileURLToPath(new URL('../youtube-subscriptions.js',import.meta.url))],bundle:true,format:'iife',platform:'browser',write:false})).outputFiles[0].text;
  const elements=new Map(),listeners={};let tokenConfig,reads=0,posts=[];
  class Element{constructor(){this.children=[];this.hidden=false;this.disabled=false;this.textContent='';}set innerHTML(html){for(const [,id] of html.matchAll(/id="([^"]+)"/g))elements.set(id,new Element());elements.get('youtubeImportForm')?.children.push(new Element());}get innerHTML(){return '';}append(...nodes){this.children.push(...nodes);}before(){}replaceChildren(){this.children=[];}querySelector(){return this.children[0];}querySelectorAll(){return elements.get('youtubeImportMatches').children.flatMap(row=>row.children.filter(n=>n?.type==='checkbox'&&n.checked));}}
  elements.set('reactorGrid',new Element());
