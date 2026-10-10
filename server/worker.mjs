@@ -1,13 +1,12 @@
-import {pollRss} from './rss.mjs';
+import {discoveryCycle} from './rss.mjs';
 import { missionedSouls, scheduledMissionedSouls } from './missioned-souls.mjs';
 import { database, seedDatabase, catalog, status } from './db.mjs';
 import { youtubeSubscriptions } from './youtube-subscriptions.mjs';
 import { social } from './social.mjs';
 import { community, profilePicture } from './community.mjs';
-import { runDiscovery } from './discovery.mjs';
 import { refreshChannelStats } from './channel-stats.mjs';
 import { authenticate, authConfig } from './auth.mjs';
-import { youtubePush, renewSubscriptions, processPushJobs } from './push.mjs';
+import { youtubePush } from './push.mjs';
 import {recheckBatch} from './recheck.mjs';
 import { managePerformers } from './performers.mjs';
 import { reconcile } from './reconciliation.mjs';
@@ -55,10 +54,7 @@ export default {
       if(path==='/api/discovery/run'){
         if(request.method!=='POST')return json({error:'POST required'},405);
         if(!await authorized(request,env))return json({error:'Not authorized'},401);
-        const rss=await pollRss(env,seed).catch(()=>console.error('RSS fallback failed; API discovery remains enabled'));
-        const push=await processPushJobs(env,seed);
-        const subscriptions=await renewSubscriptions(env,seed);
-        return json({...await runDiscovery(env,seed),push,subscriptions,rss});
+        return json(await discoveryCycle(env,seed));
       }
       if(request.method!=='GET'&&request.method!=='HEAD')return json({error:'Method not allowed'},405);
       if(path==='/data.json'||path==='/api/status'){
@@ -84,10 +80,7 @@ export default {
       const db=database(env);
       await seedDatabase(db,seed);
       await db.prepare("INSERT INTO state(key,value) VALUES('last-scheduled-invocation',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(new Date().toISOString()).run();
-      await pollRss(env,seed).catch(()=>console.error('RSS fallback failed; API discovery remains enabled'));
-      await processPushJobs(env,seed);
-      await runDiscovery(env,seed);
-      await renewSubscriptions(env,seed);
+      await discoveryCycle(env,seed);
       await recheckBatch(env);
       await scheduledMissionedSouls(env,seed.missionedSouls).catch(()=>console.error('MS Journey refresh failed'));
     })());

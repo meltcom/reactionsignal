@@ -18,7 +18,7 @@ async function setup(){
  return {sql,db,env,call};
 }
 
-import {pollRss} from '../server/rss.mjs';
+import {pollRss,discoveryCycle} from '../server/rss.mjs';
 import {status} from '../server/db.mjs';
 
 const xml=(ch=channel,title='Missioned Souls reaction')=>`<feed><entry><yt:videoId>${video}</yt:videoId><yt:channelId>${ch}</yt:channelId><title>${title}</title></entry></feed>`;
@@ -65,4 +65,36 @@ test('RSS rejects redirects without fetching another host',async()=>{
  const {env,sql}=await eligible();let calls=0;
  await pollRss(env,seed,async()=>{calls++;return new Response(null,{status:302,headers:{Location:'https://untrusted.test'}});});
  assert.equal(calls,1);assert.equal(sql.prepare('SELECT error FROM rss_checks').get().error,'Feed HTTP 302; retry scheduled');
+});
+test('repeated feed 404s limit polling and recover without disabling API channels',async()=>{
+ const {db,env,sql}=await eligible();
+ for(let i=0;i<39;i++)sql.prepare("INSERT INTO channels(id,name,discovery_scope) VALUES(?,?,'eligible')").run('UC'+String(i).padStart(22,'0'),'Reactor '+i);
+ let calls=0;const before=Date.now();await pollRss(env,seed,async()=>{calls++;return new Response(null,{status:404});});
+ assert.equal(calls,8);const batch=JSON.parse(sql.prepare("SELECT value FROM state WHERE key='rss-last-batch'").get().value);
+ assert.equal(batch.serviceStatus,'degraded');assert.equal(batch.deferred,32);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM channels WHERE discovery_scope='eligible' AND recent_checked_at IS NULL").get().n,40);
+ for(const r of sql.prepare('SELECT retry_at FROM rss_checks').all())assert.ok(Date.parse(r.retry_at)-before<=15*60000+1000);
+ sql.exec("UPDATE rss_checks SET checked_at='2000-01-01',retry_at='2000-01-01'");
+ calls=0;await pollRss(env,seed,async()=>{calls++;return new Response('<feed></feed>');});
+ assert.equal(calls,40);assert.equal(sql.prepare('SELECT COUNT(*) n FROM rss_checks WHERE error IS NULL').get().n,40);
+ assert.equal(JSON.parse(sql.prepare("SELECT value FROM state WHERE key='rss-last-batch'").get().value).serviceStatus,'available');
+});
+test('API discovery precedes optional RSS and survives feed and notification failures',async()=>{
+ const order=[];const result=await discoveryCycle({},seed,{
+  processPushJobs:async()=>{order.push('push');throw Error('fixture');},
+  runDiscovery:async()=>{order.push('api');return {status:'succeeded',channels:7};},
+  pollRss:async()=>{order.push('rss');throw Error('fixture');},
+  renewSubscriptions:async()=>{order.push('renew');return {status:'requested'};}
+ });
+ assert.deepEqual(order,['push','api','rss','renew']);assert.equal(result.channels,7);assert.equal(result.rss.status,'failed');assert.equal(result.subscriptions.status,'requested');
+});
+test('RSS candidates are verified in the same cycle after reliable API coverage',async()=>{
+ const order=[];let jobs=0;
+ const result=await discoveryCycle({},seed,{
+  processPushJobs:async()=>{order.push('push');return {processed:jobs++};},
+  runDiscovery:async()=>{order.push('api');return {status:'succeeded'};},
+  pollRss:async()=>{order.push('rss');return {queued:1};},
+  renewSubscriptions:async()=>{order.push('renew');return {status:'requested'};}
+ });
+ assert.deepEqual(order,['push','api','rss','push','renew']);assert.equal(result.rssPush.processed,1);
 });
