@@ -89,3 +89,31 @@ test('category lifecycle preserves assignments and rejects stale updates and mem
  assert.equal((await missionedSouls(request({action:'categories',revision:catalog.categoryRevision,operation:'archive',id:custom,archived:true}),env,seed,{id:'member',moderator:false})).status,403);
  assert.equal((await missionedSouls(new Request('https://local/api/missioned-souls'),env,seed,null)).status,401);
 });
+
+test('moderator hide/remove survives refresh and import, filters member API, and restores seed records',async()=>{
+ const db=database(),seed={videos:[video(undefined,{views:123,tags:['OPM'],reviewed:true})]},env={DB:db,YOUTUBE_API_KEY:'fixture'},mod={id:'moderator',moderator:true};
+ const req=body=>new Request('https://local/api/missioned-souls',{method:'POST',body:JSON.stringify(body)});
+ const act=(visibility,user=mod,id=seed.videos[0].id)=>missionedSouls(req({action:'visibility',id,visibility}),env,seed,user);
+ assert.equal((await act('hidden',{id:'member'})).status,403);
+ assert.equal((await act('wrong')).status,400);
+ assert.equal((await act('hidden',mod,'missing')).status,404);
+ const fetcher=async url=>{const p=new URL(url).pathname;return Response.json(p.endsWith('/channels')?{items:[{id:'official',contentDetails:{relatedPlaylists:{uploads:'uploads'}}}]}:p.endsWith('/playlistItems')?{items:[{contentDetails:{videoId:'C1yfkA_0_Sg'}}]}:{items:[{id:'C1yfkA_0_Sg',snippet:{title:'Studio cover',channelId:'official',publishedAt:'2026-01-01'},statistics:{viewCount:'456'}}]});};
+ for(const visibility of ['hidden','removed']){
+  assert.equal((await act(visibility)).status,200);
+  await refreshMissionedSouls(env,seed,fetcher);
+  assert.equal((await missionedSouls(req({action:'import',videos:seed.videos}),env,seed,mod)).status,200);
+  const member=await (await missionedSouls(new Request('https://local/api/missioned-souls'),env,seed,{id:'member'})).json();
+  assert.equal(member.videos.length,0);
+  const catalog=await readMissionedSouls(db,seed);assert.equal(catalog.videos[0].visibility,visibility);
+  assert.deepEqual(catalog.videos[0].tags,['OPM']);assert.ok(catalog.videos[0].history.length);
+  assert.equal(selectVideos(catalog.videos).length,0);
+  assert.equal(selectVideos(catalog.videos,{visibility:'managed'}).length,1);
+ }
+ assert.equal((await act('visible')).status,200);
+ const member=await (await missionedSouls(new Request('https://local/api/missioned-souls'),env,seed,{id:'member'})).json();assert.equal(member.videos.length,1);
+});
+test('hidden unknown-date and unavailable records remain recoverable',()=>{
+ const hidden=video(undefined,{visibility:'hidden',available:false});
+ assert.equal(selectVideos([hidden]).length,0);
+ assert.equal(selectVideos([hidden],{visibility:'managed'}).length,1);
+});
