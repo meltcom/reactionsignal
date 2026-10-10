@@ -1,6 +1,6 @@
 # Reaction Journey Help
 
-Choose a topic to expand its guide. Guides for members, moderators, and administrators. Updated October 9, 2026, for the current Missioned Souls service.
+Choose a topic to expand its guide. Guides for members, moderators, and administrators. Updated October 10, 2026, for the current Missioned Souls service.
 
 - Sign in and get started
 
@@ -10,7 +10,7 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - Following and Reactors
 
-- Reactor ratings and ranking
+- Reactor comments, ratings and ranking
 
 - Hide and unhide reactors
 
@@ -161,6 +161,24 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 - The listing remains until a moderator acts.
 
 - Disagreement or a low rating alone is not grounds for removal.
+
+### Reactor comments and ratings
+
+- Open Reactors and choose Rate & comment beside a reactor.
+
+- Save or clear your overall reactor rating (1–100), and post a comment of 10–2,000 characters.
+
+- Reactor discussions apply to the channel; video comments apply to one video.
+
+- Use Reply, Helpful, Edit, Delete, Report, or Block just as in video discussions.
+
+- Trusted Members publish directly; other comments and edits await moderator approval and are visible only to their author until approved.
+
+- Useful reactor and video comments/replies share the same +3 Contribution Points award, up to three awards per day.
+
+- Removing a comment reverses its award.
+
+- Reactor ratings do not earn video-rating points.
 
 ### Reactor ratings
 
