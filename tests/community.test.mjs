@@ -173,15 +173,54 @@ test('accepted submissions and rejected comments cannot be reopened as submissio
  for(const [id,kind,status] of [['accepted-test','submission','accepted'],['comment-test','comment','rejected']]){sql.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,status,created_at) VALUES(?,'fan',?,'missioned-souls','KYI8i2_v8nU','Test contribution',?,'2026-01-01')").run(id,kind,status);assert.equal((await call('/submission/reopen',{id,note:'Review this item again'},'owner')).status,409);}
 });
 
-test('trusted reaction submissions publish fetched metadata without rewards and preserve exclusions',async()=>{
+test('trusted reaction submissions publish fetched metadata with immediate points and preserve exclusions',async()=>{
  const {sql,call,env,points}=await setup();
  const now=new Date().toISOString();sql.prepare("INSERT INTO reputation_events VALUES('earned','fan',16,'Verified help',?)").run(now);
  const id='newvideo123';sql.prepare('INSERT INTO state(key,value) VALUES(?,?)').run('submission-metadata:'+id,JSON.stringify({title:'Missioned Souls reaction',channelName:'Trusted reactor',channelId:channel,publishedAt:'2026-09-01T00:00:00Z',format:'FULL_LENGTH',fetchedAt:Date.now()}));
  const b={kind:'submission',performerId:'missioned-souls',url:'https://youtu.be/'+id,body:'A verified reaction to Missioned Souls.'};
  const r=await call('/contribute',b);assert.equal(r.status,200);assert.equal(r.data.published,true);
- assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(id).status,'CONFIRMED');assert.equal(points('fan'),0);
+ assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(id).status,'CONFIRMED');assert.equal(points('fan'),20);
  assert.equal((await call('/contribute',b)).status,409);
  assert.equal((await call('/contribute',{...b,url:'https://youtu.be/pwNtcFZ_59I'})).status,409);
  assert.equal((await call('/contribute',{...b,url:'https://youtu.be/unavailable'})).status,503);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM contributions WHERE video_id='unavailable'").get().n,0);
+});
+
+test('trusted comments earn capped points once and hiding reverses the award',async()=>{
+ const {sql,call,video,points}=await setup();
+ sql.prepare("INSERT INTO reputation_events VALUES('trusted','fan',16,'Verified help',?)").run(new Date().toISOString());
+ for(let i=0;i<4;i++){
+  const id=String(i).padStart(11,'0');video(id);
+  const b={kind:'comment',performerId:'missioned-souls',videoId:id,body:'A thoughtful comment about this reaction.'};
+  assert.equal((await call('/contribute',b)).data.published,true);
+  assert.equal((await call('/contribute',b)).status,409);
+ }
+ assert.equal(points('fan'),9);
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM reputation_events WHERE user_id='fan'").get().n,16);
+ assert.equal((await call('/moderate',{id:'comment:fan:00000000000',decision:'hide',note:'Remove this comment'},'owner')).status,200);
+ assert.equal(points('fan'),6);
+});
+
+test('trusted points migration backfills original UTC days once, respecting caps and decisions',async()=>{
+ const {sql,points}=await setup();
+ const migration=readFileSync(new URL('../drizzle/0033_trusted_member_points_20261010.sql',import.meta.url),'utf8');
+ sql.exec("DELETE FROM state WHERE key='trusted-member-points-backfill-v1'");
+ const note='Published directly: verified reputation above 15; no verification rewards awarded.';
+ const insert=sql.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,status,created_at,review_note) VALUES(?,'fan',?,'missioned-souls',?,'Useful contribution',?,?,?)");
+ for(let i=0;i<5;i++)insert.run('old-comment-'+i,'comment',String(i).padStart(11,'0'),'accepted','2026-10-08T01:00:00Z',note);
+ insert.run('hidden','comment','00000000008','hidden','2026-10-07T00:00:00Z',note);
+ insert.run('pending','comment','00000000009','pending','2026-10-07T00:00:00Z',note);
+ insert.run('ordinary','comment','00000000010','accepted','2026-10-07T00:00:00Z','Moderator approval');
+ insert.run('old-submission','submission','00000000011','accepted','2026-10-07T00:00:00Z',note);
+ insert.run('excluded-submission','submission','pwNtcFZ_59I','accepted','2026-10-07T00:00:00Z',note);
+ sql.prepare("INSERT INTO videos(id,channel_id,title,available) VALUES('00000000011',?,'Reaction',1)").run(channel);
+ sql.exec("INSERT INTO matches VALUES('missioned-souls','00000000011','CONFIRMED','Direct submission by trusted member')");
+ sql.exec("INSERT INTO points VALUES('existing','fan','comment',3,'2026-10-08T02:00:00Z')");
+ sql.exec(migration);assert.equal(points('fan'),29);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM points WHERE id LIKE 'old-comment-%'").get().n,2);
+ assert.equal(sql.prepare("SELECT created_at FROM points WHERE id='old-submission'").get().created_at,'2026-10-07T00:00:00Z');
+ const audit=JSON.parse(sql.prepare("SELECT value FROM state WHERE key='trusted-member-points-backfill-v1'").get().value);
+ assert.equal(audit.awards,3);assert.equal(audit.points,26);
+ sql.exec(migration);assert.equal(points('fan'),29);
+ assert.equal(sql.prepare('SELECT COUNT(*) n FROM reputation_events').get().n,0);
 });

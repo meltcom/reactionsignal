@@ -318,10 +318,15 @@ export async function community(request,env,seed,user){
       const id=b.kind==='submission'?`submission:${b.performerId}:${video}`:b.kind==='comment'?`comment:${user.id}:${video}`:`flag:${user.id}:${b.performerId}:${video}`;
       const direct=b.kind!=='flag'&&await canPublishDirectly(db,user.id);
       const metadata=direct&&b.kind==='submission'?await submissionMetadata(db,env,video):null;
-      const status=direct?'accepted':'pending',note=direct?'Published directly: verified reputation above 15; no verification rewards awarded.':null;
+      const status=direct?'accepted':'pending',note=direct?'Published directly: verified reputation above 15; points awarded within daily limits.':null;
       const insert=db.prepare(`INSERT OR IGNORE INTO contributions(id,user_id,kind,performer_id,video_id,body,reason,status,created_at,review_note)
         SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=?)<20`).bind(id,user.id,b.kind,b.performerId,video,body,reason,status,now,note,user.id,now.slice(0,10));
       const statements=[insert];
+      if(direct){
+        const [amount,cap]=b.kind==='submission'?[20,5]:[3,3];
+        statements.push(award(db,id,user.id,b.kind,amount,cap,now,
+          "EXISTS(SELECT 1 FROM contributions WHERE id=? AND status='accepted' AND created_at=?)",[id,now]));
+      }
       if(metadata){
         const guard="EXISTS(SELECT 1 FROM contributions WHERE id=? AND status='accepted' AND created_at=?)";
         statements.push(db.prepare(`INSERT OR IGNORE INTO channels(id,name) SELECT ?,? WHERE ${guard}`).bind(metadata.channelId,metadata.channelName,id,now));
@@ -330,7 +335,7 @@ export async function community(request,env,seed,user){
       }
       const results=await db.batch(statements);
       if(!results[0].meta.changes)fail('Already submitted, or your daily limit of 20 contributions has been reached.',409);
-      return json({ok:true,status,published:direct,message:direct?(b.kind==='submission'?'Reaction published directly to the confirmed catalog.':'Comment published directly.') : b.kind==='flag'?'Removal request sent to moderators. The video remains listed while they review it.':'Saved for review. Points are awarded only after approval, within daily limits.'});
+      return json({ok:true,status,published:direct,message:direct?(b.kind==='submission'?'Reaction published directly to the confirmed catalog. Points awarded within daily limits.':'Comment published directly. Points awarded within daily limits.') : b.kind==='flag'?'Removal request sent to moderators. The video remains listed while they review it.':'Saved for review. Points are awarded only after approval, within daily limits.'});
     }
     if(path==='/moderate'){
       if(!user.moderator)fail('Moderator access required.',403);
