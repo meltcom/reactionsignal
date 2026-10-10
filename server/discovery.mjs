@@ -68,6 +68,11 @@ export function measuredDatabase(raw,metrics){
   return {prepare(query){return wrap(raw.prepare(query),query.replace(/\s+/g,' ').trim());},batch(statements){return measure(()=>raw.batch(statements.map(s=>originals.get(s)||s)),statements.map(s=>queries.get(s)||'batch statement'));}};
 }
 export function retryDelay(failures){return failures<=1?3600000:failures===2?21600000:86400000;}
+export function searchDailyLimit(env){
+  const value=env.DISCOVERY_DAILY_SEARCH_LIMIT;
+  if(value===undefined||value===null||value==='')return 20;
+  const limit=Number(value);return Number.isFinite(limit)?Math.max(0,Math.min(80,Math.floor(limit))):20;
+}
 export async function runDiscovery(env,seed,fetcher=fetch,options={}){
   const startedMs=Date.now(),metrics={dbMs:0,examined:0,rowsRead:0,rowsWritten:0};const db=measuredDatabase(database(env),metrics);await seedDatabase(db,seed);
   if(!env.YOUTUBE_API_KEY)return {status:'blocked',reason:'YouTube API key is not configured'};
@@ -78,6 +83,10 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
   const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db);let added=0,scanned=0,historyPages=0,recentAdded=0,historyAdded=0,final='succeeded',detail='';
   await db.prepare('INSERT INTO runs(id,started_at,status) VALUES(?,?,?)').bind(id,now,'running').run();
   try{
+    if(!await db.prepare("SELECT value FROM state WHERE key='discovery-repair-baseline-v1'").first()){
+      const sources=(await db.prepare("SELECT source,COUNT(*) samples,AVG(delay_seconds) average_seconds,MAX(delay_seconds) max_seconds FROM discovery_observations WHERE discovered_at>=? AND delay_seconds BETWEEN 0 AND 604800 GROUP BY source").bind(new Date(startedMs-86400000).toISOString()).all()).results;
+      await db.prepare("INSERT OR IGNORE INTO state(key,value) VALUES('discovery-repair-baseline-v1',?)").bind(JSON.stringify({at:now,sources})).run();
+    }
     const performers=(await db.prepare("SELECT p.* FROM performers p LEFT JOIN state s ON s.key='search-touch:'||p.id WHERE p.discovery_enabled=1 AND p.id='missioned-souls' ORDER BY COALESCE(s.value,''),p.id").all()).results;
     if(!performers.length)return {id,status:'succeeded',calls:0,channels:0,added:0,detail:'No discovery-enabled performers.'};
     // Fresh uploads get the first allocation. Historical cursors are independent.
@@ -142,21 +151,24 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
     let searched=0;
     for(const p of performers){
       if(options.performerId&&p.id!==options.performerId)continue;
-      if(searched>=4||api.calls>22||Date.now()>api.deadline-4000)break;
+      const recordSearch=async report=>db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(`search-diagnostics:${p.id}`,JSON.stringify({at:now,dailyLimit:searchDailyLimit(env),...report})).run();
+      if(searched>=4||api.calls>22||Date.now()>api.deadline-4000){await recordSearch({status:'deferred',reason:'Discovery run budget reached'});break;}
       const key=`search:${p.id}`,progressKey=`search-progress:${p.id}`;
       const prev=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();
       const pending=await db.prepare('SELECT value FROM state WHERE key=?').bind(progressKey).first();
-      if(!pending&&prev&&Date.parse(now)-Date.parse(prev.value)<2*3600000)continue;
+      if(!pending&&prev&&Date.parse(now)-Date.parse(prev.value)<2*3600000){await recordSearch({status:'waiting',reason:'Two-hour interval',lastCompletedAt:prev.value,nextDueAt:new Date(Date.parse(prev.value)+2*3600000).toISOString()});continue;}
       const terms=JSON.parse(p.aliases);
       const cursor=pending?JSON.parse(pending.value):{term:0,page:null,startedAt:now,after:prev?new Date(Date.parse(prev.value)-48*3600000).toISOString():p.lookback_days===0?null:new Date(Date.now()-p.lookback_days*86400000).toISOString()};
       const quotaKey=`search-budget:${now.slice(0,10)}`;
-      const dailyLimit=Math.max(1,Math.min(80,Number(env.DISCOVERY_DAILY_SEARCH_LIMIT)||20));
+      const dailyLimit=searchDailyLimit(env);
+      if(!dailyLimit){await recordSearch({status:'disabled',reason:'Daily search limit is zero'});continue;}
       const slot=await db.prepare("INSERT INTO state(key,value) VALUES(?,'1') ON CONFLICT(key) DO UPDATE SET value=CAST(state.value AS INTEGER)+1 WHERE CAST(state.value AS INTEGER)<?").bind(quotaKey,dailyLimit).run();
-      if(!slot.meta.changes){final='partial';detail+='Daily search budget reached; queued searches resume tomorrow. ';break;}
+      if(!slot.meta.changes){await recordSearch({status:'capped',reason:'Daily search budget reached'});final='partial';detail+='Daily search budget reached; queued searches resume tomorrow. ';break;}
       searched++;
       await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(`search-touch:${p.id}`,now).run();
       try{
         if(!pending)await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(progressKey,JSON.stringify(cursor)).run();
+        await recordSearch({status:'requesting',term:terms[cursor.term]||p.name,windowEnd:cursor.startedAt});
         const result=await api.get('search',{part:'snippet',type:'video',order:'date',maxResults:50,q:`"${terms[cursor.term]||p.name}" reaction`,publishedAfter:cursor.after,publishedBefore:cursor.startedAt,pageToken:cursor.page});
         const ids=(result.items||[]).map(x=>x.id?.videoId).filter(Boolean);
         if(ids.length){const data=await api.get('videos',{part:'snippet,contentDetails,status',id:ids.join(',')});added+=await saveVideos(db,data.items||[],[p],now,'Performer discovery search');metrics.examined+=ids.length;}
@@ -170,7 +182,9 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
           db.prepare('DELETE FROM state WHERE key=?').bind(progressKey)
         ]);
         await db.prepare('DELETE FROM state WHERE key=?').bind(`search-error:${p.id}`).run();
+        await recordSearch({status:cursor.term<terms.length?'continuing':'completed',results:ids.length,windowEnd:cursor.startedAt,nextDueAt:cursor.term<terms.length?now:new Date(Date.parse(cursor.startedAt)+2*3600000).toISOString()});
       }catch(error){
+        await recordSearch({status:'failed',reason:error.message});
         await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(`search-error:${p.id}`,error.message).run();
         throw error;
       }

@@ -48,3 +48,21 @@ test('RSS repeat polling preserves pending API retries',async()=>{
  const before=sql.prepare('SELECT * FROM push_jobs').get();sql.exec('DELETE FROM rss_checks');await pollRss(env,seed,async()=>new Response(xml()));
  const after=sql.prepare('SELECT * FROM push_jobs').get();assert.equal(after.attempts,before.attempts);assert.equal(after.next_attempt,before.next_attempt);
 });
+test('RSS records HTTP and timeout failures separately and recovers after retry',async()=>{
+ const {db,env,sql}=await eligible();
+ await pollRss(env,seed,async()=>new Response('Not found',{status:404}));
+ assert.equal(sql.prepare('SELECT error FROM rss_checks').get().error,'Feed HTTP 404; retry scheduled');
+ let report=await status(db,env);assert.equal(report.rss.errors[0].channels,1);
+ sql.exec('DELETE FROM rss_checks');
+ const before=Date.now();await pollRss(env,seed,async()=>{throw new DOMException('Timeout','TimeoutError');});
+ const row=sql.prepare('SELECT * FROM rss_checks').get();assert.equal(row.error,'Feed timeout; retry scheduled');assert.ok(Date.parse(row.retry_at)-before<=15*60000+1000);
+ sql.exec("UPDATE rss_checks SET retry_at='2000-01-01',checked_at='2000-01-01'");
+ await pollRss(env,seed,async(url,options)=>{assert.equal(options.redirect,'manual');assert.match(options.headers.Accept,/atom/);return new Response(xml());});
+ assert.equal(sql.prepare('SELECT error FROM rss_checks').get().error,null);
+ assert.equal((await status(db,env)).rss.coverage.checked,1);
+});
+test('RSS rejects redirects without fetching another host',async()=>{
+ const {env,sql}=await eligible();let calls=0;
+ await pollRss(env,seed,async()=>{calls++;return new Response(null,{status:302,headers:{Location:'https://untrusted.test'}});});
+ assert.equal(calls,1);assert.equal(sql.prepare('SELECT error FROM rss_checks').get().error,'Feed HTTP 302; retry scheduled');
+});
