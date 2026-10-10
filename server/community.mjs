@@ -101,7 +101,7 @@ export async function community(request,env,seed,user){
       }
       if(path==='/users/contributions'){
         const id=text(u.searchParams.get('id'),1,100,'Member ID');
-        const items=await db.prepare("SELECT id,kind,video_id,body,status,reviewed_at,reviewed_by,review_note FROM contributions WHERE user_id=? ORDER BY created_at DESC LIMIT 100").bind(id).all();
+        const items=await db.prepare("SELECT id,kind,video_id,channel_id,body,status,reviewed_at,reviewed_by,review_note FROM contributions WHERE user_id=? ORDER BY created_at DESC LIMIT 100").bind(id).all();
         const history=await db.prepare('SELECT trusted,reason,moderator_id,created_at FROM member_trust_history WHERE user_id=? ORDER BY created_at DESC LIMIT 20').bind(id).all();
         return json({items:items.results,trustHistory:history.results});
       }
@@ -116,7 +116,7 @@ export async function community(request,env,seed,user){
         const totals=await db.prepare('SELECT COALESCE(SUM(amount),0) total FROM points WHERE user_id=?').bind(user.id).first();
         const scores=await db.prepare('SELECT video_id,COUNT(*) count,AVG(score) average,(SUM(score)+15.0)/(COUNT(*)+5) ranking FROM ratings GROUP BY video_id').all();
         const leaders=await db.prepare('SELECT m.name,m.profile_icon,m.profile_color,m.profile_picture,SUM(p.amount) points FROM points p JOIN members m ON m.id=p.user_id GROUP BY p.user_id HAVING SUM(p.amount)>0 ORDER BY points DESC,m.created_at ASC LIMIT 10').all();
-        const mine=await db.prepare('SELECT id,kind,video_id,performer_id,body,status,review_note,created_at FROM contributions WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(user.id).all();
+        const mine=await db.prepare('SELECT id,kind,video_id,channel_id,performer_id,body,status,review_note,created_at FROM contributions WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(user.id).all();
         const ledger=await db.prepare('SELECT kind,amount,created_at FROM points WHERE user_id=? ORDER BY created_at DESC LIMIT 30').bind(user.id).all();
         const approvals=await db.prepare(`SELECT ${approvedContributionCount} count FROM members m WHERE m.id=?`).bind(user.id).first();
         return json({trusted:me?.trusted===1,approvedCount:approvals?.count||0,name:me?.name||'',profile_icon:me?.profile_icon||'initials',profile_color:me?.profile_color||'teal',profile_picture:me?.profile_picture||null,moderator:user.moderator,points:totals.total,tier:tier(totals.total),scores:scores.results,leaders:leaders.results,mine:mine.results,ledger:ledger.results});

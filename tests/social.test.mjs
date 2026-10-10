@@ -18,6 +18,59 @@ test('threaded comments are reviewed, ownership enforced, likes deduplicated and
 test('chat messages, unread counts, mentions, blocking, reports and moderator mutes work together',async()=>{const {call,sql}=await setup();assert.equal((await call('/chat',{room:'missioned-souls',body:'Hello @other, what a great performance!'})).status,200);assert.equal((await call('/chat',{room:'missioned-souls',body:'Too fast'})).status,429);assert.equal((await call('/rooms',null,'other')).data.rooms[0].unread,1);assert.equal((await call('/mentions',null,'other')).data.items.length,1);await call('/presence',{room:'missioned-souls'},'other');assert.equal((await call('/rooms',null,'other')).data.rooms[0].unread,0);await call('/block',{target:'fan'},'other');assert.equal((await call('/chat?room=missioned-souls',null,'other')).data.messages.length,0);await call('/block',{target:'fan',remove:true},'other');const id=(await call('/chat?room=missioned-souls',null,'other')).data.messages[0].id;assert.equal((await call('/delete',{kind:'chat',id},'other')).status,403);await call('/report',{kind:'chat',target:id,body:'Please review this message.'},'other');assert.equal((await call('/queue',null,'fan')).status,403);const report=(await call('/queue',null,'owner')).data.reports[0];assert.equal((await call('/moderate',{id:report.id,action:'mute'},'fan')).status,403);assert.equal((await call('/moderate',{id:report.id,action:'mute'},'owner')).status,200);assert.equal((await call('/chat?room=missioned-souls')).data.messages.length,0);assert.equal((await call('/comment',{videoId:'abcdefghijk',performerId:'missioned-souls',body:'A muted member tries posting.'})).status,403);await call('/unmute',{id:'fan'},'owner');assert.equal(sql.prepare('SELECT COUNT(*) n FROM mutes').get().n,0);});
 test('settings reject invalid fields and numbers',()=>{assert.throws(()=>settings({minRating:8}));assert.throws(()=>settings({fields:['admin']}));assert.throws(()=>settings({hideWatched:'yes'}));assert.equal(settings({startDate:'2026-09-01'}).startDate,'2026-09-01');});
 
+test('reactor discussions keep targets, pending visibility, moderation and ownership isolated',async()=>{
+ const {call,sql}=await setup();
+ const channelId='UC1234567890123456789012',second='UCabcdefghijklmnopqrstuv';
+ for(const id of [channelId,second])sql.prepare('INSERT INTO channels(id,name) VALUES(?,?)').run(id,'Test reactor');
+ const c={channelId,body:'A thoughtful reactor comment mentioning @other.'};
+ assert.equal((await call('/comment',c,null)).status,401);
+ assert.equal((await call('/comment',c,'fan','https://evil.test')).status,403);
+ assert.equal((await call('/comment',{...c,channelId:'missing'})).status,400);
+ assert.equal((await call('/comment',{...c,videoId:'abcdefghijk'})).status,400);
+ assert.equal((await call('/comment',c)).data.status,'pending');
+ assert.equal((await call('/comment',c)).status,409);
+ let items=(await call('/comments?channel='+channelId)).data.items;assert.equal(items.length,1);const id=items[0].id;
+ assert.equal((await call('/comments?channel='+channelId,null,'other')).data.items.length,0);
+ assert.equal((await call('/comments?video=abcdefghijk')).data.items.length,0);
+ assert.equal((await call('/comments?channel='+second)).data.items.length,0);
+ assert.equal((await call('/comment',{...c,id},'other')).status,403);
+ assert.equal((await call('/comment',{...c,id,channelId:second})).status,400);
+ assert.equal((await call('/moderate',{id,decision:'accept',note:'Useful channel discussion'},'owner','https://pilot.test',community)).status,200);
+ assert.equal((await call('/comments?channel='+channelId,null,'other')).data.items.length,1);
+ assert.equal((await call('/mentions',null,'other')).data.comments[0].channel_id,channelId);
+ assert.equal((await call('/comment',{channelId:second,parentId:id,body:'Wrong channel reply must fail.'},'other')).status,400);
+ assert.equal((await call('/comment',{videoId:'abcdefghijk',performerId:'missioned-souls',parentId:id,body:'Video reply must not cross targets.'},'other')).status,400);
+ assert.equal((await call('/comment',{...c,parentId:id,body:'A useful reply about this reactor.'},'other')).data.status,'pending');
+ await call('/like',{id},'other');await call('/like',{id},'other');
+ assert.equal((await call('/comments?channel='+channelId)).data.items[0].likes,1);
+ await call('/block',{target:'fan'},'other');
+ assert.equal((await call('/comments?channel='+channelId,null,'other')).data.items.some(i=>i.id===id),false);
+ await call('/block',{target:'fan',remove:true},'other');
+ assert.equal((await call('/comment',{...c,id,body:'Edited reactor comment returns to review.'})).data.status,'pending');
+ assert.equal((await call('/comments?channel='+channelId,null,'other')).data.items.some(i=>i.id===id),false);
+ assert.equal((await call('/delete',{id,kind:'comment'},'other')).status,403);
+ assert.equal((await call('/delete',{id,kind:'comment'})).status,200);
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,0);
+});
+
+test('trusted reactor comments share video point caps, support reports, and respect mutes',async()=>{
+ const {call,sql}=await setup();const channelId='UC1234567890123456789012';
+ sql.prepare('INSERT INTO channels(id,name) VALUES(?,?)').run(channelId,'Test reactor');
+ sql.prepare("UPDATE members SET trusted=1 WHERE id='fan'").run();
+ for(let i=0;i<2;i++)assert.equal((await call('/comment',{videoId:'abcdefghijk',performerId:'missioned-souls',body:'Useful video discussion number '+i})).data.status,'accepted');
+ for(let i=0;i<2;i++)assert.equal((await call('/comment',{channelId,body:'Useful reactor discussion number '+i})).data.status,'accepted');
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,9);
+ const id=sql.prepare('SELECT id FROM contributions WHERE channel_id=? ORDER BY created_at LIMIT 1').get(channelId).id;
+ assert.equal((await call('/comment',{channelId,id,body:'A trusted edit keeps existing points.'})).data.status,'accepted');
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,9);
+ assert.equal((await call('/report',{kind:'comment',target:id,body:'Please review this reactor comment.'},'other')).status,200);
+ const report=(await call('/queue',null,'owner')).data.reports[0];
+ assert.equal((await call('/moderate',{id:report.id,action:'mute'},'owner')).status,200);
+ assert.equal((await call('/comments?channel='+channelId)).data.items.some(c=>c.id===id),false);
+ assert.equal((await call('/comment',{channelId,body:'Muted comments should not be published.'})).status,403);
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,6);
+});
+
 test('dashboard reads overlap and keep the existing account-scoped response',async()=>{
  const {call,db}=await setup();
  const prepare=db.prepare.bind(db);let inFlight=0,peak=0;
