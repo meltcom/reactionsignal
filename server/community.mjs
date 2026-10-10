@@ -43,6 +43,7 @@ export async function community(request,env,seed,user){
     const db=database(env);await seedDatabase(db,seed);
     const u=new URL(request.url),path=u.pathname.replace('/api/community','');
     if(!user)return json({error:'Sign in to participate.'},401);
+    if(path==='/coverage/queue'&&!user.moderator)fail('Moderator access required.',403);
     if(path==='/coverage'||path==='/coverage/queue'){if(request.method==='GET')return json({items:[]});fail('Reaction Journey covers Missioned Souls only.',400);}
     if(path==='/coverage/review')fail('Performer recommendations are closed.',400);
     if(path==='/summary'&&request.method==='GET')await db.prepare("INSERT INTO members(id,name,created_at,email,last_seen_at) VALUES(?,'',?,?,?) ON CONFLICT(id) DO UPDATE SET email=excluded.email,last_seen_at=excluded.last_seen_at WHERE members.last_seen_at IS NULL OR members.last_seen_at<? OR members.email IS NOT excluded.email").bind(user.id,new Date().toISOString(),user.email||null,new Date().toISOString(),new Date(Date.now()-3600000).toISOString()).run();
