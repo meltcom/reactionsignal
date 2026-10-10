@@ -19,7 +19,8 @@ export async function youtubeSubscriptions(request,env,seed,user){
  const known=new Set((await catalog(db,seed,env)).channels.map(c=>c.id));
  if(unique.some(id=>!known.has(id)))return json({error:'A selected reactor is no longer in the catalog. Refresh the preview.'},409);
  // Atomic, additive and idempotent. Recheck hidden channels at write time.
- const results=await db.batch(unique.map(id=>db.prepare("INSERT OR IGNORE INTO follows(user_id,kind,target) SELECT ?,'reactor',id FROM channels WHERE id=? AND NOT EXISTS(SELECT 1 FROM hidden_reactors WHERE user_id=? AND channel_id=channels.id)").bind(user.id,id,user.id)));
- const added=results.reduce((n,r)=>n+Number(r.meta?.changes||0),0);
+ const results=await db.batch(unique.map(id=>db.prepare("INSERT OR IGNORE INTO follows(user_id,kind,target) SELECT ?,'reactor',id FROM channels WHERE id=? AND NOT EXISTS(SELECT 1 FROM hidden_reactors WHERE user_id=? AND channel_id=channels.id) RETURNING target").bind(user.id,id,user.id)));
+ // D1 change metadata includes activity-trigger writes; count only inserted follows.
+ const added=results.reduce((n,r)=>n+r.results.length,0);
  return json({added,skipped:unique.length-added});
 }
