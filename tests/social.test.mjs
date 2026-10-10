@@ -65,7 +65,7 @@ test('Master Reset clears the four selected groups atomically and preserves othe
  assert.equal((await call('/master-reset',{confirm:true})).status,200);
 });
 
-test('direct comments use verified reputation above 15 and do not reward self publication',async()=>{
+test('direct comments use verified reputation above 15 without adding unverified reputation',async()=>{
  const {call,sql}=await setup();
  sql.prepare("INSERT INTO reputation_events VALUES('earned','fan',15,'Verified discovery',?)").run(new Date().toISOString());
  sql.prepare("INSERT INTO points VALUES('participation','fan','submission',1000,?)").run(new Date().toISOString());
@@ -79,4 +79,55 @@ test('direct comments use verified reputation above 15 and do not reward self pu
  assert.equal((await call('/dashboard')).data.reputationTotal,16);
  sql.prepare("INSERT INTO reputation_events VALUES('reversal','fan',-2,'Removed contribution',?)").run(new Date().toISOString());
  assert.equal((await call('/comment',{...c,body:'Lost reputation returns me to review.'})).data.status,'pending');
+});
+
+test('trusted comments and replies share daily awards across routes; edits retain points and removal reverses once',async()=>{
+ const {sql,call}=await setup();
+ sql.prepare("INSERT INTO reputation_events VALUES('trusted','fan',16,'Verified help',?)").run(new Date().toISOString());
+ const b={videoId:'abcdefghijk',performerId:'missioned-souls',body:'A useful trusted comment about this reaction.'};
+ assert.equal((await call('/comment',b)).data.status,'accepted');
+ const id=sql.prepare("SELECT id FROM contributions WHERE body=?").get(b.body).id;
+ const points=()=>sql.prepare("SELECT COALESCE(SUM(amount),0) n FROM points WHERE user_id='fan'").get().n;
+ assert.equal(points(),3);
+ assert.equal((await call('/comment',b)).status,409);assert.equal(points(),3);
+ assert.equal((await call('/comment',{...b,id,body:'An improved trusted comment about this reaction.'})).status,200);assert.equal(points(),3);
+ assert.equal((await call('/comment',{...b,parentId:id,body:'A useful reply discussing the performance.'})).status,200);assert.equal(points(),6);
+ assert.equal((await call('/contribute',{kind:'comment',...b,body:'A comment through the original contribution form.'},'fan','https://pilot.test',community)).status,200);assert.equal(points(),9);
+ assert.equal((await call('/comment',{...b,body:'Another useful comment above the daily reward limit.'})).status,200);assert.equal(points(),9);
+ assert.equal((await call('/dashboard')).data.reputationTotal,16);
+ assert.equal((await call('/delete',{id,kind:'comment'})).status,200);assert.equal(points(),6);
+ assert.equal((await call('/delete',{id,kind:'comment'})).status,200);assert.equal(points(),6);
+});
+
+test('social backfill restores unreviewed direct comments and replies on original days without duplicate awards',async()=>{
+ const {sql}=await setup();
+ const migration=readFileSync(new URL('../drizzle/0034_trusted_comment_points_20261010.sql',import.meta.url),'utf8');
+ sql.exec("DELETE FROM state WHERE key='trusted-comment-points-backfill-v2'");
+ const add=sql.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,status,created_at,review_note,reviewed_by,reviewed_at,parent_id) VALUES(?,'fan','comment','missioned-souls','abcdefghijk','Useful comment',?,?,?,?,?,?)");
+ const day='2026-10-08T01:00:00Z';
+ add.run('parent','accepted',day,null,null,null,null);
+ add.run('reply','accepted',day,null,null,null,'parent');
+ add.run('over-cap','accepted',day,null,null,null,null);
+ add.run('already-paid','accepted',day,null,null,null,null);
+ add.run('hidden-old','hidden',day,null,null,null,null);
+ add.run('pending-old','pending',day,null,null,null,null);
+ add.run('reviewed-old','accepted','2026-10-07T00:00:00Z',null,'owner','2026-10-07T01:00:00Z',null);
+ add.run('reversed-old','accepted','2026-10-07T00:00:00Z',null,null,null,null);
+ sql.exec("INSERT INTO points VALUES('already-paid','fan','comment',3,'2026-10-08T01:00:00Z'); INSERT INTO points VALUES('revoke:reversed-old','fan','reversal',-3,'2026-10-07T00:00:00Z')");
+ sql.exec(migration);
+ const awards=sql.prepare("SELECT id,created_at FROM points WHERE id IN ('parent','reply','over-cap','reviewed-old','reversed-old') ORDER BY id").all();
+ // Stable creation-time/id ordering gives remaining slots to over-cap and parent.
+ assert.deepEqual(awards.map(p=>p.id),['over-cap','parent']);assert.ok(awards.every(p=>p.created_at===day));
+ const audit=JSON.parse(sql.prepare("SELECT value FROM state WHERE key='trusted-comment-points-backfill-v2'").get().value);assert.equal(audit.awards,2);assert.equal(audit.points,6);
+ const before=sql.prepare('SELECT COUNT(*) n FROM points').get().n;sql.exec(migration);assert.equal(sql.prepare('SELECT COUNT(*) n FROM points').get().n,before);
+});
+
+test('first trusted publication of an edited pending comment earns one award',async()=>{
+ const {sql,call}=await setup();
+ const b={videoId:'abcdefghijk',performerId:'missioned-souls',body:'Initially this comment needs review.'};
+ assert.equal((await call('/comment',b)).data.status,'pending');
+ const id=sql.prepare('SELECT id FROM contributions').get().id;
+ sql.prepare("INSERT INTO reputation_events VALUES('trusted','fan',16,'Verified help',?)").run(new Date().toISOString());
+ for(let i=0;i<2;i++)assert.equal((await call('/comment',{...b,id,body:'Now trusted, this comment publishes directly.'})).data.status,'accepted');
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,3);
 });
