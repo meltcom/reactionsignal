@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { seedDatabase, catalog, EXCLUDED } from '../server/db.mjs';
-import { classify, seconds, saveVideo, runDiscovery, YouTube } from '../server/discovery.mjs';
+import { classify, seconds, saveVideo, runDiscovery, YouTube, searchDailyLimit } from '../server/discovery.mjs';
 function db(){
   const sql=new DatabaseSync(':memory:');
   for(const name of readdirSync(new URL('../drizzle/',import.meta.url)).filter(x=>x.endsWith('.sql')).sort())sql.exec(readFileSync(new URL(`../drizzle/${name}`,import.meta.url),'utf8'));
@@ -12,6 +12,12 @@ function db(){
 const channel='UC1234567890123456789012';
 const seed={performers:[{id:'missioned-souls',name:'Missioned Souls'}],channels:[{id:channel,name:'Sample reactor',performerId:'missioned-souls',url:`https://www.youtube.com/channel/${channel}`}],videos:[]};
 function item(id='abcdefghijk',title='Missioned Souls reaction'){return {id,snippet:{channelId:channel,channelTitle:'Sample reactor',title,publishedAt:'2026-09-24T12:00:00Z'},contentDetails:{duration:'PT6M12S'},status:{privacyStatus:'public'}};}
+test('zero search budget disables requests and reports the scheduling reason',async()=>{
+ const d=await isolatedDiscovery();await d.prepare("UPDATE channels SET discovery_scope='other'").run();let searches=0;
+ await runDiscovery({DB:d,YOUTUBE_API_KEY:'fixture-only',DISCOVERY_DAILY_SEARCH_LIMIT:'0'},seed,async url=>{if(url.pathname.endsWith('/search'))searches++;return Response.json({items:[]});});
+ assert.equal(searches,0);const report=JSON.parse((await d.prepare("SELECT value FROM state WHERE key='search-diagnostics:missioned-souls'").first()).value);assert.equal(report.status,'disabled');assert.equal(report.dailyLimit,0);
+ assert.equal(searchDailyLimit({}),20);assert.equal(searchDailyLimit({DISCOVERY_DAILY_SEARCH_LIMIT:'bad'}),20);
+});
 test('classifies exact performer names; holds ambiguous and short matches',()=>{
  assert.equal(classify('Missioned Souls reaction',['Missioned Souls'],400),'CONFIRMED');
  assert.equal(classify('NotMissioned Souls reaction',['Missioned Souls'],400),null);
