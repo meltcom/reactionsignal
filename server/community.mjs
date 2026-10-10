@@ -23,7 +23,7 @@ export function youtubeId(input){
   }catch{return null;}
 }
 export const tier=points=>points>=1000?'Community champion':points>=250?'Catalog curator':points>=100?'Reaction scout':points>=25?'Contributor':'Novice';
-function award(db,id,user,kind,amount,cap,now,guard='1',args=[]){
+export function award(db,id,user,kind,amount,cap,now,guard='1',args=[]){
   return db.prepare(`INSERT OR IGNORE INTO points(id,user_id,kind,amount,created_at)
     SELECT ?,?,?,?,? WHERE (${guard}) AND (SELECT COUNT(*) FROM points WHERE user_id=? AND kind=? AND amount>0 AND created_at>=?)<?`)
     .bind(id,user,kind,amount,now,...args,user,kind,now.slice(0,10),cap);
