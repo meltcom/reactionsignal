@@ -39,7 +39,7 @@ async function loadCommunity({deferSecondary=false}={}){
     pendingProfilePicture=undefined;$('profilePictureUpload').value='';updateProfilePreview();
     const avatar=document.querySelector('.app-header .avatar');
     if(avatar){avatar.innerHTML=memberProfileIcon(communityState.name,communityState.profile_icon,communityState.profile_color,communityState.profile_picture);avatar.title='Edit your community profile';avatar.setAttribute('aria-label','Edit your community profile');}
-    $('pointsBadge').innerHTML=`${memberDisplayName(communityState.name,communityState.points,communityState)} · ${communityState.points} points · ${escapeHtml(communityState.tier)}`;
+    $('pointsBadge').innerHTML=`${memberDisplayName(communityState.name,communityState.points,communityState)} · ${communityState.points} Contribution Points · ${escapeHtml(communityState.tier)} · ${communityState.trusted?'Trusted Member':'Approval required'}`;
     $('communityStatus').textContent=communityState.name?'Ready to contribute.':'Save a display name to start participating.';
     $('suggestPerformer').innerHTML=catalog.performers.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
     $('leaderboard').innerHTML=communityState.leaders.length?communityState.leaders.map(p=>`<li>${memberDisplayName(p.name,p.points,p)} <strong>${p.points} points</strong></li>`).join(''):'<li>No points awarded yet. Help start the community.</li>';

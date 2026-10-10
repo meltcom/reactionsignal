@@ -90,10 +90,19 @@ Cloudflare documentation:
 - https://developers.cloudflare.com/d1/reference/migrations/
 - https://developers.cloudflare.com/workers/configuration/cron-triggers/
 
-Members with more than 15 verified reputation points (16+) publish reactions and comments, including replies and edits, directly. Members with 15 or fewer remain subject to moderator approval. Participation points do not unlock direct publishing. Direct reactions require successful YouTube metadata lookup and appear as Confirmed. Existing exclusions, duplicate checks, mutes, and daily posting limits apply. Reports and removal requests still require review. Direct publishing earns no verification rewards; moderators can hide published comments.
+Trusted Member is a moderator-managed status, separate from Contribution Points and badges. After three currently accepted contributions verified by another moderator, members are flagged for trust review. A moderator checks quality and accuracy before granting trust; access is not automatic. Existing trusted members retain access during migration. Moderators can defer or revoke trust with a recorded reason. Trusted reactions, comments and replies publish directly and earn Contribution Points immediately within daily limits. Other members require approval. Corrections and removal reports always require verification. Direct reactions require successful YouTube metadata lookup and appear as Confirmed. Existing exclusions, duplicate checks, mutes and daily posting limits remain in force. The former reputation ledger is retained as history and no longer earns new awards or controls access.
 
 ### Recent reaction discovery scheduling
 
 Every 15-minute run reserves up to half the recent-upload batch for eligible reactors with a confirmed Missioned Souls reaction published in the last 14 days. Those reactors become due after one hour; selection rotates oldest attempts first. The remaining slots check eligible channels overdue for daily coverage, and unused priority slots return to that queue. These are scheduling thresholds, not guaranteed discovery times; backlog, retries and the bounded run budget can delay a check.
 
 Completed performer searches become eligible again after two hours rather than waiting until the next UTC day. Existing search cursors and the daily search-call cap remain intact. Search runs after latest uploads and before historical upload pages, so historical work uses the remaining budget. Existing discovery observations continue to record publication-to-discovery delay for comparing results after deployment.
+
+
+### Contribution Points and moderator-managed trust
+
+Point weights: first video rating +1 (10 awards/day), useful comment/reply +3 (3 combined/day), valid missing reaction +20 (5/day), verified correction/removal report +10 (5/day). Direct posts earn immediately; other posts earn after approval. UTC daily caps and duplicate prevention apply across posting routes. Existing correction awards are not repriced.
+
+Migration `0035_simple_member_trust_20261010.sql` preserves existing members with more than 15 net historical reputation as Trusted Members. After migration, `members.trusted` is the only direct-post gate. Historical reputation stays unchanged; new awards use only the contribution-point ledger. Trust grant/defer/revoke actions are moderator-only, cannot target the acting moderator, require a reason and are recorded in `member_trust_history`. New grants require three currently accepted contributions with another moderator’s review recorded. This condition flags a candidate for human review; it does not automatically grant access. Revocation returns new posts to approval and does not remove existing posts or badges.
+
+Use Member Review → Ready for trust review, inspect contributions and trust history, then grant or defer. Refer to [the complete Help guide](docs/help.md) for member and moderator workflows.
