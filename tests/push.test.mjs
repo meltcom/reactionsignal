@@ -89,11 +89,11 @@ test('quota failures and delayed metadata stay queued; channel metadata mismatch
  sql.prepare('UPDATE push_jobs SET next_attempt=0').run();await processPushJobs(env,seed,async()=>Response.json({items:[{...item(),snippet:{...item().snippet,channelId:'UCabcdefghijklmnopqrstuv'}}]}));
  assert.equal((await catalog(db,seed,env)).videos.length,0);assert.equal(sql.prepare('SELECT status FROM push_jobs').get().status,'done');
 });
-test('uncertain, short and draft matches do not appear as published additions',async()=>{
+test('short matches publish while drafts do not',async()=>{
  const {db,env,sql}=await setup();const performers=(await db.prepare('SELECT * FROM performers').all()).results;
  await saveVideo(db,{...item(),contentDetails:{duration:'PT1M'}},performers,new Date().toISOString(),'test');
- assert.equal((await catalog(db,seed,env)).videos.length,0);assert.equal(sql.prepare('SELECT COUNT(*) n FROM discovery_notifications').get().n,0);
+ assert.equal((await catalog(db,seed,env)).videos.length,1);assert.equal(sql.prepare('SELECT COUNT(*) n FROM discovery_notifications').get().n,1);
  sql.prepare("INSERT INTO performers(id,name,aliases,status) VALUES('draft','New Act','[\"New Act\"]','draft')").run();
  await saveVideo(db,{...item('12345678901'),snippet:{...item().snippet,title:'New Act reaction'}},(await db.prepare("SELECT * FROM performers WHERE id='draft'").all()).results,new Date().toISOString(),'test');
- assert.equal((await catalog(db,seed,env)).videos.length,0);assert.equal(sql.prepare('SELECT COUNT(*) n FROM discovery_notifications').get().n,0);
+ assert.equal((await catalog(db,seed,env)).videos.length,1);assert.equal(sql.prepare('SELECT COUNT(*) n FROM discovery_notifications').get().n,1);
 });

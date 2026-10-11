@@ -21,6 +21,8 @@ async function loadClassificationReview(){
  $('classificationNext').onclick=()=>{classificationOffset+=50;loadClassification();};
  }
  installVideoCorrectionPanel();
+ installCatalogManagementPanel();
+ await loadCatalogManagement();
  await loadClassification();
 }
 async function loadClassification(){try{
@@ -47,7 +49,28 @@ async function loadMembers(){try{
  });
  $('memberItems').querySelectorAll('form').forEach(f=>f.onsubmit=async e=>{e.preventDefault();const b=f.querySelector('button');b.disabled=true;try{const r=await communityApi('/users/update',{id:f.dataset.member,action:f.elements.action.value,name:f.elements.name.value,amount:Number(f.elements.amount.value),note:f.elements.note.value});$('memberReviewStatus').textContent=r.message;await loadMembers();await loadCommunity();}catch(err){f.querySelector('[role=status]').textContent=err.message;}finally{b.disabled=false;}});
  }catch(e){$('memberReviewStatus').textContent=e.message;}}
-window.addEventListener('reaction-auth-change',()=>{$('launchReview')?.remove();$('classificationReviewPanel')?.remove();$('videoCorrectionPanel')?.remove();$('classificationReviewNav').hidden=true;$('moderatorNavSection').hidden=true;});
+window.addEventListener('reaction-auth-change',()=>{$('launchReview')?.remove();$('classificationReviewPanel')?.remove();$('videoCorrectionPanel')?.remove();$('catalogManagementPanel')?.remove();$('classificationReviewNav').hidden=true;$('moderatorNavSection').hidden=true;});
+
+let catalogManagementOffset=0;
+function installCatalogManagementPanel(){
+ if($('catalogManagementPanel'))return;
+ const panel=document.createElement('div');panel.id='catalogManagementPanel';panel.className='panel';$('classification-review').prepend(panel);
+ panel.innerHTML='<h2>Manage catalog approvals</h2><p>Search published, pending, hidden and rejected videos. Unapprove returns a video to the moderator queue. Hide removes it from every member’s catalog. Delete removes it from the catalog and blocks rediscovery; the saved record, comments, ratings and moderator history remain available for restoration. These actions do not delete the YouTube upload.</p><form id="catalogManagementSearch"><label>Title, channel or video ID<input name="q" maxlength="100"></label><button class="outline-button">Search / refresh</button></form><div id="catalogManagementItems"></div><button id="catalogManagementPrevious" class="outline-button">Previous 50</button><button id="catalogManagementNext" class="outline-button">Next 50</button><p id="catalogManagementStatus" role="status"></p>';
+ $('catalogManagementSearch').onsubmit=e=>{e.preventDefault();catalogManagementOffset=0;loadCatalogManagement();};
+ $('catalogManagementPrevious').onclick=()=>{catalogManagementOffset=Math.max(0,catalogManagementOffset-50);loadCatalogManagement();};
+ $('catalogManagementNext').onclick=()=>{catalogManagementOffset+=50;loadCatalogManagement();};
+}
+async function loadCatalogManagement(){try{
+ const r=await performerApi('/catalog-management?q='+encodeURIComponent($('catalogManagementSearch').elements.q.value)+'&offset='+catalogManagementOffset);
+ $('catalogManagementItems').innerHTML=r.items.map(v=>`<form class="review-item" data-catalog-video="${escapeHtml(v.id)}"><h3>${escapeHtml(v.title)}</h3><p>${escapeHtml(v.channel_name||'Unknown channel')} · ${escapeHtml(v.status)} · ${escapeHtml(v.format)} · ${v.available===1?'Available':'Unavailable'}</p><p>${escapeHtml(v.source||'')}${v.exclusion_reason?' · '+escapeHtml(v.exclusion_reason):''}</p><a href="https://www.youtube.com/watch?v=${escapeHtml(v.id)}" target="_blank" rel="noopener">Check on YouTube ↗</a><label>Action<select name="action"><option value="unapprove" ${v.status==='PENDING'?'disabled':''}>Unapprove / return to review</option><option value="hide" ${v.status==='HIDDEN'?'disabled':''}>Hide from catalog</option><option value="delete">Delete from catalog</option></select></label><label>Reason<input name="note" required minlength="5" maxlength="500"></label><button class="outline-button" ${v.exclusion_reason?'disabled':''}>Apply catalog action</button><button type="button" class="outline-button" data-catalog-restore>Correct / restore approval</button><details><summary>Moderator action history</summary><button type="button" class="outline-button" data-catalog-history>Load history</button><div data-catalog-history-items></div></details><p role="status"></p></form>`).join('')||'<p>No matching entries.</p>';
+ $('catalogManagementPrevious').disabled=catalogManagementOffset===0;$('catalogManagementNext').disabled=!r.hasMore;
+ $('catalogManagementItems').querySelectorAll('form').forEach((f,i)=>{
+  const v=r.items[i];
+  f.onsubmit=async e=>{e.preventDefault();const button=f.querySelector('button');button.disabled=true;try{const result=await performerApi('/catalog-action',{videoId:v.id,action:f.elements.action.value,note:f.elements.note.value,expectedStatus:v.status,expectedSource:v.source});$('catalogManagementStatus').textContent=result.message;await reloadMemberCatalog();await loadCatalogManagement();await loadClassification();}catch(err){f.querySelector('[role=status]').textContent=err.message;}finally{button.disabled=!!v.exclusion_reason;}};
+  f.querySelector('[data-catalog-restore]').onclick=()=>{$('videoCorrectionLookup').elements.video.value=v.id;$('videoCorrectionLookup').requestSubmit();$('videoCorrectionPanel').scrollIntoView({block:'start'});};
+  f.querySelector('[data-catalog-history]').onclick=async e=>{const button=e.target;button.disabled=true;const content=f.querySelector('[data-catalog-history-items]');try{const history=await performerApi('/catalog-history?videoId='+encodeURIComponent(v.id));content.innerHTML=history.items.map(h=>`<p>${escapeHtml(h.at)} · ${escapeHtml(h.action)} · ${escapeHtml(h.before.status)} → ${escapeHtml(h.after.status)} · ${escapeHtml(h.note)} · Moderator ${escapeHtml(h.actor)}</p>`).join('')||'<p>No catalog actions recorded. Corrections and restoration history appear under Correct / restore approval.</p>';}catch(err){content.textContent=err.message;}finally{button.disabled=false;}};
+ });
+}catch(e){$('catalogManagementStatus').textContent=e.message;}}
 
 function installVideoCorrectionPanel(){
  if($('videoCorrectionPanel'))return;

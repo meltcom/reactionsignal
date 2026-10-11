@@ -19,28 +19,29 @@ test('zero search budget disables requests and reports the scheduling reason',as
  assert.equal(searches,0);const report=JSON.parse((await d.prepare("SELECT value FROM state WHERE key='search-diagnostics:missioned-souls'").first()).value);assert.equal(report.status,'disabled');assert.equal(report.dailyLimit,0);
  assert.equal(searchDailyLimit({}),20);assert.equal(searchDailyLimit({DISCOVERY_DAILY_SEARCH_LIMIT:'bad'}),20);
 });
-test('classifies exact performer names; holds ambiguous and short matches',()=>{
+test('classifies exact performer names; accepts cover and short title matches',()=>{
  assert.equal(classify('Missioned Souls reaction',['Missioned Souls'],400),'CONFIRMED');
  assert.equal(classify('NotMissioned Souls reaction',['Missioned Souls'],400),null);
- assert.equal(classify('Missioned Souls cover',['Missioned Souls'],400),'PENDING');
- assert.equal(classify('Missioned Souls reaction',['Missioned Souls'],90),'PENDING');
+ assert.equal(classify('Missioned Souls cover',['Missioned Souls'],400),'CONFIRMED');
+ assert.equal(classify('Missioned Souls reaction',['Missioned Souls'],90),'CONFIRMED');
  assert.equal(seconds('PT1H2M3S'),3723);
 });
-test('approval exceptions match the reviewed channel and performer, including plural reactions',()=>{
- const aliases=['Missioned Souls'],context={performerId:'missioned-souls',channelId:'UCP-kGozEU2blvmzI8jNCoKg'};
- assert.equal(classify('Missioned Souls – HOSANNA | Then Came the TEARS!',aliases,400,context),'CONFIRMED');
- assert.equal(classify('SOULMATES AFTER HOURS | Missioned Souls LIVE',aliases,null,context),'CONFIRMED');
- assert.equal(classify('Missioned Souls – HOSANNA',aliases,400,{...context,channelId:channel}),'PENDING');
- assert.equal(classify('Missioned Souls – HOSANNA',aliases,400,{...context,performerId:'another-performer'}),'PENDING');
- assert.equal(classify('NotMissioned Souls – HOSANNA',aliases,400,context),null);
- assert.equal(classify('Unrelated music stream',aliases,400,context),null);
- assert.equal(classify('Missioned Souls reactions',aliases,400),'CONFIRMED');
- assert.equal(classify('Missioned Souls reaction',aliases,90,context),'PENDING');
- assert.equal(classify('Missioned Souls reaction',aliases,null,{performerId:'missioned-souls',channelId:'UCz-hLsF25Xu8ILLo9twh-9g'}),'PENDING');
+test('broad approval rules use performer evidence on any channel',()=>{
+ for(const aliases of [['Missioned Souls'],['New Act']]){
+  const name=aliases[0];
+  for(const duration of [400,90,null])assert.equal(classify(name+' cover',aliases,duration),'CONFIRMED');
+  assert.equal(classify(name+' Watch Party!!',aliases,400),'PENDING');
+  assert.equal(classify(name+' - LIVE Requests, Tour Updates, Behind the Scenes',aliases,400),'PENDING');
+  assert.equal(classify('Before '+name+', there was Another Band | FIRST reaction',aliases,400),'PENDING');
+  assert.equal(classify('Not'+name+' reaction',aliases,400),null);
+  assert.equal(classify('My first reaction',aliases,null,{description:'I react to '+name+' today.'}),'CONFIRMED');
+  assert.equal(classify('My reaction',aliases,400,{description:'#'+name}),null);
+  assert.equal(classify('My reaction',aliases,400,{description:'Original video: '+name}),null);
+ }
 });
 test('approved short pattern publishes as Short; exclusions, holds and manual formats win',async()=>{
  const d=db();await seedDatabase(d,seed);const p=(await d.prepare('SELECT * FROM performers').all()).results;
- const shortChannel='UCIVmJPriTtfAjpY2AM5i0hw';
+ const shortChannel=channel;
  const short={...item('shortvideo1','Missioned Souls Fernando Reaction #shorts'),snippet:{...item().snippet,channelId:shortChannel,title:'Missioned Souls Fernando Reaction #shorts'},contentDetails:{duration:'PT1M'}};
  await saveVideo(d,short,p,'2026-10-11T12:00:00Z','test');
  assert.equal((await d.prepare('SELECT status FROM matches WHERE video_id=?').bind(short.id).first()).status,'CONFIRMED');
@@ -168,8 +169,8 @@ test('Missioned Souls history resumes pages, honors daily budgets and holds unce
  await d.prepare("DELETE FROM state WHERE key='discovery-lease'").run();
  await runDiscovery(env,seed,fetcher,{performerId:'missioned-souls'});assert.equal(searches,2);
 });
-test('unknown durations remain held for review even with a clear title',()=>{
- assert.equal(classify('New Act reaction',['New Act'],null),'PENDING');
+test('unknown durations no longer block clear title matches',()=>{
+ assert.equal(classify('New Act reaction',['New Act'],null),'CONFIRMED');
 });
 
 async function isolatedDiscovery(){
