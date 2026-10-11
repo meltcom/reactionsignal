@@ -91,9 +91,9 @@ $('ratingForm').addEventListener('submit',e=>{e.preventDefault();if(!activeCommu
 for(const [formId,kind] of [['commentForm','comment'],['flagForm','flag']])$(formId).addEventListener('submit',e=>{e.preventDefault();if(!activeCommunityVideo)return;const form=e.currentTarget,v=activeCommunityVideo;formAction(form,'videoStatus',async()=>{const r=await communityApi('/contribute',{kind,videoId:v.id,performerId:v.performerId,...Object.fromEntries(new FormData(form))});form.reset();return r;});});
 let memberContributionOffset=0;
 async function loadReviewQueue(){
-  if(!communityState?.moderator)return;
+  if(!communityState?.moderator||!reviewSectionOpen('reviewMembers'))return;
   $('moderation').hidden=false;
-  await loadSubmissionHistory();
+
   try{$('memberContributionStatus').textContent='Loading member contributions…';const kind=$('memberContributionKind').value;const r=await communityApi('/queue?kind='+kind+'&offset='+memberContributionOffset);
     $('memberContributionPrevious').disabled=memberContributionOffset===0;$('memberContributionNext').disabled=!r.hasMore;
     $('memberContributionStatus').textContent=r.items.length?`${r.items.length} ${kind==='submission'?'submitted reactions':'contributions'} shown.`:'No '+(kind==='submission'?'submitted reactions awaiting review':'matching contributions')+'.';
@@ -109,6 +109,7 @@ $('memberContributionNext').onclick=()=>{memberContributionOffset+=50;loadReview
 
 let submissionHistoryOffset=0,submissionHistoryRequest=0;
 async function loadSubmissionHistory(){
+ if(!reviewSectionOpen('reviewHistory')||!$('submissionHistoryPanel').open)return;
  if(!communityState?.moderator)return;
  const token=++submissionHistoryRequest;
  $('submissionHistoryStatus').textContent='Loading reviewed submissions…';

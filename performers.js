@@ -4,7 +4,7 @@ let catalogEtag=null;
 window.addEventListener('reaction-auth-change',()=>{catalogEtag=null;});
 async function reloadMemberCatalog(){const response=await reactionAuth.fetch('/data.json',{cache:'no-store',headers:catalogEtag?{'If-None-Match':catalogEtag}:{}});if(response.status===304)return;if(!response.ok)throw new Error('Catalog refresh failed. Please reload.');const nextCatalog=await response.json();catalogEtag=response.headers.get('ETag');catalog=nextCatalog;$('performerCount').textContent=catalog.performers.length;if(state.performer!=='all'&&!catalog.performers.some(p=>p.id===state.performer))state.performer=catalog.performers[0]?.id||'all';renderAll();await refreshRooms();}
 async function loadPerformerManager(){
- if(!communityState?.moderator||managerLoading)return;managerLoading=true;
+ if(!communityState?.moderator||managerLoading||!reviewSectionOpen('reviewTools'))return;managerLoading=true;
  try{
   const result=await performerApi('/list');managedPerformers=result.items;
   $('performerServiceStatus').textContent=result.discovery.message+' Searches share a daily budget and continue in batches.';
@@ -44,7 +44,7 @@ $('performerForm').onsubmit=async event=>{
 async function loadDiscoveryResults(id){
  selectedDiscoveryPerformer=id;const result=await performerApi('/results?id='+encodeURIComponent(id));
  if(selectedDiscoveryPerformer!==id)return;
- $('performerResults').hidden=false;$('selectDiscoveryResults').checked=false;
+ $('performerResults').hidden=false;$('performerResults').open=true;$('selectDiscoveryResults').checked=false;
  $('performerResultsTitle').textContent='Discovery results · '+(managedPerformers.find(p=>p.id===id)?.name||'Performer');
  $('discoveryResultsList').innerHTML=result.items.length?result.items.map(v=>`<article class="discovery-result"><label class="check-label">${escapeHtml(v.title)}<input type="checkbox" data-discovery-video="${escapeHtml(v.video_id)}" data-pending="${v.status==='PENDING'}" ${v.status==='REJECTED'?'disabled':''}></label><p class="subtle">${escapeHtml(v.channel_name||'Unknown reactor')} · ${prettyDate(v.published_at)} · ${{PENDING:'Awaiting review',CONFIRMED:'Approved',PROBABLE:'Probable',REJECTED:'Excluded'}[v.status]||escapeHtml(v.status)}${v.format!=='FULL_LENGTH'?' · Check length / Shorts':''}${!v.available?' · Video unavailable':''}</p><a href="https://www.youtube.com/watch?v=${escapeHtml(v.video_id)}" target="_blank" rel="noopener noreferrer">Open video on YouTube</a></article>`).join(''):'<p class="empty-state">No matches yet. Use Find reactions, or wait for the next scheduled batch.</p>';
 }
@@ -59,21 +59,26 @@ async function reviewDiscovery(decision){
 $('approveDiscovery').onclick=()=>reviewDiscovery('approve');$('excludeDiscovery').onclick=()=>reviewDiscovery('exclude');
 setInterval(()=>{if(!document.hidden&&page==='review'&&reactionAuth.account?.moderator)loadPerformerManager();},60000);
 
-let additionsLoading=false;
+let additionsLoading=false,discoveryOffset=0,additionsRequest=null;
 async function loadAutomaticAdditions(summaryOnly=false,force=false){
+ while(additionsRequest)await additionsRequest;
+ const request=fetchAutomaticAdditions(summaryOnly,force);additionsRequest=request;
+ try{await request;}finally{if(additionsRequest===request)additionsRequest=null;}
+}
+async function fetchAutomaticAdditions(summaryOnly=false,force=false){
+ if(!reviewSectionOpen('reviewDiscoveries'))summaryOnly=true;
  if(!reactionAuth.account?.moderator||additionsLoading)return;additionsLoading=true;
  try{
-  const data=await performerApi('/notifications'+(summaryOnly?'?summary=1':'?group='+encodeURIComponent($('reviewGroup').value)));
+  const data=await performerApi('/notifications'+(summaryOnly?'?summary=1':'?group='+encodeURIComponent($('reviewGroup').value)+'&offset='+discoveryOffset));
   $('discoveryNoticeBadge').textContent=data.count+data.reports||'';
+  $('reviewDiscoveryCount').textContent=data.count+' awaiting review';
   if(summaryOnly)return;
-  const push=data.push;
-  $('pushServiceStatus').textContent=!push.configured?'Upload notifications need a public endpoint before they can connect.':!push.apiConfigured?'Upload notifications need YouTube API access before videos can be checked.':`${push.active} of ${push.total} channel notifications connected · ${push.queued} uploads queued · ${push.expiring||0} leases expire within 24h${push.errors?' · '+push.errors+' connection errors':''}${push.oldestQueuedAt?' · Oldest queued '+new Date(push.oldestQueuedAt).toLocaleString():''}${push.problemChannels?.length?' · '+push.problemChannels.map(c=>c.name+': '+c.error).join('; '):''}${push.lastReceivedAt?' · Last notification '+new Date(push.lastReceivedAt).toLocaleString():''}`;
-  $('connectPush').disabled=!push.configured||!push.apiConfigured;
   if(!force&&(document.activeElement?.closest('#automaticAdditions')||document.querySelector('#automaticAdditions .queue-select:checked')))return;
-  await loadShortRecovery();
-  await loadRecheckStatus();
+
   const filtered=data.items.filter(v=>$('reviewGroup').value==='all'||(v.review_group||'unprocessed')===$('reviewGroup').value);
-  $('automaticAdditions').innerHTML=filtered.length?filtered.map(v=>`<article class="panel"><label><input type="checkbox" class="queue-select" data-performer="${escapeHtml(v.performer_id)}" data-video="${escapeHtml(v.video_id)}"> Select for bulk review</label><h3>${escapeHtml(v.title)}</h3><p class="subtle">${escapeHtml(v.performer_name)} · ${escapeHtml(v.channel_name||'Unknown reactor')} · Found ${v.created_at?new Date(v.created_at).toLocaleString():'in the historical catalog'}</p><p>Awaiting review - not published${v.format==='SHORT'?' · Classified as Short':''}</p><p class="subtle">${escapeHtml(v.review_reason||'Not yet rechecked.')}</p><a href="https://www.youtube.com/watch?v=${escapeHtml(v.video_id)}" target="_blank" rel="noopener noreferrer">Check video on YouTube</a><form data-addition-performer="${escapeHtml(v.performer_id)}" data-addition-video="${escapeHtml(v.video_id)}"><label>Reason if removing<input name="note" minlength="5" maxlength="500" placeholder="Wrong performer, excerpt, or another issue"></label><button class="outline-button" type="submit" name="action" value="keep">Approve & publish</button> <button class="outline-button" type="submit" name="action" value="remove">Exclude video</button> <button class="outline-button" type="submit" name="action" value="short">Mark as Short</button><p class="review-result" role="status"></p></form></article>`).join(''):'<p class="subtle">No uncertain matches awaiting review.</p>';
+  $('discoveryPrevious').disabled=discoveryOffset===0;$('discoveryNext').disabled=!data.hasMore;
+  $('discoveryPageStatus').textContent=filtered.length+' matches shown · Page '+(Math.floor(discoveryOffset/25)+1)+' · '+data.count+' awaiting review across all groups';
+  $('automaticAdditions').innerHTML=filtered.length?filtered.map(v=>`<article class="panel"><label><input type="checkbox" class="queue-select" data-performer="${escapeHtml(v.performer_id)}" data-video="${escapeHtml(v.video_id)}"> Select for bulk review</label><h3>${escapeHtml(v.title)}</h3><p class="subtle">${escapeHtml(v.performer_name)} · ${escapeHtml(v.channel_name||'Unknown reactor')} · Found ${v.created_at?new Date(v.created_at).toLocaleString():'in the historical catalog'}</p><p>Awaiting review - not published${v.format==='SHORT'?' · Classified as Short':''}</p><p class="subtle">${escapeHtml(v.review_reason||'Not yet rechecked.')}</p><a href="https://www.youtube.com/watch?v=${escapeHtml(v.video_id)}" target="_blank" rel="noopener noreferrer">Check video on YouTube</a><form data-addition-performer="${escapeHtml(v.performer_id)}" data-addition-video="${escapeHtml(v.video_id)}"><label>Reason if removing<input name="note" minlength="5" maxlength="500" placeholder="Wrong performer, excerpt, or another issue"></label><button class="outline-button" type="submit" name="action" value="keep">Approve & publish</button> <button class="outline-button" type="submit" name="action" value="remove">Exclude video</button> <button class="outline-button" type="submit" name="action" value="short">Mark as Short</button><p class="review-result" role="status"></p></form></article>`).join(''):'<p class="subtle">No uncertain matches on this page. Use Previous or another review group.</p>';
   $('automaticAdditions').querySelectorAll('form').forEach(form=>form.onsubmit=async event=>{
    event.preventDefault();const action=event.submitter?.value;if(!action)return;
    if(action==='remove'&&form.elements.note.value.trim().length<5){form.querySelector('.review-result').textContent='Enter a reason with at least 5 characters.';form.elements.note.focus();return;}
@@ -82,7 +87,7 @@ async function loadAutomaticAdditions(summaryOnly=false,force=false){
   });
  }catch(error){$('additionStatus').textContent=error.message;}finally{additionsLoading=false;}
 }
-$('connectPush').onclick=async()=>{const button=$('connectPush');button.disabled=true;try{const result=await performerApi('/push/connect',{});$('additionStatus').textContent=result.message;await loadAutomaticAdditions(false,true);}catch(error){$('additionStatus').textContent=error.message;}finally{button.disabled=false;}};
+$('connectPush').onclick=async()=>{const button=$('connectPush');button.disabled=true;try{const result=await performerApi('/push/connect',{});$('notificationActionStatus').textContent=result.message;await loadNotificationService();await loadAutomaticAdditions(true);}catch(error){$('notificationActionStatus').textContent=error.message;}finally{button.disabled=false;}};
 setInterval(()=>{if(!document.hidden&&reactionAuth.account?.moderator)loadAutomaticAdditions(page!=='review');},60000);
 
 $('markShortDiscovery').onclick=()=>reviewDiscovery('short');
@@ -96,9 +101,11 @@ async function loadRecheckStatus(){
  $('batchRecheck').disabled=!data.enabled;
 }
 for(const [id,action] of [['startRecheck','start'],['batchRecheck','batch'],['pauseRecheck','pause'],['publishRecheck','publish']]){
- $(id).onclick=async()=>{const button=$(id);button.disabled=true;try{const data=await performerApi('/recheck',{action});$('additionStatus').textContent=data.message;await reloadMemberCatalog();await loadAutomaticAdditions(false,true);}catch(e){$('additionStatus').textContent=e.message;}finally{button.disabled=false;await loadRecheckStatus();}};
+ $(id).onclick=async()=>{const button=$(id);button.disabled=true;try{const data=await performerApi('/recheck',{action});$('recheckActionStatus').textContent=data.message;await reloadMemberCatalog();await loadAutomaticAdditions(false,true);}catch(e){$('recheckActionStatus').textContent=e.message;}finally{button.disabled=false;await loadRecheckStatus();}};
 }
-$('reviewGroup').onchange=()=>loadAutomaticAdditions(false,true);
+$('reviewGroup').onchange=()=>{discoveryOffset=0;loadAutomaticAdditions(false,true);};
+$('discoveryPrevious').onclick=()=>{discoveryOffset=Math.max(0,discoveryOffset-25);loadAutomaticAdditions(false,true);};
+$('discoveryNext').onclick=()=>{discoveryOffset+=25;loadAutomaticAdditions(false,true);};
 
 $('selectQueueVisible').onclick=()=>{const boxes=[...document.querySelectorAll('#automaticAdditions .queue-select')];const select=!boxes.slice(0,50).every(b=>b.checked);boxes.forEach((b,i)=>b.checked=select&&i<50);};
 for(const [id,decision] of [['approveQueueSelected','approve'],['excludeQueueSelected','exclude'],['shortQueueSelected','short']]){
@@ -114,6 +121,7 @@ for(const [id,decision] of [['approveQueueSelected','approve'],['excludeQueueSel
 }
 
 async function loadShortRecovery(){
+ if(!reviewSectionOpen('reviewHistory')||!$('shortRecovery').open)return;
  const data=await performerApi('/shorts/recovery');let panel=$('shortRecovery');
  if(!panel){panel=document.createElement('details');panel.id='shortRecovery';$('automaticAdditions').before(panel);}
  panel.innerHTML='<summary>Previously excluded Shorts ('+data.items.length+(data.items.length===100?' shown; refresh after restoring':'')+')</summary><p>Review each video before restoring. Only exclusions made by the old Mark as Short action appear. Other exclusions remain protected.</p>'+data.items.map(v=>`<article class="panel"><h3>${escapeHtml(v.title)}</h3><p>${escapeHtml(v.channel_name||'Unknown reactor')} · ${prettyDate(v.published_at)}</p><a href="https://www.youtube.com/watch?v=${escapeHtml(v.video_id)}" target="_blank" rel="noopener">Check video on YouTube</a><p>${escapeHtml(v.reason)}</p><button class="outline-button" data-restore-short="${escapeHtml(v.video_id)}">Restore &amp; approve as Short</button><p role="status"></p></article>`).join('');
