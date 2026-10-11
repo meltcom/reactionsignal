@@ -14,6 +14,15 @@ export async function managePerformers(request,env,seed,user){try{
  const first=async(q,...v)=>db.prepare(q).bind(...v).first();
  if(url.searchParams.has('id')&&url.searchParams.get('id')!=='missioned-souls')fail('Reaction Journey covers Missioned Souls only.',400);
  if(request.method==='GET'){
+  if(path==='/catalog-management'){
+   const q=(url.searchParams.get('q')||'').slice(0,100),offset=Math.max(0,Math.min(100000,Math.floor(Number(url.searchParams.get('offset'))||0)));
+   const items=await all("SELECT v.id,v.title,v.available,v.format,c.name channel_name,m.status,m.source,e.reason exclusion_reason FROM matches m JOIN videos v ON v.id=m.video_id LEFT JOIN channels c ON c.id=v.channel_id LEFT JOIN exclusions e ON e.video_id=m.video_id AND e.performer_id=m.performer_id WHERE m.performer_id='missioned-souls' AND instr(lower(v.title||' '||v.id||' '||COALESCE(c.name,'')),lower(?))>0 ORDER BY COALESCE(v.discovered_at,v.published_at) DESC,v.id LIMIT 51 OFFSET ?",q,offset);
+   return json({items:items.slice(0,50),hasMore:items.length>50});
+  }
+  if(path==='/catalog-history'){
+   const id=text(url.searchParams.get('videoId'),11,11,'Video ID');
+   return json({items:(await all("SELECT value FROM state WHERE key LIKE 'catalog-audit:%' AND json_extract(value,'$.videoId')=? ORDER BY key DESC LIMIT 30",id)).map(r=>JSON.parse(r.value))});
+  }
   if(path==='/channels/requests'){
    const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0));
    const rows=await all("SELECT r.*,m.name member_name FROM reactor_requests r LEFT JOIN members m ON m.id=r.user_id WHERE r.status='pending' ORDER BY r.created_at,r.id LIMIT 51 OFFSET ?",offset);
@@ -63,6 +72,25 @@ export async function managePerformers(request,env,seed,user){try{
  const raw=await request.text();if(raw.length>12000)fail('Request too large.',413);let b;try{b=JSON.parse(raw);}catch{fail('Invalid JSON.');}if(!b||typeof b!=='object'||Array.isArray(b))fail('Invalid request.');
  if((b.id&&b.id!=='missioned-souls'&&path!=='/channels/requests/review')||(b.performerId&&b.performerId!=='missioned-souls')||(path==='/save'&&(!b.id||b.name!=='Missioned Souls')))fail('Reaction Journey covers Missioned Souls only.',400);
  const now=new Date().toISOString();
+ if(path==='/catalog-action'){
+  const id=text(b.videoId,11,11,'Video ID'),note=text(b.note,5,500,'Reason');
+  const next={unapprove:'PENDING',hide:'HIDDEN',delete:'REJECTED'}[b.action];if(!next)fail('Choose unapprove, hide or delete.');
+  const prior=await first("SELECT m.status,m.source FROM matches m WHERE m.performer_id='missioned-souls' AND m.video_id=?",id);if(!prior)fail('Catalog entry not found.',404);
+  if(prior.status!==b.expectedStatus||prior.source!==b.expectedSource)fail('This entry changed. Refresh before applying your decision.',409);
+  if(await first("SELECT 1 FROM exclusions WHERE performer_id='missioned-souls' AND video_id=?",id))fail('This video is already excluded. Use the correction and restoration controls to revisit it.',409);
+  if(next===prior.status)fail('This entry already has that status.',409);
+  const source='Moderator catalog '+b.action+':'+crypto.randomUUID();
+  const audit={videoId:id,performerId:'missioned-souls',actor:user.id,at:now,action:b.action,note,before:prior,after:{status:next,source}};
+  const guard="EXISTS(SELECT 1 FROM matches WHERE performer_id='missioned-souls' AND video_id=? AND source=?)";
+  await db.batch([
+   db.prepare("UPDATE matches SET status=?,source=? WHERE performer_id='missioned-souls' AND video_id=? AND status=? AND source=? AND NOT EXISTS(SELECT 1 FROM exclusions WHERE performer_id='missioned-souls' AND video_id=?)").bind(next,source,id,prior.status,prior.source,id),
+   ...(b.action==='delete'?[db.prepare("INSERT INTO exclusions(performer_id,video_id,reason) SELECT 'missioned-souls',?,'Moderator deleted from catalog' WHERE "+guard).bind(id,id,source)]:[]),
+   db.prepare("INSERT INTO state(key,value) SELECT ?,? WHERE "+guard).bind('catalog-audit:'+now+':'+crypto.randomUUID(),JSON.stringify(audit),id,source),
+   db.prepare("UPDATE discovery_notifications SET status='removed' WHERE performer_id='missioned-souls' AND video_id=? AND "+guard).bind(id,id,source)
+  ]);
+  if(!(await first("SELECT 1 FROM matches WHERE performer_id='missioned-souls' AND video_id=? AND source=?",id,source)))fail('This entry changed. Refresh before applying your decision.',409);
+  return json({ok:true,message:b.action==='unapprove'?'Approval withdrawn; video returned to the moderator queue.':b.action==='hide'?'Video hidden from the catalog for all members.':'Video deleted from the catalog and blocked from rediscovery. Moderator history is retained for restoration.'});
+ }
  if(path==='/recheck'){
   if(!['start','pause','batch','publish'].includes(b.action))fail('Choose a recheck action.');
   if(b.action==='publish')return json(await publishPreview(db,user));

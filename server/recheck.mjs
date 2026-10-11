@@ -1,5 +1,6 @@
 import {database} from './db.mjs';
 import {YouTube,seconds} from './discovery.mjs';
+import {reactionEvidence} from './approval-rules.mjs';
 const norm=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const mentions=(s,aliases)=>aliases.some(a=>a&&` ${norm(s)} `.includes(` ${norm(a)} `));
 export function recommend(row,item){
@@ -8,17 +9,12 @@ export function recommend(row,item){
  if(!item||item.status?.privacyStatus!=='public')return {outcome:'uncertain',reason:'Public video metadata is unavailable; no automatic removal.'};
  if(item.snippet?.channelId!==row.channel_id)return {outcome:'protected',reason:'Channel identity conflicts with the catalog.'};
  const duration=seconds(item.contentDetails?.duration),title=item.snippet?.title||'',description=item.snippet?.description||'';
- if(row.format==='SHORT'||duration!==null&&duration<=180||/\b(shorts?|excerpt|teaser|clip|preview)\b/i.test(title))return {outcome:'shorts',reason:'Possible Short or excerpt; duration alone does not establish format.'};
- if(duration===null)return {outcome:'uncertain',reason:'Duration is unknown.'};
  const aliases=JSON.parse(row.aliases),inTitle=mentions(title,aliases),inDescription=mentions(description,aliases);
  if(!inTitle&&!inDescription)return {outcome:'unrelated',reason:'No exact performer name found in title or description; review before excluding.'};
  const otherAliases=JSON.parse(row.other_aliases||'[]').flatMap(a=>JSON.parse(a)).filter(a=>!aliases.some(current=>norm(current)===norm(a)));
  if(inTitle&&mentions(title,otherAliases))return {outcome:'uncertain',reason:'Title names multiple covered performers; review the performer match.'};
- const reactionTitle=/\b(reacts?|reaction|reacting)\b/i.test(title);
- // Restrict description evidence to a sentence also naming the performer.
- const reactionDescription=description.split(/[\n.!?]+/).some(sentence=>mentions(sentence,aliases)&&/\b(reacts?|reaction|reacting)\b/i.test(sentence));
- if(!row.known_reactor)return {outcome:'uncertain',reason:'Channel is not yet supported by a verified master record or a confirmed reaction.'};
- if(inTitle&&reactionTitle||reactionDescription&&(inTitle||reactionTitle))return {outcome:'strong',reason:'Known reactor, exact performer evidence, reaction wording and duration over three minutes agree. Metadata does not verify video contents.'};
+ if(reactionEvidence(title,aliases,description))return {outcome:'strong',reason:'Exact performer title match or explicit description reaction evidence. Short or missing duration does not block publication; metadata does not verify video contents.'};
+ if(row.format==='SHORT'||duration!==null&&duration<=180)return {outcome:'shorts',reason:'Possible Short without enough reaction evidence.'};
  return {outcome:'uncertain',reason:'Performer is mentioned, but reaction context is not strong enough.'};
 }
 export async function recheckStatus(db){
@@ -56,7 +52,7 @@ export async function publishPreview(db,user){
  for(const r of rows){
   const source='Moderator applied metadata preview:'+crypto.randomUUID();
   const results=await db.batch([
-   db.prepare(`UPDATE matches SET status='CONFIRMED',source=? WHERE performer_id=? AND video_id=? AND status='PENDING' AND source=? AND EXISTS(SELECT 1 FROM videos v WHERE v.id=? AND v.title=? AND v.format=? AND v.channel_id=? AND v.available=1 AND v.format<>'SHORT') AND EXISTS(SELECT 1 FROM performers p WHERE p.id=? AND p.status='active' AND p.aliases=? AND p.review_mode='auto' AND p.review_mode=?) AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=? AND e.video_id=?)`).bind(source,r.performer_id,r.video_id,r.original_source,r.video_id,r.original_title,r.original_format,r.channel_id,r.performer_id,r.aliases,r.review_mode,r.performer_id,r.video_id),
+   db.prepare(`UPDATE matches SET status='CONFIRMED',source=? WHERE performer_id=? AND video_id=? AND status='PENDING' AND source=? AND EXISTS(SELECT 1 FROM videos v WHERE v.id=? AND v.title=? AND v.format=? AND v.channel_id=? AND v.available=1) AND EXISTS(SELECT 1 FROM performers p WHERE p.id=? AND p.status='active' AND p.aliases=? AND p.review_mode='auto' AND p.review_mode=?) AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=? AND e.video_id=?)`).bind(source,r.performer_id,r.video_id,r.original_source,r.video_id,r.original_title,r.original_format,r.channel_id,r.performer_id,r.aliases,r.review_mode,r.performer_id,r.video_id),
    db.prepare("INSERT OR IGNORE INTO discovery_notifications(performer_id,video_id,created_at,source) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=? AND status='CONFIRMED' AND source=?)").bind(r.performer_id,r.video_id,now,'Metadata preview published',r.performer_id,r.video_id,source),
    db.prepare("INSERT INTO state(key,value) SELECT ?,? WHERE EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=? AND source=?)").bind('performer-audit:'+crypto.randomUUID(),JSON.stringify({actor:user.id,at:now,action:'publish-metadata-preview',performerId:r.performer_id,videoId:r.video_id,reason:r.reason}),r.performer_id,r.video_id,source)
   ]);published+=Number(results[0].meta?.changes||0);

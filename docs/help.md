@@ -576,7 +576,7 @@ Contribution Points recognize helpful activity and determine your badge. Trusted
 
 - Review group filters All groups, Strong matches, Possible Shorts / excerpts, Possibly unrelated, Uncertain evidence, Moderator / performer holds, or Not rechecked yet.
 
-- Strong matches require a known reactor, exact performer evidence, reaction wording, and duration over three minutes.
+- Strong matches accept an exact performer name in the title, or reaction wording in the title with explicit performer reaction evidence in the description. Covers, Shorts and missing duration do not block approval. Watch parties, tour updates and comparison titles await review.
 
 - Metadata cannot prove video contents.
 
@@ -600,7 +600,7 @@ Contribution Points recognize helpful activity and determine your badge. Trusted
 
 - Initial history scan offers 30 days, 90 days, one year, or older history; changing aliases or the window starts a fresh search.
 
-- Review policy either holds matches or publishes clear full-length reactions automatically; ambiguous/short matches remain for review.
+- Review policy either holds matches or publishes clear performer matches automatically on any channel. Ambiguous context and explicit moderator holds remain for review.
 
 - Enable ongoing discovery controls new discovery for Missioned Souls.
 
@@ -667,3 +667,6 @@ Contribution Points recognize helpful activity and determine your badge. Trusted
 - A successful deployment does not guarantee healthy discovery: verify recent runs, catalog loading, login, and moderation.
 
 Trusted Member is a moderator-managed status, separate from Contribution Points and badges. After three currently accepted contributions verified by another moderator, members are flagged for trust review. A moderator checks quality and accuracy before granting trust; access is not automatic. Existing trusted members retain access during migration. Moderators can defer or revoke trust with a recorded reason. Trusted reactions, comments and replies publish directly and earn Contribution Points immediately within daily limits. Other members require approval. Corrections and removal reports always require verification. Direct reactions require successful YouTube metadata lookup and appear as Confirmed. Existing exclusions, duplicate checks, mutes and daily posting limits remain in force. The former reputation ledger is retained as history and no longer earns new awards or controls access.
+
+
+Moderators can use Video Classification Review → Manage catalog approvals to search any catalog status. Unapprove returns an entry to the review queue; Hide removes it for all members; Delete removes it and blocks rediscovery. Each action requires a reason and records the moderator, timestamp and previous decision. Comments, ratings and saved metadata are retained. Correct / restore approval opens the existing correction workflow, which explicitly restores an available video and records a restoration reason. These catalog actions do not delete YouTube uploads.

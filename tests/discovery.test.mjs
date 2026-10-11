@@ -19,12 +19,45 @@ test('zero search budget disables requests and reports the scheduling reason',as
  assert.equal(searches,0);const report=JSON.parse((await d.prepare("SELECT value FROM state WHERE key='search-diagnostics:missioned-souls'").first()).value);assert.equal(report.status,'disabled');assert.equal(report.dailyLimit,0);
  assert.equal(searchDailyLimit({}),20);assert.equal(searchDailyLimit({DISCOVERY_DAILY_SEARCH_LIMIT:'bad'}),20);
 });
-test('classifies exact performer names; holds ambiguous and short matches',()=>{
+test('classifies exact performer names; accepts cover and short title matches',()=>{
  assert.equal(classify('Missioned Souls reaction',['Missioned Souls'],400),'CONFIRMED');
  assert.equal(classify('NotMissioned Souls reaction',['Missioned Souls'],400),null);
- assert.equal(classify('Missioned Souls cover',['Missioned Souls'],400),'PENDING');
- assert.equal(classify('Missioned Souls reaction',['Missioned Souls'],90),'PENDING');
+ assert.equal(classify('Missioned Souls cover',['Missioned Souls'],400),'CONFIRMED');
+ assert.equal(classify('Missioned Souls reaction',['Missioned Souls'],90),'CONFIRMED');
  assert.equal(seconds('PT1H2M3S'),3723);
+});
+test('broad approval rules use performer evidence on any channel',()=>{
+ for(const aliases of [['Missioned Souls'],['New Act']]){
+  const name=aliases[0];
+  for(const duration of [400,90,null])assert.equal(classify(name+' cover',aliases,duration),'CONFIRMED');
+  assert.equal(classify(name+' Watch Party!!',aliases,400),'PENDING');
+  assert.equal(classify(name+' - LIVE Requests, Tour Updates, Behind the Scenes',aliases,400),'PENDING');
+  assert.equal(classify('Before '+name+', there was Another Band | FIRST reaction',aliases,400),'PENDING');
+  assert.equal(classify('Not'+name+' reaction',aliases,400),null);
+  assert.equal(classify('My first reaction',aliases,null,{description:'I react to '+name+' today.'}),'CONFIRMED');
+  assert.equal(classify('My reaction',aliases,400,{description:'#'+name}),null);
+  assert.equal(classify('My reaction',aliases,400,{description:'Original video: '+name}),null);
+ }
+});
+test('approved short pattern publishes as Short; exclusions, holds and manual formats win',async()=>{
+ const d=db();await seedDatabase(d,seed);const p=(await d.prepare('SELECT * FROM performers').all()).results;
+ const shortChannel=channel;
+ const short={...item('shortvideo1','Missioned Souls Fernando Reaction #shorts'),snippet:{...item().snippet,channelId:shortChannel,title:'Missioned Souls Fernando Reaction #shorts'},contentDetails:{duration:'PT1M'}};
+ await saveVideo(d,short,p,'2026-10-11T12:00:00Z','test');
+ assert.equal((await d.prepare('SELECT status FROM matches WHERE video_id=?').bind(short.id).first()).status,'CONFIRMED');
+ assert.equal((await d.prepare('SELECT format FROM videos WHERE id=?').bind(short.id).first()).format,'SHORT');
+ await d.prepare("UPDATE matches SET status='PENDING',source='Manual hold' WHERE video_id=?").bind(short.id).run();
+ await d.prepare("UPDATE videos SET format='FULL_LENGTH',format_locked=1 WHERE id=?").bind(short.id).run();
+ await saveVideo(d,short,p,'2026-10-12T12:00:00Z','test');
+ assert.equal((await d.prepare('SELECT status FROM matches WHERE video_id=?').bind(short.id).first()).status,'PENDING');
+ assert.equal((await d.prepare('SELECT format FROM videos WHERE id=?').bind(short.id).first()).format,'FULL_LENGTH');
+ await d.prepare("INSERT INTO exclusions(performer_id,video_id,reason) VALUES('missioned-souls','excluded123','Checked by moderator')").run();
+ await saveVideo(d,{...short,id:'excluded123'},p,'2026-10-12T12:00:00Z','test');
+ assert.equal(await d.prepare("SELECT 1 FROM matches WHERE video_id='excluded123'").first(),null);
+ await saveVideo(d,{...short,id:'private1234',status:{privacyStatus:'private'}},p,'2026-10-12T12:00:00Z','test');
+ assert.equal(await d.prepare("SELECT 1 FROM videos WHERE id='private1234'").first(),null);
+ await saveVideo(d,{...short,id:'heldvideo12'},p.map(p=>({...p,review_mode:'review'})),'2026-10-12T12:00:00Z','test');
+ assert.equal((await d.prepare("SELECT status FROM matches WHERE video_id='heldvideo12'").first()).status,'PENDING');
 });
 test('seed is idempotent and applies prior exclusions',async()=>{
  const d=db(),input={...seed,videos:[{id:EXCLUDED[0],channelId:channel,title:'False positive',performerId:'missioned-souls',confidence:'CONFIRMED'}]};
@@ -136,8 +169,8 @@ test('Missioned Souls history resumes pages, honors daily budgets and holds unce
  await d.prepare("DELETE FROM state WHERE key='discovery-lease'").run();
  await runDiscovery(env,seed,fetcher,{performerId:'missioned-souls'});assert.equal(searches,2);
 });
-test('unknown durations remain held for review even with a clear title',()=>{
- assert.equal(classify('New Act reaction',['New Act'],null),'PENDING');
+test('unknown durations no longer block clear title matches',()=>{
+ assert.equal(classify('New Act reaction',['New Act'],null),'CONFIRMED');
 });
 
 async function isolatedDiscovery(){

@@ -1,11 +1,12 @@
 import { database, seedDatabase } from './db.mjs';
+import {reactionEvidence,explicitShort} from './approval-rules.mjs';
 
 const normalize = s => String(s||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
-export function classify(title,aliases,duration) {
+export function classify(title,aliases,duration,{description=''}={}) {
   const t=` ${normalize(title)} `;
-  if(!aliases.some(a=>t.includes(` ${normalize(a)} `))) return null;
-  if(duration===null || duration<=180) return 'PENDING';
-  return /\b(reacts?|reaction|reacting)\b/i.test(t)?'CONFIRMED':'PENDING';
+  const evidence=reactionEvidence(title,aliases,description);
+  if(!aliases.some(a=>t.includes(` ${normalize(a)} `))&&!evidence)return null;
+  return evidence?'CONFIRMED':'PENDING';
 }
 export function seconds(s) { const m=/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(s||''); return m?Number(m[1]||0)*3600+Number(m[2]||0)*60+Number(m[3]||0):null; }
 export class YouTube {
@@ -38,14 +39,15 @@ export async function saveVideos(db,items,performers,runTime,source){
     for(const item of chunk){
       const snippet=item.snippet,duration=seconds(item.contentDetails?.duration),prior=old.get(item.id);
       if(prior&&prior.channel_id!==snippet.channelId)continue;
-      const eligible=performers.map(p=>({p,classification:classify(snippet.title,JSON.parse(p.aliases),duration)})).filter(({p,classification})=>classification&&!excluded.has(p.id+':'+item.id));
+      const eligible=performers.map(p=>({p,classification:classify(snippet.title,JSON.parse(p.aliases),duration,{description:snippet.description})})).filter(({p,classification})=>classification&&!excluded.has(p.id+':'+item.id));
       if(!eligible.length)continue;
       const changed=!prior||prior.title!==snippet.title||prior.published_at!==(snippet.publishedAt||null)||!prior.available;
       const stale=!prior?.checked_at||Date.parse(runTime)-Date.parse(prior.checked_at)>=7*86400000;
       const missing=eligible.filter(({p})=>!matches.has(p.id+':'+item.id));
       if(changed||stale||missing.length){
         channels.set(snippet.channelId,snippet.channelTitle||'Unknown reactor');
-        statements.push(db.prepare('INSERT INTO videos(id,channel_id,title,published_at,discovered_at,checked_at,format,available) VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=excluded.published_at,checked_at=excluded.checked_at,format=CASE WHEN videos.format_locked=1 THEN videos.format ELSE excluded.format END,available=1').bind(item.id,snippet.channelId,snippet.title,snippet.publishedAt||null,runTime,runTime,duration!==null&&duration>180?'FULL_LENGTH':'UNKNOWN'));
+        const approvedShort=explicitShort(snippet.title)&&(duration===null||duration<=180)&&eligible.some(({p,classification})=>p.review_mode==='auto'&&classification==='CONFIRMED');
+        statements.push(db.prepare('INSERT INTO videos(id,channel_id,title,published_at,discovered_at,checked_at,format,available) VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=excluded.published_at,checked_at=excluded.checked_at,format=CASE WHEN videos.format_locked=1 THEN videos.format ELSE excluded.format END,available=1').bind(item.id,snippet.channelId,snippet.title,snippet.publishedAt||null,runTime,runTime,approvedShort?'SHORT':duration!==null&&duration>180?'FULL_LENGTH':'UNKNOWN'));
       }
       if(!prior){inserted++;const lag=Date.parse(runTime)-Date.parse(snippet.publishedAt);statements.push(db.prepare('INSERT OR IGNORE INTO discovery_observations(video_id,source,discovered_at,published_at,delay_seconds) VALUES(?,?,?,?,?)').bind(item.id,source,runTime,snippet.publishedAt||null,Number.isFinite(lag)&&lag>=0?Math.floor(lag/1000):null));}
       for(const {p,classification:found} of missing){
