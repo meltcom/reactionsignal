@@ -26,6 +26,38 @@ test('classifies exact performer names; holds ambiguous and short matches',()=>{
  assert.equal(classify('Missioned Souls reaction',['Missioned Souls'],90),'PENDING');
  assert.equal(seconds('PT1H2M3S'),3723);
 });
+test('approval exceptions match the reviewed channel and performer, including plural reactions',()=>{
+ const aliases=['Missioned Souls'],context={performerId:'missioned-souls',channelId:'UCP-kGozEU2blvmzI8jNCoKg'};
+ assert.equal(classify('Missioned Souls – HOSANNA | Then Came the TEARS!',aliases,400,context),'CONFIRMED');
+ assert.equal(classify('SOULMATES AFTER HOURS | Missioned Souls LIVE',aliases,null,context),'CONFIRMED');
+ assert.equal(classify('Missioned Souls – HOSANNA',aliases,400,{...context,channelId:channel}),'PENDING');
+ assert.equal(classify('Missioned Souls – HOSANNA',aliases,400,{...context,performerId:'another-performer'}),'PENDING');
+ assert.equal(classify('NotMissioned Souls – HOSANNA',aliases,400,context),null);
+ assert.equal(classify('Unrelated music stream',aliases,400,context),null);
+ assert.equal(classify('Missioned Souls reactions',aliases,400),'CONFIRMED');
+ assert.equal(classify('Missioned Souls reaction',aliases,90,context),'PENDING');
+ assert.equal(classify('Missioned Souls reaction',aliases,null,{performerId:'missioned-souls',channelId:'UCz-hLsF25Xu8ILLo9twh-9g'}),'PENDING');
+});
+test('approved short pattern publishes as Short; exclusions, holds and manual formats win',async()=>{
+ const d=db();await seedDatabase(d,seed);const p=(await d.prepare('SELECT * FROM performers').all()).results;
+ const shortChannel='UCIVmJPriTtfAjpY2AM5i0hw';
+ const short={...item('shortvideo1','Missioned Souls Fernando Reaction #shorts'),snippet:{...item().snippet,channelId:shortChannel,title:'Missioned Souls Fernando Reaction #shorts'},contentDetails:{duration:'PT1M'}};
+ await saveVideo(d,short,p,'2026-10-11T12:00:00Z','test');
+ assert.equal((await d.prepare('SELECT status FROM matches WHERE video_id=?').bind(short.id).first()).status,'CONFIRMED');
+ assert.equal((await d.prepare('SELECT format FROM videos WHERE id=?').bind(short.id).first()).format,'SHORT');
+ await d.prepare("UPDATE matches SET status='PENDING',source='Manual hold' WHERE video_id=?").bind(short.id).run();
+ await d.prepare("UPDATE videos SET format='FULL_LENGTH',format_locked=1 WHERE id=?").bind(short.id).run();
+ await saveVideo(d,short,p,'2026-10-12T12:00:00Z','test');
+ assert.equal((await d.prepare('SELECT status FROM matches WHERE video_id=?').bind(short.id).first()).status,'PENDING');
+ assert.equal((await d.prepare('SELECT format FROM videos WHERE id=?').bind(short.id).first()).format,'FULL_LENGTH');
+ await d.prepare("INSERT INTO exclusions(performer_id,video_id,reason) VALUES('missioned-souls','excluded123','Checked by moderator')").run();
+ await saveVideo(d,{...short,id:'excluded123'},p,'2026-10-12T12:00:00Z','test');
+ assert.equal(await d.prepare("SELECT 1 FROM matches WHERE video_id='excluded123'").first(),null);
+ await saveVideo(d,{...short,id:'private1234',status:{privacyStatus:'private'}},p,'2026-10-12T12:00:00Z','test');
+ assert.equal(await d.prepare("SELECT 1 FROM videos WHERE id='private1234'").first(),null);
+ await saveVideo(d,{...short,id:'heldvideo12'},p.map(p=>({...p,review_mode:'review'})),'2026-10-12T12:00:00Z','test');
+ assert.equal((await d.prepare("SELECT status FROM matches WHERE video_id='heldvideo12'").first()).status,'PENDING');
+});
 test('seed is idempotent and applies prior exclusions',async()=>{
  const d=db(),input={...seed,videos:[{id:EXCLUDED[0],channelId:channel,title:'False positive',performerId:'missioned-souls',confidence:'CONFIRMED'}]};
  await seedDatabase(d,input);await seedDatabase(d,input);
