@@ -34,6 +34,7 @@ export async function social(request,env,seed,user){try{
       hiddenReactors: async()=>(await all('SELECT h.channel_id,c.name FROM hidden_reactors h JOIN channels c ON c.id=h.channel_id WHERE h.user_id=? ORDER BY c.name',user.id)),
       preferences: async()=>(JSON.parse((await first('SELECT settings FROM preferences WHERE user_id=?',user.id))?.settings||'{}')),
       views: async()=>((await all('SELECT * FROM saved_views WHERE user_id=? ORDER BY created_at DESC',user.id)).map(v=>({...v,settings:JSON.parse(v.settings)}))),
+      followingGroups: async()=>((await all('SELECT * FROM following_groups WHERE user_id=? ORDER BY name,id',user.id)).map(g=>({...g,follows:JSON.parse(g.follows)}))),
       follows: async()=>(await all('SELECT kind,target FROM follows WHERE user_id=?',user.id)),
       watch: async()=>(await all('SELECT video_id,status,favorite FROM watch WHERE user_id=?',user.id)),
       blocks: async()=>(await all('SELECT b.target,m.name,m.profile_icon,m.profile_color,m.profile_picture,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM blocks b LEFT JOIN members m ON m.id=b.target WHERE b.user_id=?',user.id)),
@@ -59,6 +60,27 @@ export async function social(request,env,seed,user){try{
  if(request.headers.get('Origin')!==url.origin||request.headers.get('Sec-Fetch-Site')==='cross-site')fail('Use the Reaction Journey website.',403);
  if(!request.headers.get('Content-Type')?.startsWith('application/json'))fail('JSON required.',415);
  const raw=await request.text();if(raw.length>16000)fail('Request too large.',413);let b;try{b=JSON.parse(raw);}catch{fail('Invalid JSON.');}if(!b||typeof b!=='object')fail('Invalid request.');
+ const snapshot="COALESCE((SELECT json_group_array(json_object('kind',kind,'target',target)) FROM follows WHERE user_id=? AND kind IN ('reactor','song')),'[]')";
+ if(path==='/following-group'){
+  if(!['create','rename','delete','activate','save'].includes(b.action))fail('Choose a group action.');
+  const id=b.action==='create'?crypto.randomUUID():txt(b.id,1,100);
+  if(b.action!=='create'&&!await first('SELECT 1 FROM following_groups WHERE id=? AND user_id=?',id,user.id))fail('Group unavailable.',404);
+  if(b.action==='create'){
+   if((await first('SELECT COUNT(*) n FROM following_groups WHERE user_id=?',user.id)).n>=50)fail('You can save up to 50 following groups.');
+   await run(`INSERT INTO following_groups(id,user_id,name,follows,created_at) VALUES(?,?,?,${snapshot},?)`,id,user.id,txt(b.name,1,60),user.id,now);
+  }
+  if(b.action==='rename')await run('UPDATE following_groups SET name=? WHERE id=? AND user_id=?',txt(b.name,1,60),id,user.id);
+  if(b.action==='delete')await run('DELETE FROM following_groups WHERE id=? AND user_id=?',id,user.id);
+  if(b.action==='save')await run(`UPDATE following_groups SET follows=${snapshot} WHERE id=? AND user_id=?`,user.id,id,user.id);
+  if(b.action==='activate')await db.batch([
+   db.prepare(`UPDATE following_groups SET follows=${snapshot} WHERE user_id=? AND active=1`).bind(user.id,user.id),
+   db.prepare(`UPDATE following_groups SET follows=${snapshot},active=0 WHERE user_id=? AND active=1`).bind(user.id,user.id),
+   db.prepare("DELETE FROM follows WHERE user_id=? AND kind IN ('reactor','song')").bind(user.id),
+   db.prepare("INSERT OR IGNORE INTO follows(user_id,kind,target) SELECT ?,json_extract(value,'$.kind'),json_extract(value,'$.target') FROM following_groups,json_each(following_groups.follows) WHERE following_groups.id=? AND user_id=?").bind(user.id,id,user.id),
+   db.prepare('UPDATE following_groups SET active=1 WHERE id=? AND user_id=?').bind(id,user.id)
+  ]);
+  return json({ok:true,id});
+ }
  if(path==='/preferences'){await run('INSERT INTO preferences VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET settings=excluded.settings,updated_at=excluded.updated_at',user.id,JSON.stringify(settings(b,performerIds)),now);return json({ok:true});}
  if(path==='/view'){if(b.remove){await run('DELETE FROM saved_views WHERE id=? AND user_id=?',txt(b.id,1,100),user.id);return json({ok:true});}if((await first('SELECT COUNT(*) n FROM saved_views WHERE user_id=?',user.id)).n>=50)fail('You can save up to 50 views.');await run('INSERT INTO saved_views VALUES(?,?,?,?,?)',crypto.randomUUID(),user.id,txt(b.name,1,60),JSON.stringify(settings(b.settings,performerIds)),now);return json({ok:true});}
  if(path==='/reactor-rating'){
@@ -78,6 +100,7 @@ export async function social(request,env,seed,user){try{
  if(path==='/master-reset'){
   if(b.confirm!==true)fail('Confirm Master Reset.');
   await db.batch([
+   db.prepare('UPDATE following_groups SET active=0 WHERE user_id=?').bind(user.id),
    db.prepare("DELETE FROM follows WHERE user_id=? AND kind IN ('reactor','song')").bind(user.id),
    db.prepare('DELETE FROM hidden_reactors WHERE user_id=?').bind(user.id),
    db.prepare('DELETE FROM reactor_ratings WHERE user_id=?').bind(user.id)
@@ -86,7 +109,7 @@ export async function social(request,env,seed,user){try{
  }
  if(path==='/reset-follows'){
   if(!['reactor','song'].includes(b.kind)||b.confirm!==true)fail('Confirm resetting reactor or song follows.');
-  await run('DELETE FROM follows WHERE user_id=? AND kind=?',user.id,b.kind);
+  await db.batch([db.prepare(`UPDATE following_groups SET follows=${snapshot},active=0 WHERE user_id=? AND active=1`).bind(user.id,user.id),db.prepare('DELETE FROM follows WHERE user_id=? AND kind=?').bind(user.id,b.kind)]);
   return json({ok:true});
  }
  if(path==='/follow'){if(!['performer','reactor','song'].includes(b.kind))fail('Invalid follow type.');const target=txt(b.target,1,200);if(b.kind==='performer'&&!performerIds.includes(target))fail('Unknown performer.');if(b.kind==='reactor'&&!await first('SELECT 1 FROM channels WHERE id=?',target))fail('Unknown reactor.');await run(b.remove?'DELETE FROM follows WHERE user_id=? AND kind=? AND target=?':'INSERT OR IGNORE INTO follows VALUES(?,?,?)',user.id,b.kind,target);return json({ok:true});}
