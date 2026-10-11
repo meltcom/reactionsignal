@@ -186,7 +186,8 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - Each member has one editable rating per channel. Community score is the average; rating counts show how many members contributed.
 
-- Sort Reactors by Highest ranked, subscribers, or name.
+- Sort Reactors by Community rank (average member rating), My ranking (your own saved 1–100 ratings), subscribers, or name. Both rating sorts put highest scores first and unrated reactors last.
+- Choose 10, 25 (default), 50, or All reactors per page. Previous and Next browse the shorter list. Searching or changing the sort or list size returns to the first page.
 
 - In My Feed choose Highest ranked reactors to sort videos by their channels’ community scores.
 
