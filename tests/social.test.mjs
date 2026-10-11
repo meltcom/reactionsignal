@@ -181,3 +181,30 @@ test('first trusted publication of an edited pending comment earns one award',as
  for(let i=0;i<2;i++)assert.equal((await call('/comment',{...b,id,body:'Now trusted, this comment publishes directly.'})).data.status,'accepted');
  assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,3);
 });
+
+test('following groups persist, isolate accounts, switch atomically and preserve active edits',async()=>{
+ const {call}=await setup();
+ await call('/follow',{kind:'performer',target:'missioned-souls'});
+ await call('/follow',{kind:'song',target:'Hysteria'});
+ const a=await call('/following-group',{action:'create',name:'Rock'});assert.equal(a.status,200);
+ await call('/reset-follows',{kind:'song',confirm:true});
+ const b=await call('/following-group',{action:'create',name:'Empty'});
+ assert.equal((await call('/following-group',{action:'activate',id:a.data.id},'other')).status,404);
+ assert.equal((await call('/dashboard',null,'other')).data.followingGroups.length,0);
+ await call('/following-group',{action:'activate',id:a.data.id});
+ assert.equal((await call('/dashboard')).data.follows.some(f=>f.target==='Hysteria'),true);
+ await call('/follow',{kind:'song',target:'All It Takes'});
+ await call('/following-group',{action:'activate',id:b.data.id});
+ assert.deepEqual((await call('/dashboard')).data.follows,[{kind:'performer',target:'missioned-souls'}]);
+ await call('/following-group',{action:'activate',id:a.data.id});
+ assert.equal((await call('/dashboard')).data.follows.filter(f=>f.kind==='song').length,2);
+ await call('/following-group',{action:'rename',id:a.data.id,name:'Favorites'});
+ assert.equal((await call('/dashboard')).data.followingGroups.find(g=>g.id===a.data.id).name,'Favorites');
+ await call('/master-reset',{confirm:true});
+ assert.equal((await call('/dashboard')).data.followingGroups.length,2);
+ assert.equal((await call('/dashboard')).data.followingGroups.some(g=>g.active),false);
+ await call('/following-group',{action:'activate',id:a.data.id});
+ await call('/following-group',{action:'delete',id:a.data.id});
+ assert.equal((await call('/dashboard')).data.follows.filter(f=>f.kind==='song').length,2);
+ assert.equal((await call('/following-group',{action:'create',name:' '})).status,400);
+});

@@ -33,3 +33,5 @@ export const rssChecks=sqliteTable('rss_checks',{channelId:text('channel_id').pr
 export const notificationReceipts=sqliteTable('notification_receipts',{videoId:text('video_id').notNull(),source:text('source').notNull(),receivedAt:text('received_at').notNull(),processedAt:text('processed_at')},t=>[primaryKey({columns:[t.videoId,t.source]}),index('notification_receipts_date').on(t.receivedAt)]);
 
 export const memberTrustHistory=sqliteTable('member_trust_history',{id:text('id').primaryKey(),userId:text('user_id').notNull().references(()=>members.id),moderatorId:text('moderator_id'),trusted:integer('trusted').notNull(),reason:text('reason').notNull(),createdAt:text('created_at').notNull()},t=>[index('member_trust_history_user').on(t.userId,t.createdAt)]);
+
+export const followingGroups=sqliteTable('following_groups',{id:text('id').primaryKey(),userId:text('user_id').notNull(),name:text('name').notNull(),follows:text('follows').notNull().default('[]'),active:integer('active').notNull().default(0),createdAt:text('created_at').notNull()},t=>[index('following_groups_user').on(t.userId)]);
