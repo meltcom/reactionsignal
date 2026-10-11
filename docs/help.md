@@ -670,3 +670,6 @@ Trusted Member is a moderator-managed status, separate from Contribution Points 
 
 
 Moderators can use Video Classification Review → Manage catalog approvals to search any catalog status. Unapprove returns an entry to the review queue; Hide removes it for all members; Delete removes it and blocks rediscovery. Each action requires a reason and records the moderator, timestamp and previous decision. Comments, ratings and saved metadata are retained. Correct / restore approval opens the existing correction workflow, which explicitly restores an available video and records a restoration reason. These catalog actions do not delete YouTube uploads.
+
+
+Moderator Queue starts with five collapsed sections: Automatic discoveries, Member contributions, Content reports & member mutes, Review history & recovery, and Discovery tools & settings. Open a section to load its list; only one section remains open at a time. Automatic discoveries use pages of 25 videos and keep bulk actions on the current page. Click the section heading or Close section & return to overview to collapse a long list. Reviewed member submissions and previously excluded Shorts load only when their history list is opened. Refresh counts / open section refreshes counts and the section being reviewed. Manage published catalog videos opens Video Classification Review.

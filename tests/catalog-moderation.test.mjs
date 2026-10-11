@@ -74,3 +74,20 @@ test('hidden, unapproved and deleted catalog entries can be explicitly restored 
   assert.equal(restored.decision.status,{hide:'HIDDEN',unapprove:'PENDING',delete:'REJECTED'}[action]);
  }
 });
+
+test('automatic review pagination reaches every pending video without loading service details',async()=>{
+ const s=await setup();s.sql.prepare("UPDATE matches SET status='PENDING'").run();
+ for(let i=0;i<54;i++){
+  const videoId='queue'+String(i).padStart(6,'0');
+  s.sql.prepare("INSERT INTO videos(id,channel_id,title,format,available) VALUES(?,?,?,'UNKNOWN',1)").run(videoId,channel,'Missioned Souls reaction '+i);
+  s.sql.prepare("INSERT INTO matches VALUES('missioned-souls',?,'PENDING','fixture')").run(videoId);
+ }
+ const seen=new Set();
+ for(const [offset,size,more] of [[0,25,true],[25,25,true],[50,5,false]]){
+  const r=await s.call('/notifications?group=all&offset='+offset);assert.equal(r.status,200);assert.equal(r.data.items.length,size);assert.equal(r.data.hasMore,more);assert.equal(r.data.count,55);assert.equal(r.data.push,undefined);
+  for(const row of r.data.items){assert.equal(seen.has(row.video_id),false);seen.add(row.video_id);}
+ }
+ assert.equal(seen.size,55);
+ const summary=await s.call('/notifications?summary=1');assert.equal(summary.data.count,55);assert.equal(summary.data.items,undefined);
+ const service=await s.call('/notifications?service=1');assert.ok(service.data.push);assert.equal(service.data.items,undefined);
+});
