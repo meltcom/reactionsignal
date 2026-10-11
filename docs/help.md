@@ -1,6 +1,6 @@
 # Reaction Journey Help
 
-Choose a topic to expand its guide. Guides for members, moderators, and administrators. Updated October 10, 2026, for the current Missioned Souls service.
+Choose a topic to expand its guide. Guides for members, moderators, and administrators. Updated October 11, 2026, for the current Missioned Souls service.
 
 - Sign in and get started
 
@@ -9,6 +9,8 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 - Reaction cards, watch lists, ratings, and comments
 
 - Following and Reactors
+
+- Following groups
 
 - Reactor comments, ratings and ranking
 
@@ -56,11 +58,11 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 ### Reset follows or use Master Reset
 
-- Open Following. Reset all reactor follows removes every reactor follow in your account, including follows of hidden channels. Reset all song follows removes only your song follows.
+- Open Following. Performer follows are at the bottom of the page. Reset all reactor follows removes every reactor follow in your account, including follows of hidden channels. Reset all song follows removes only your song follows.
 
 - Each separate reset asks for confirmation. Other follow types, hidden reactors, ratings, and YouTube subscriptions stay unchanged.
 
-- Master Reset removes your reactor follows, song follows, hidden reactors, and reactor ratings together. Confirm only if you want to clear all four; these choices cannot be automatically restored.
+- At the bottom of Following, expand Advanced: Master Reset and select Master Reset… to open the confirmation. Master Reset removes your reactor follows, song follows, hidden reactors, and reactor ratings together. Confirm only if you want to clear all four. Saved Following groups remain available but are deactivated; switching to one can restore its saved reactor and song follows. Hidden choices and reactor ratings cannot be restored from groups.
 
 - Master Reset preserves video ratings, performer follows, favorites, watch status, appearance and account settings, earned points, and your YouTube subscriptions. It affects only your own Reaction Journey account.
 
@@ -110,7 +112,7 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - All reactions shows the catalog subject to your filters.
 
-- New today shows videos newly cataloged today using your browser’s local date, not necessarily uploaded today.
+- New today includes videos discovered today or published today, using your browser’s local date. An older upload can appear when discovered; a premiere discovered earlier can appear again on its publication day once its recorded publication time has passed. It remains one catalog entry. The catalog must have the current publication date. Your filters and hidden reactors still apply.
 
 - Following shows matches to your account’s follows.
 
@@ -148,9 +150,9 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - Every member’s rating has equal weight; changing your rating does not earn more points.
 
-- Submit comment for review sends your comment to moderators before public display.
+- Trusted Members publish comments and replies directly. Other members submit them for moderator review; pending comments are visible only to their author until approved.
 
-- Reply starts a response; Edit resubmits an existing comment for review; Delete removes your own contribution.
+- Reply starts a response; Edit publishes directly for Trusted Members or resubmits for review when approval is required; Delete removes your own contribution.
 
 - Like, Block, and Report appear where available.
 
@@ -294,6 +296,12 @@ In Reactors, use Import YouTube subscriptions, then Connect YouTube. Grant optio
 - Being muted prevents posting until the restriction expires or a moderator removes it.
 
 ### My Profile & Activity and submitting reactions
+
+- In My Profile & Activity, choose a Profile icon and Background color, preview the result, then use Save display name to save your profile. Initials returns to the initials icon. Contribution badges remain separate from pictures and icons.
+
+- Upload profile picture accepts JPG, PNG, or WebP up to 10 MB. The image is cropped to a square and resized automatically. Check the preview and use Save display name to save it; selecting a file alone does not upload it.
+
+- Your saved picture appears publicly beside your name in discussions, chat, and leaderboards. Remove picture / use icon previews removal; save your profile to confirm it.
 
 - Save display name updates the public name used on contributions and leaderboards.
 
@@ -674,3 +682,20 @@ Moderators can use Video Classification Review → Manage catalog approvals to s
 
 
 Moderator Queue starts with five collapsed sections: Automatic discoveries, Member contributions, Content reports & member mutes, Review history & recovery, and Discovery tools & settings. Open a section to load its list; only one section remains open at a time. Automatic discoveries use pages of 25 videos and keep bulk actions on the current page. Click the section heading or Close section & return to overview to collapse a long list. Reviewed member submissions and previously excluded Shorts load only when their history list is opened. Refresh counts / open section refreshes counts and the section being reviewed. Manage published catalog videos opens Video Classification Review.
+
+
+### Following groups
+
+- Open Following and add the reactors and songs you want in a group. Enter a New group name, then choose Save current follows as new group. Save up to 50 private groups with names of 1–60 characters.
+
+- Choose a Saved group, then Switch group to replace current reactor and song follows with its saved follows. Saving a new group does not activate it; use Switch group to activate it.
+
+- Changes to an active group are saved automatically when you switch groups. If no group is active, save current follows before switching if you want to keep them.
+
+- Replace with current follows overwrites the selected group after confirmation. Rename changes its name; Delete group removes the saved group after confirmation and leaves current follows in place.
+
+- Groups contain reactor and song follows. Performer follows, hidden reactors, ratings, favorites, and appearance are account choices outside groups. An empty active group shows no followed reactions. Hidden reactors stay hidden in every group.
+
+- Resets clear current follows and deactivate the active group while retaining saved groups. A separate reactor or song reset saves the active group’s current follows first; Master Reset retains its last saved snapshot. Switching to a saved group restores that snapshot.
+
+- View followed reactions opens the Following feed. Other feed filters still apply. Following groups choose who and what you follow; Saved Views store filters and layout.
