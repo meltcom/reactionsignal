@@ -1,5 +1,6 @@
 const state = { performer: 'missioned-souls', query: '', format: 'all', confidence: 'all', sort:'latest', visible:24 };
 let catalog = null;
+let discoveryDiagnostics = null, discoveryStatusError = null;
 
 const $ = (id) => document.getElementById(id);
 const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
@@ -28,8 +29,18 @@ function renderAll() { renderPerformers(); renderNewReactors(); renderVideos(); 
 function renderNewReactors() { const el=$('newReactors'); const channels=catalog.channels.filter(c=>c.performerId===state.performer&&c.currentDiscovery); el.hidden=!channels.length; el.innerHTML=channels.length?`<strong>New reactors found in the latest scan</strong><div>${channels.map(c=>`<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener">${escapeHtml(c.name)}</a>`).join(' · ')}</div>`:''; }
 
 function renderDiscovery() {
-  const d = catalog.discovery;
-  $('discoveryStatus').textContent = d?.message || 'Historical catalog snapshot. Automatic updates are not active.';
+  $('discoveryDetails').hidden = communityState?.moderator !== true;
+  if ($('discoveryDetails').hidden) return;
+  const d = discoveryDiagnostics;
+  if (!d) {
+    $('discoveryStatus').textContent = discoveryStatusError || 'Loading live discovery status…';
+    $('lastDiscovery').textContent = 'Unavailable';
+    $('discoveryCoverage').textContent = '';
+    $('discoveryHistory').textContent = '';
+    $('discoveryRuns').textContent = '';
+    return;
+  }
+  $('discoveryStatus').textContent = discoveryStatusError ? `${discoveryStatusError} Showing the last successfully loaded status. ${d.message}` : d.message;
   $('lastDiscovery').textContent = d?.lastDiscoveryRunAt ? new Date(d.lastDiscoveryRunAt).toLocaleString() : 'Not run yet';
   $('discoveryCoverage').textContent = d?.coverage ? `${d.coverage.checked || 0} of ${d.coverage.total} eligible Missioned Souls channels had their latest uploads checked in the past 24 hours. Historical scans are tracked separately.` : '';
   $('discoveryHistory').textContent = `${d?.historyBacklog || 0} channels have historical upload pages queued. Newly cataloged videos may have older upload dates.`;
@@ -56,10 +67,19 @@ function renderDiscovery() {
 }
 
 async function refreshDiscoveryDiagnostics(){
-  if(!communityState?.moderator)return;
-  try{const response=await reactionAuth.fetch('/api/status',{cache:'no-store'});if(!response.ok)return;catalog.discovery=await response.json();renderDiscovery();}catch{}
+  if(communityState?.moderator !== true){renderDiscovery();return;}
+  try{
+    const response=await reactionAuth.fetch('/api/status',{cache:'no-store'});
+    if(!response.ok)throw new Error('Status unavailable');
+    const data=await response.json();
+    if(!data.message || !Array.isArray(data.runs) || !data.coverage)throw new Error('Invalid status');
+    discoveryDiagnostics=data;discoveryStatusError=null;
+  }catch{discoveryStatusError='Live discovery status is temporarily unavailable. Please retry.';}
+  renderDiscovery();
 }
 async function init() {
+  discoveryDiagnostics=null;discoveryStatusError=null;
+  $('discoveryDetails').hidden=true;
   try {
     // Start independent member reads together; only rendering needs the catalog.
     const catalogLoad=(async()=>{const response=await reactionAuth.fetch('/data.json',{cache:'no-store'});if(!response.ok)throw new Error('Unavailable');catalog=await response.json();catalogEtag=response.headers.get('ETag');$('catalogCount').textContent=catalog.stats.channels.toLocaleString();$('performerCount').textContent=catalog.performers.length;})();
