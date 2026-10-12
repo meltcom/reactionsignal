@@ -48,7 +48,7 @@ const ready=(async()=>{
     await verify();
     emailForm.querySelectorAll('input,button').forEach(e=>e.disabled=false);
     googleButton.disabled=false;
-    if(!status.textContent.includes('again')&&!status.textContent.includes('couldn’t'))status.textContent='We’ll email you a one-time link. No password needed.';
+    if(status.textContent==='Checking sign-in availability…')status.textContent='We’ll email you a one-time link. No password needed.';
     client.auth.onAuthStateChange(()=>{setTimeout(()=>verify().catch(()=>lock('We couldn’t verify your sign-in. Please reload to retry.')),0);});
   }catch(error){lock(error.message);}
 })();

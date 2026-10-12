@@ -2,7 +2,7 @@ import {canPublishDirectly,approvedContributionCount} from './reputation.mjs';
 import { database, seedDatabase } from './db.mjs';
 import {YouTube,seconds} from './discovery.mjs';
 import {auditStatement,restrictAccount} from './operations.mjs';
-import {sharedCache,clearSharedCache} from './cache.mjs';
+import {sharedCache} from './cache.mjs';
 export async function submissionMetadata(db,env,videoId,fetcher=fetch){
  const key='submission-metadata:'+videoId,cached=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();
  if(cached){try{const c=JSON.parse(cached.value);if(Date.now()-c.fetchedAt<600000)return c;}catch{}}
@@ -151,7 +151,7 @@ export async function community(request,env,seed,user){
     if(!request.headers.get('Content-Type')?.startsWith('application/json'))fail('JSON required.',415);
     const raw=await request.text();if(raw.length>(path==='/profile'?45000:10000))fail('Submission too large.',413);
     let b;try{b=JSON.parse(raw);}catch{fail('Invalid submission.');}if(!b||typeof b!=='object')fail('Invalid submission.');
-    const now=new Date().toISOString();clearSharedCache(db);
+    const now=new Date().toISOString();
     if(path==='/submission/reopen'){
       if(!user.moderator)fail('Moderator access required.',403);
       const id=text(b.id,1,200,'Submission ID'),note=text(b.note,5,500,'Reason for reopening');

@@ -12,7 +12,7 @@ import { managePerformers } from './performers.mjs';
 import { reconcile } from './reconciliation.mjs';
 import { workbookImport } from './workbook-import.mjs';
 import { assets, seed } from './assets.mjs';
-import {sharedCache,clearSharedCache} from './cache.mjs';
+import {sharedCache} from './cache.mjs';
 import {accountAccess,operations,recordOperationalEvent,checkOperationalAlerts} from './operations.mjs';
 const json=(data,code=200)=>new Response(JSON.stringify(data),{status:code,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
 async function authorized(request,env){
@@ -34,7 +34,6 @@ export default {
     const route=new URL(request.url).pathname.replace(/\/api\/profile-pictures\/.*/, '/api/profile-pictures/:id');
     console.log(JSON.stringify({event:'request',requestId,route,method:request.method,status:response.status,durationMs:Date.now()-started}));
     response.headers.set('X-Request-ID',requestId);
-    if(request.method==='POST')clearSharedCache(env.DB);
     if(response.status>=500){const task=recordOperationalEvent(env,response.status===503?'request-unavailable':'request-error');if(ctx?.waitUntil)ctx.waitUntil(task);else await task;}
     return response;
   },

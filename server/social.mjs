@@ -1,7 +1,7 @@
 import {award} from './community.mjs';
 import {canPublishDirectly} from './reputation.mjs';
 import {database,seedDatabase} from './db.mjs';
-import {sharedCache,clearSharedCache} from './cache.mjs';
+import {sharedCache} from './cache.mjs';
 import {auditStatement} from './operations.mjs';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store'}});
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -63,7 +63,6 @@ export async function social(request,env,seed,user){try{
  if(request.headers.get('Origin')!==url.origin||request.headers.get('Sec-Fetch-Site')==='cross-site')fail('Use the Reaction Journey website.',403);
  if(!request.headers.get('Content-Type')?.startsWith('application/json'))fail('JSON required.',415);
  const raw=await request.text();if(raw.length>16000)fail('Request too large.',413);let b;try{b=JSON.parse(raw);}catch{fail('Invalid JSON.');}if(!b||typeof b!=='object')fail('Invalid request.');
- clearSharedCache(db);
  const snapshot="COALESCE((SELECT json_group_array(json_object('kind',kind,'target',target)) FROM follows WHERE user_id=? AND kind IN ('reactor','song')),'[]')";
  if(path==='/following-group'){
   if(!['create','rename','delete','activate','save'].includes(b.action))fail('Choose a group action.');
