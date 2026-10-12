@@ -14,6 +14,14 @@ const importBundle=await build({entryPoints:[fileURLToPath(new URL('workbook-imp
 assets['/workbook-import.js']={type:'text/javascript; charset=utf-8',body:importBundle.outputFiles[0].text};
 const youtubeBundle=await build({entryPoints:[fileURLToPath(new URL('youtube-subscriptions.js',root))],bundle:true,format:'iife',platform:'browser',target:'es2022',write:false,minify:true});
 assets['/youtube-subscriptions.js']={type:'text/javascript; charset=utf-8',body:youtubeBundle.outputFiles[0].text};
+
+for(const [name,type] of [['mobile-app.js','text/javascript; charset=utf-8'],['mobile-app.css','text/css; charset=utf-8'],['offline.html','text/html; charset=utf-8'],['app.webmanifest','application/manifest+json']])assets['/'+name]={type,body:await readFile(new URL(name,root),'utf8')};
+for(const name of ['app-192','app-512','app-maskable','app-apple'])assets['/images/'+name+'.png']={type:'image/png',base64:(await readFile(new URL('images/'+name+'.png',root))).toString('base64')};
+const {createHash}=await import('node:crypto');
+const workerSource=await readFile(new URL('service-worker.js',root),'utf8');
+const version=createHash('sha256').update(JSON.stringify(assets)+workerSource).digest('hex').slice(0,16);
+assets['/service-worker.js']={type:'text/javascript; charset=utf-8',body:workerSource.replaceAll('__APP_VERSION__',version)};
+
 const seed=JSON.parse(await readFile(new URL('data.json',root),'utf8'));
 seed.missionedSouls=JSON.parse(await readFile(new URL('missioned-souls-seed.json',root),'utf8'));
 seed.importRun=JSON.parse(await readFile(new URL('import-run.json',root),'utf8'));
