@@ -88,7 +88,8 @@ export async function catalog(db,seed,env) {
   for(const c of imported) if(activeIds.has('missioned-souls')) known.set(`missioned-souls:${c.id}`,{...known.get(`missioned-souls:${c.id}`),performerId:'missioned-souls',id:c.id,name:c.name,url:`https://www.youtube.com/channel/${c.id}`,status:c.currentDiscovery?'NEW REACTOR':'CATALOGED',reactions:c.reactions,discoveredAt:seed.importRun.startedAt,currentDiscovery:c.currentDiscovery});
   const masterChannels=(await db.prepare("SELECT value FROM state WHERE key >= 'master-channel-snapshot:' AND key < 'master-channel-snapshot;'").all()).results;
   for(const row of masterChannels)if(activeIds.has('missioned-souls')){const c=JSON.parse(row.value);const key=`missioned-souls:${c.id}`;known.set(key,{...known.get(key),...c,performerId:'missioned-souls',url:`https://www.youtube.com/channel/${c.id}`,currentDiscovery:false});}
-  for(const v of videos) if(!known.has(`${v.performerId}:${v.channelId}`)) known.set(`${v.performerId}:${v.channelId}`,{performerId:v.performerId,id:v.channelId,name:v.channelName,url:`https://www.youtube.com/channel/${v.channelId}`,status:'CATALOGED',reactions:videos.filter(x=>x.channelId===v.channelId&&x.performerId===v.performerId).length});
+  const videoCounts=new Map();for(const v of videos){const key=`${v.performerId}:${v.channelId}`;videoCounts.set(key,(videoCounts.get(key)||0)+1);}
+  for(const v of videos) if(!known.has(`${v.performerId}:${v.channelId}`)) known.set(`${v.performerId}:${v.channelId}`,{performerId:v.performerId,id:v.channelId,name:v.channelName,url:`https://www.youtube.com/channel/${v.channelId}`,status:'CATALOGED',reactions:videoCounts.get(`${v.performerId}:${v.channelId}`)});
   const liveStats=(await db.prepare("SELECT key,value FROM state WHERE key >= 'youtube-channel-stats:' AND key < 'youtube-channel-stats;'").all()).results;
   const byId=new Map(liveStats.map(row=>[row.key.slice('youtube-channel-stats:'.length),JSON.parse(row.value)]));
   for(const c of known.values()){
@@ -96,5 +97,5 @@ export async function catalog(db,seed,env) {
     if(live.updatedAt){c.subscribers=live.subscribers;c.subscribersHidden=live.subscribersHidden;c.subscribersUpdatedAt=live.updatedAt;c.channelViews=live.channelViews;c.channelVideoCount=live.channelVideoCount;c.description=live.description;c.thumbnailUrl=live.thumbnailUrl;c.youtubeName=live.youtubeName;}
     c.youtubeAvailability=live.availability||'unknown';c.subscriberRefreshError=live.error||null;
   }
-  return {performers,channels:[...known.values()],videos,stats:{channels:new Set([...known.values()].map(c=>c.id)).size,videos:videos.length,performers:performers.length},discovery:await status(db,env)};
+  return {performers,channels:[...known.values()],videos,stats:{channels:new Set([...known.values()].map(c=>c.id)).size,videos:videos.length,performers:performers.length}};
 }

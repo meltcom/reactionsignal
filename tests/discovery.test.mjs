@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
-import { seedDatabase, catalog, EXCLUDED } from '../server/db.mjs';
+import { seedDatabase, catalog, status, EXCLUDED } from '../server/db.mjs';
 import { classify, seconds, saveVideo, runDiscovery, YouTube, searchDailyLimit, searchInterval, performerQueries, recentSongTitles } from '../server/discovery.mjs';
 function db(historical=false){
   const sql=new DatabaseSync(':memory:');
@@ -81,11 +81,11 @@ test('missing credentials never report success or fetch YouTube',async()=>{
 });
 test('schedule status comes from actual scheduled invocations, not manual runs',async()=>{
  const d=db();await seedDatabase(d,seed);
- assert.equal((await catalog(d,seed,{YOUTUBE_API_KEY:'fixture-only'})).discovery.automation,'not_connected');
+ assert.equal((await status(d,{YOUTUBE_API_KEY:'fixture-only'})).automation,'not_connected');
  await d.prepare("INSERT INTO state(key,value) VALUES('last-scheduled-invocation',?)").bind(new Date().toISOString()).run();
- assert.equal((await catalog(d,seed,{YOUTUBE_API_KEY:'fixture-only'})).discovery.automation,'active');
+ assert.equal((await status(d,{YOUTUBE_API_KEY:'fixture-only'})).automation,'active');
  await d.prepare("UPDATE state SET value=? WHERE key='last-scheduled-invocation'").bind(new Date(Date.now()-25*3600000).toISOString()).run();
- assert.equal((await catalog(d,seed,{YOUTUBE_API_KEY:'fixture-only'})).discovery.automation,'stale');
+ assert.equal((await status(d,{YOUTUBE_API_KEY:'fixture-only'})).automation,'stale');
 });
 test('known channel scan persists fixture data and throttles immediate repeats',async()=>{
  const d=db();await seedDatabase(d,seed);await d.prepare("UPDATE channels SET discovery_scope='eligible' WHERE id=?").bind(channel).run();let calls=0;const fake=async url=>{calls++;const endpoint=url.pathname.split('/').pop();return Response.json(endpoint==='channels'?{items:[{id:channel,contentDetails:{relatedPlaylists:{uploads:'uploads-example'}}}]}:endpoint==='playlistItems'?{items:[{contentDetails:{videoId:'abcdefghijk',videoPublishedAt:'2026-09-24T12:00:00Z'}}]}:endpoint==='videos'?{items:[item()]}:{items:[]});};
@@ -98,7 +98,7 @@ test('quota rejection leaves the scan resumable and last successful date empty',
  const d=db();const r=await runDiscovery({DB:d,YOUTUBE_API_KEY:'fixture-only'},seed,async()=>Response.json({error:{errors:[{reason:'quotaExceeded'}]}},{status:403}));
  assert.equal(r.status,'partial');assert.match(r.detail,/quotaExceeded/);
  assert.equal((await d.prepare('SELECT checked_at FROM channels').first()).checked_at,null);
- assert.equal((await catalog(d,seed,{})).discovery.lastSuccessfulBatchAt,null);
+ assert.equal((await status(d,{})).lastSuccessfulBatchAt,null);
 });
 test('transient errors retry without leaking the API key',async()=>{
  let calls=0;const api=new YouTube('never-log-this',async url=>{assert.equal(url.searchParams.has('key'),false);return ++calls===1?Response.json({}, {status:503}):Response.json({items:[]});});
@@ -110,7 +110,7 @@ test('real pilot seed loads persistently without reintroducing excluded videos',
  assert.ok(result.videos.length>300);assert.ok(result.channels.length>=390);
  assert.equal(result.videos.some(v=>EXCLUDED.includes(v.id)),false);
  assert.equal(result.videos.some(v=>v.id==='gXWQQNUpKcA'),false);
- assert.equal(result.discovery.automation,'not_connected');
+ assert.equal((await status(d,{})).automation,'not_connected');
 });
 test('reviewed discovery run imports once with probable labels and duplicate holds',async()=>{
  const input=JSON.parse(readFileSync(new URL('../data.json',import.meta.url),'utf8'));
@@ -237,7 +237,7 @@ test('actual packaged scheduled handler records invocation without YouTube crede
  await worker.scheduled({cron:'*/15 * * * *'},{DB:d},{waitUntil(p){pending.push(p);}});
  await Promise.all(pending);
  const recorded=await d.prepare("SELECT value FROM state WHERE key='last-scheduled-invocation'").first();
- assert.ok(Number.isFinite(Date.parse(recorded.value)));assert.equal((await catalog(d,seed,{})).discovery.automation,'active');
+ assert.ok(Number.isFinite(Date.parse(recorded.value)));assert.equal((await status(d,{})).automation,'active');
 });
 
 test('candidate hold repair retains the record, audits it, and never overrides reviewed decisions',async()=>{
