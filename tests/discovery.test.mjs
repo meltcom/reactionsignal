@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { seedDatabase, catalog, EXCLUDED } from '../server/db.mjs';
-import { classify, seconds, saveVideo, runDiscovery, YouTube, searchDailyLimit } from '../server/discovery.mjs';
+import { classify, seconds, saveVideo, runDiscovery, YouTube, searchDailyLimit, searchInterval, performerQueries, recentSongTitles } from '../server/discovery.mjs';
 function db(historical=false){
   const sql=new DatabaseSync(':memory:');
   for(const name of readdirSync(new URL('../drizzle/',import.meta.url)).filter(x=>x.endsWith('.sql')).sort())sql.exec(readFileSync(new URL(`../drizzle/${name}`,import.meta.url),'utf8'));
@@ -163,6 +163,7 @@ test('Missioned Souls history resumes pages, honors daily budgets and holds unce
  const capped=await runDiscovery(env,seed,fetcher,{performerId:'missioned-souls'});assert.equal(capped.status,'partial');assert.match(capped.detail,/Daily search budget/);assert.equal(searches,1);
  assert.equal((await d.prepare("SELECT value FROM state WHERE key='search-progress:missioned-souls'").first()).value,progress);
  await d.prepare("DELETE FROM state WHERE key='discovery-lease' OR key LIKE 'search-budget:%'").run();
+ await d.prepare("UPDATE state SET value=? WHERE key='search-touch:missioned-souls'").bind(new Date(Date.now()-25*3600000).toISOString()).run();
  await runDiscovery(env,seed,fetcher,{performerId:'missioned-souls'});assert.equal(searches,2);
  assert.equal(await d.prepare("SELECT value FROM state WHERE key='search-progress:missioned-souls'").first(),null);
  assert.ok(await d.prepare("SELECT value FROM state WHERE key='search:missioned-souls'").first());
@@ -171,6 +172,27 @@ test('Missioned Souls history resumes pages, honors daily budgets and holds unce
 });
 test('unknown durations no longer block clear title matches',()=>{
  assert.equal(classify('New Act reaction',['New Act'],null),'CONFIRMED');
+});
+test('rotation keeps broad searches between supplemental queries and uses recent dated songs',()=>{
+ const p={name:'Missioned Souls',aliases:JSON.stringify(['Missioned Souls','MissionedSoul'])};
+ const songs=recentSongTitles([{title:'Old Song by Artist',publishedAt:'2020-01-01'},{title:'Hysteria by Muse | Missioned Souls',publishedAt:'2026-10-11'},{title:'Undated by Artist'}]);
+ assert.deepEqual(songs,['Hysteria','Old Song']);
+ const q=performerQueries(p,songs);assert.equal(q[0],'"Missioned Souls" reaction');assert.equal(q[1],'"Missioned Souls"');assert.ok(q.includes('"Missioned Souls" "Hysteria"'));assert.ok(q.filter((_,i)=>i%2===0).every(x=>x.endsWith(' reaction')));
+ assert.equal(searchInterval({}),75*60000);assert.equal(searchInterval({DISCOVERY_DAILY_SEARCH_LIMIT:10}),150*60000);
+});
+test('paced rotation overlaps windows, preserves pagination, and counts unique discoveries only once',async()=>{
+ const d=await isolatedDiscovery();await d.prepare("UPDATE channels SET discovery_scope='other'").run();
+ const recent=new Date(Date.now()-2*3600000).toISOString();await d.prepare("INSERT INTO state(key,value) VALUES('search:missioned-souls',?)").bind(recent).run();
+ let calls=0;const queries=[];
+ const fake=async url=>{if(url.pathname.endsWith('/search')){calls++;queries.push(url.searchParams.get('q'));assert.equal(url.searchParams.get('publishedAfter'),new Date(Date.parse(recent)-7*86400000).toISOString());return Response.json({items:[{id:{videoId:'newvideo123'}}],...(calls===1?{nextPageToken:'next'}:{})});}if(url.pathname.endsWith('/videos'))return Response.json({items:[{...item('newvideo123'),snippet:{...item().snippet,channelId:'UCnewreactor123456789012',publishedAt:new Date(Date.now()-600000).toISOString()}}]});return Response.json({items:[]});};
+ const env={DB:d,YOUTUBE_API_KEY:'fixture-only'};
+ await runDiscovery(env,seed,fake);assert.equal(calls,1);
+ await d.prepare("DELETE FROM state WHERE key='discovery-lease'").run();
+ await runDiscovery(env,seed,fake);assert.equal(calls,1);
+ await d.prepare("DELETE FROM state WHERE key='discovery-lease'").run();
+ await d.prepare("UPDATE state SET value=? WHERE key='search-touch:missioned-souls'").bind(new Date(Date.now()-76*60000).toISOString()).run();
+ await runDiscovery(env,seed,fake);assert.equal(calls,2);assert.equal(queries[0],queries[1]);
+ const metric=JSON.parse((await d.prepare("SELECT value FROM state WHERE key LIKE 'search-query:%'").first()).value);assert.equal(metric.pages,2);assert.equal(metric.uniqueVideos,1);assert.equal(metric.newReactors,1);assert.equal(metric.delaySamples,1);
 });
 
 async function isolatedDiscovery(){
@@ -182,18 +204,18 @@ async function isolatedDiscovery(){
  await saveVideo(d,video,performers,new Date().toISOString(),'fixture');
  return d;
 }
-test('active reactors retain reserved slots during a daily backlog, and search precedes history',async()=>{
+test('overdue coverage precedes active reactors, and search precedes history',async()=>{
  const d=await isolatedDiscovery();
  for(let i=0;i<8;i++)await d.prepare("INSERT INTO channels(id,name,uploads,discovery_scope) VALUES(?,?,?,'eligible')").bind('backlog-'+i,'Backlog','backlog-uploads-'+i).run();
  await d.prepare("UPDATE channels SET next_page='older',scan_before='2020-01-01' WHERE id=?").bind(channel).run();
  const requests=[];const fake=async url=>{requests.push({endpoint:url.pathname.split('/').pop(),playlist:url.searchParams.get('playlistId'),page:url.searchParams.get('pageToken')});return Response.json({items:[]});};
  await runDiscovery({DB:d,YOUTUBE_API_KEY:'fixture-only',DISCOVERY_RECENT_BATCH_SIZE:4},seed,fake);
  const recent=requests.filter(r=>r.endpoint==='playlistItems'&&!r.page);
- assert.equal(recent.length,4);assert.equal(recent[0].playlist,'active-uploads');
+ assert.equal(recent.length,4);assert.equal(recent[0].playlist,'backlog-uploads-0');
  assert.equal(new Set(recent.map(r=>r.playlist)).size,4);
  assert.ok(requests.findIndex(r=>r.endpoint==='search')<requests.findIndex(r=>r.page==='older'));
 });
-test('completed searches repeat after two hours within the daily cap',async()=>{
+test('completed searches use the interval appropriate to the daily cap',async()=>{
  const d=await isolatedDiscovery();
  await d.prepare("UPDATE channels SET discovery_scope='other'").run();
  const now=new Date().toISOString();
@@ -202,7 +224,7 @@ test('completed searches repeat after two hours within the daily cap',async()=>{
  const env={DB:d,YOUTUBE_API_KEY:'fixture-only',DISCOVERY_DAILY_SEARCH_LIMIT:1};
  await runDiscovery(env,seed,fake);assert.equal(searches,0);
  await d.prepare("DELETE FROM state WHERE key='discovery-lease'").run();
- await d.prepare("UPDATE state SET value=? WHERE key='search:missioned-souls'").bind(new Date(Date.now()-3*3600000).toISOString()).run();
+ await d.prepare("UPDATE state SET value=? WHERE key='search:missioned-souls'").bind(new Date(Date.now()-25*3600000).toISOString()).run();
  await runDiscovery(env,seed,fake);assert.equal(searches,1);
  await d.prepare("DELETE FROM state WHERE key='discovery-lease'").run();
  await d.prepare("UPDATE state SET value=? WHERE key='search:missioned-souls'").bind(new Date(Date.now()-3*3600000).toISOString()).run();
