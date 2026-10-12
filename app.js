@@ -54,6 +54,11 @@ function renderDiscovery() {
   if(communityState?.moderator===true)for(const r of d?.runs||[]){let queries=[];try{queries=JSON.parse(r.query_metrics||'[]');}catch{}if(!queries.length)continue;const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent=`Query diagnostics: ${r.started_at}`;details.append(summary);for(const q of queries){const line=document.createElement('p');line.textContent=`${q.rowsRead} rows read · ${q.rowsWritten} written · ${q.calls} calls · ${q.ms}ms individual requests · ${q.query}`;details.append(line);}$('discoveryRuns').append(details);}
 
 }
+
+async function refreshDiscoveryDiagnostics(){
+  if(!communityState?.moderator)return;
+  try{const response=await reactionAuth.fetch('/api/status',{cache:'no-store'});if(!response.ok)return;catalog.discovery=await response.json();renderDiscovery();}catch{}
+}
 async function init() {
   try {
     // Start independent member reads together; only rendering needs the catalog.
@@ -64,6 +69,7 @@ async function init() {
     await loadDashboard(memberDashboard);
     renderAll();renderDiscovery();
     loadCoverage().catch(error=>communityMessage('communityStatus',error.message));
+    if(communityState?.moderator)refreshDiscoveryDiagnostics();
   } catch (error) {
     $('discoveryStatus').textContent='The catalog service is temporarily unavailable. Please reload to retry.';
     $('videoGrid').innerHTML='<div class="empty-state">The catalog is temporarily unavailable. Please try again shortly.</div>';

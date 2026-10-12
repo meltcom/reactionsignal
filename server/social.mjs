@@ -1,6 +1,8 @@
 import {award} from './community.mjs';
 import {canPublishDirectly} from './reputation.mjs';
 import {database,seedDatabase} from './db.mjs';
+import {sharedCache,clearSharedCache} from './cache.mjs';
+import {auditStatement} from './operations.mjs';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store'}});
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const txt=(v,min,max)=>{if(typeof v!=='string'||v.trim().length<min||v.trim().length>max)fail(`Use ${min}–${max} characters.`);return v.trim();};
@@ -26,10 +28,11 @@ export async function social(request,env,seed,user){try{
  const run=async(q,...v)=>db.prepare(q).bind(...v).run();
  if(request.method==='GET'){
   if(path==='/dashboard'){
+    const aggregateRevision=(await first("SELECT value FROM state WHERE key='aggregate-revision'"))?.value||'0';
     // These account-scoped reads are independent; avoid one round trip after another.
     const reads={
       userId: async()=>(user.id),
-      reactorScores: async()=>(await all('SELECT channel_id,COUNT(*) count,AVG(score) average FROM reactor_ratings GROUP BY channel_id')),
+      reactorScores: async()=>sharedCache(db,'reactor-scores:'+aggregateRevision,30000,()=>all('SELECT channel_id,COUNT(*) count,AVG(score) average FROM reactor_ratings GROUP BY channel_id')),
       myReactorRatings: async()=>(await all('SELECT channel_id,score FROM reactor_ratings WHERE user_id=?',user.id)),
       hiddenReactors: async()=>(await all('SELECT h.channel_id,c.name FROM hidden_reactors h JOIN channels c ON c.id=h.channel_id WHERE h.user_id=? ORDER BY c.name',user.id)),
       preferences: async()=>(JSON.parse((await first('SELECT settings FROM preferences WHERE user_id=?',user.id))?.settings||'{}')),
@@ -40,8 +43,8 @@ export async function social(request,env,seed,user){try{
       blocks: async()=>(await all('SELECT b.target,m.name,m.profile_icon,m.profile_color,m.profile_picture,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM blocks b LEFT JOIN members m ON m.id=b.target WHERE b.user_id=?',user.id)),
       reputation: async()=>(await all('SELECT amount,reason,created_at FROM reputation_events WHERE user_id=? ORDER BY created_at DESC LIMIT 100',user.id)),
       reputationTotal: async()=>((await first('SELECT COALESCE(SUM(amount),0) total FROM reputation_events WHERE user_id=?',user.id)).total),
-      leaders: async()=>(await all('SELECT m.name,m.profile_icon,m.profile_color,m.profile_picture,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points,SUM(r.amount) reputation FROM reputation_events r JOIN members m ON m.id=r.user_id GROUP BY r.user_id HAVING SUM(r.amount)>0 ORDER BY reputation DESC LIMIT 20')),
-      scores: async()=>(await all("SELECT video_id,COUNT(*) comments FROM contributions WHERE kind='comment' AND channel_id IS NULL AND status='accepted' GROUP BY video_id")),
+      leaders: async()=>sharedCache(db,'reputation-leaders:'+aggregateRevision,30000,()=>all('SELECT m.name,m.profile_icon,m.profile_color,m.profile_picture,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points,SUM(r.amount) reputation FROM reputation_events r JOIN members m ON m.id=r.user_id GROUP BY r.user_id HAVING SUM(r.amount)>0 ORDER BY reputation DESC LIMIT 20')),
+      scores: async()=>sharedCache(db,'comment-counts:'+aggregateRevision,30000,()=>all("SELECT video_id,COUNT(*) comments FROM contributions WHERE kind='comment' AND channel_id IS NULL AND status='accepted' GROUP BY video_id")),
     };
     return json(Object.fromEntries(await Promise.all(
       Object.entries(reads).map(async([key,read])=>[key,await read()])
@@ -60,6 +63,7 @@ export async function social(request,env,seed,user){try{
  if(request.headers.get('Origin')!==url.origin||request.headers.get('Sec-Fetch-Site')==='cross-site')fail('Use the Reaction Journey website.',403);
  if(!request.headers.get('Content-Type')?.startsWith('application/json'))fail('JSON required.',415);
  const raw=await request.text();if(raw.length>16000)fail('Request too large.',413);let b;try{b=JSON.parse(raw);}catch{fail('Invalid JSON.');}if(!b||typeof b!=='object')fail('Invalid request.');
+ clearSharedCache(db);
  const snapshot="COALESCE((SELECT json_group_array(json_object('kind',kind,'target',target)) FROM follows WHERE user_id=? AND kind IN ('reactor','song')),'[]')";
  if(path==='/following-group'){
   if(!['create','rename','delete','activate','save'].includes(b.action))fail('Choose a group action.');
@@ -119,14 +123,36 @@ export async function social(request,env,seed,user){try{
  if(path==='/presence'){if(!rooms.some(r=>r.id===b.room))fail('Unknown room.');await run('INSERT INTO room_members VALUES(?,?,?,?) ON CONFLICT(user_id,room) DO UPDATE SET last_read=excluded.last_read,seen_at=excluded.seen_at',user.id,b.room,now,now);return json({ok:true});}
  if(path==='/like'){if(!await first("SELECT 1 FROM contributions WHERE id=? AND kind='comment' AND status='accepted'",b.id))fail('Comment unavailable.');await run(b.remove?'DELETE FROM comment_likes WHERE user_id=? AND comment_id=?':'INSERT OR IGNORE INTO comment_likes VALUES(?,?)',user.id,b.id);return json({ok:true});}
  if(path==='/report'){if(!['comment','chat'].includes(b.kind))fail('Invalid report.');const exists=await first(b.kind==='comment'?"SELECT 1 FROM contributions WHERE id=? AND kind='comment' AND status='accepted'":"SELECT 1 FROM chat_messages WHERE id=? AND status='visible'",b.target);if(!exists)fail('Content unavailable.');if((await first('SELECT COUNT(*) n FROM abuse_reports WHERE user_id=? AND created_at>=?',user.id,now.slice(0,10))).n>=20)fail('Daily report limit reached.');await run('INSERT OR IGNORE INTO abuse_reports VALUES(?,?,?,?,?,\'pending\',?)',`${user.id}:${b.kind}:${b.target}`,user.id,b.kind,b.target,txt(b.body,5,500),now);return json({ok:true});}
- if(path==='/moderate'){if(!user.moderator)fail('Moderator access required.',403);const report=await first("SELECT * FROM abuse_reports WHERE id=? AND status='pending'",b.id);if(!report)fail('Report already resolved.');if(!['dismiss','hide','mute'].includes(b.action))fail('Invalid decision.');const item=await first(report.kind==='chat'?'SELECT user_id FROM chat_messages WHERE id=?':'SELECT user_id FROM contributions WHERE id=?',report.target);const stmts=[];
-  if(b.action!=='dismiss'){stmts.push(db.prepare(report.kind==='chat'?"UPDATE chat_messages SET status='hidden' WHERE id=?":"UPDATE contributions SET status='hidden',review_note='Community abuse report upheld' WHERE id=?").bind(report.target));if(report.kind==='comment'){stmts.push(db.prepare("INSERT OR IGNORE INTO points SELECT ?,user_id,'reversal',-amount,? FROM points WHERE id=? AND amount>0").bind(`revoke:${report.target}`,now,report.target));}}
-  if(b.action==='mute'&&item)stmts.push(db.prepare('INSERT INTO mutes VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET until=excluded.until,reason=excluded.reason').bind(item.user_id,new Date(Date.now()+86400000).toISOString(),'Community abuse report upheld'));
-  stmts.push(db.prepare('UPDATE abuse_reports SET status=? WHERE id=?').bind(b.action,report.id));await db.batch(stmts);return json({ok:true});
+ if(path==='/moderate'){
+  if(!user.moderator)fail('Moderator access required.',403);
+  const report=await first("SELECT * FROM abuse_reports WHERE id=? AND status='pending'",b.id);if(!report)fail('Report already resolved.',409);
+  if(!['dismiss','hide','mute'].includes(b.action))fail('Invalid decision.');
+  const reason=b.note===undefined?'Community abuse report reviewed':txt(b.note,5,500);
+  const table=report.kind==='chat'?'chat_messages':'contributions',item=await first('SELECT * FROM '+table+' WHERE id=?',report.target);
+  const guard="EXISTS(SELECT 1 FROM abuse_reports WHERE id=? AND status='pending')",stmts=[];
+  // Batch guards stop a second reviewer from applying a stale decision.
+  stmts.push(db.prepare('INSERT INTO moderation_audit SELECT ?,?,?,?,?,?,?,?,? WHERE '+guard).bind(crypto.randomUUID(),user.id,b.action,report.kind,report.target,reason,JSON.stringify({report,item}),JSON.stringify({status:b.action}),now,report.id));
+  if(b.action!=='dismiss'){
+   stmts.push(db.prepare('UPDATE '+table+" SET status='hidden' WHERE id=? AND "+guard).bind(report.target,report.id));
+   if(report.kind==='comment')stmts.push(db.prepare("INSERT OR IGNORE INTO points SELECT ?,user_id,'reversal',-amount,? FROM points WHERE id=? AND amount>0 AND "+guard).bind('revoke:'+report.target,now,report.target,report.id));
+  }
+  if(b.action==='mute'&&item)stmts.push(db.prepare('INSERT INTO mutes SELECT ?,?,? WHERE '+guard+' ON CONFLICT(user_id) DO UPDATE SET until=excluded.until,reason=excluded.reason').bind(item.user_id,new Date(Date.now()+86400000).toISOString(),reason,report.id));
+  stmts.push(db.prepare("UPDATE abuse_reports SET status=? WHERE id=? AND status='pending'").bind(b.action,report.id));
+  const result=await db.batch(stmts);if(!result[0].meta?.changes)fail('Report already resolved. Refresh the queue.',409);return json({ok:true});
  }
- if(path==='/mute'){if(!user.moderator)fail('Moderator access required.',403);if(b.id===user.id||!await first('SELECT 1 FROM members WHERE id=?',b.id))fail('Choose another member.');await run('INSERT INTO mutes VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET until=excluded.until,reason=excluded.reason',b.id,new Date(Date.now()+86400000).toISOString(),'Moderator action');return json({ok:true});}
- if(path==='/unmute'){if(!user.moderator)fail('Moderator access required.',403);await run('DELETE FROM mutes WHERE user_id=?',b.id);return json({ok:true});}
- if(path==='/delete'){if(!['chat','comment'].includes(b.kind))fail('Invalid content type.');const item=await first(b.kind==='chat'?'SELECT user_id FROM chat_messages WHERE id=?':"SELECT user_id FROM contributions WHERE id=? AND kind='comment'",b.id);if(!item||item.user_id!==user.id&&!user.moderator)fail('Not allowed.',403);const ops=[db.prepare(b.kind==='chat'?"UPDATE chat_messages SET status='deleted' WHERE id=?":"UPDATE contributions SET status='hidden' WHERE id=?").bind(b.id)];if(b.kind==='comment'){ops.push(db.prepare("INSERT OR IGNORE INTO points SELECT ?,user_id,'reversal',-amount,? FROM points WHERE id=? AND amount>0").bind(`revoke:${b.id}`,now,b.id));}await db.batch(ops);return json({ok:true});}
+ if(path==='/mute'||path==='/unmute'){
+  if(!user.moderator)fail('Moderator access required.',403);if(b.id===user.id||!await first('SELECT 1 FROM members WHERE id=?',b.id))fail('Choose another member.');
+  const before=await first('SELECT * FROM mutes WHERE user_id=?',b.id),reason=b.note===undefined?'Moderator posting restriction':txt(b.note,5,500);
+  await db.batch([path==='/mute'?db.prepare('INSERT INTO mutes VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET until=excluded.until,reason=excluded.reason').bind(b.id,new Date(Date.now()+86400000).toISOString(),reason):db.prepare('DELETE FROM mutes WHERE user_id=?').bind(b.id),auditStatement(db,user,path.slice(1),'member',b.id,reason,before,{muted:path==='/mute'})]);return json({ok:true});
+ }
+ if(path==='/delete'){
+  if(!['chat','comment'].includes(b.kind))fail('Invalid content type.');
+  const table=b.kind==='chat'?'chat_messages':'contributions',item=await first('SELECT * FROM '+table+' WHERE id=?',b.id);
+  if(!item||b.kind==='comment'&&item.kind!=='comment'||item.user_id!==user.id&&!user.moderator)fail('Not allowed.',403);
+  const ops=[db.prepare('UPDATE '+table+' SET status=? WHERE id=?').bind(b.kind==='chat'?'deleted':'hidden',b.id),auditStatement(db,user,'delete',b.kind,b.id,b.note===undefined?(item.user_id===user.id?'Author removed own content':'Moderator removed content'):txt(b.note,5,500),item,{status:b.kind==='chat'?'deleted':'hidden'})];
+  if(b.kind==='comment')ops.push(db.prepare("INSERT OR IGNORE INTO points SELECT ?,user_id,'reversal',-amount,? FROM points WHERE id=? AND amount>0").bind('revoke:'+b.id,now,b.id));
+  await db.batch(ops);return json({ok:true});
+ }
  if(await first('SELECT 1 FROM mutes WHERE user_id=? AND until>?',user.id,now))fail('Posting is temporarily muted. You can still browse.',403);
  if(path==='/chat'){if(!rooms.some(r=>r.id===b.room))fail('Unknown room.');const body=txt(b.body,1,2000);const result=await run("INSERT INTO chat_messages SELECT ?,?,?,?,'visible',? WHERE (SELECT COUNT(*) FROM chat_messages WHERE user_id=? AND created_at>?)<1 AND (SELECT COUNT(*) FROM chat_messages WHERE user_id=? AND created_at>=?)<200",crypto.randomUUID(),b.room,user.id,body,now,user.id,new Date(Date.now()-3000).toISOString(),user.id,now.slice(0,10));if(!result.meta.changes)fail('Please wait 3 seconds between messages. Daily limit: 200.',429);return json({ok:true});}
  if(path==='/comment'){const channel=b.channelId||null;if(channel){if(b.videoId||!/^UC[\w-]{22}$/.test(channel)||!await first('SELECT 1 FROM channels WHERE id=?',channel))fail('Choose a valid reactor.');b.videoId='';b.performerId='missioned-souls';}const direct=await canPublishDirectly(db,user.id),status=direct?'accepted':'pending';const body=txt(b.body,10,2000);if(!channel&&(!performerIds.includes(b.performerId)||!await first("SELECT 1 FROM matches WHERE video_id=? AND performer_id=? AND status='CONFIRMED'",b.videoId,b.performerId)))fail('Choose a confirmed video.');let parent=b.parentId||null;if(parent&&!await first("SELECT 1 FROM contributions WHERE id=? AND video_id=? AND channel_id IS ? AND kind='comment' AND status='accepted'",parent,b.videoId,channel))fail('Reply target unavailable.');

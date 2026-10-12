@@ -28,8 +28,8 @@ async function verify(){
   if(data.session){
     const response=await fetch('/api/auth/me',{headers:{Authorization:`Bearer ${data.session.access_token}`},cache:'no-store'});
     if(response.ok)account=await response.json();
-    else if(response.status===401||response.status===403){await client.auth.signOut();status.textContent='Please sign in again to continue.';}
-    else status.textContent='We couldn’t verify your sign-in. Please reload to retry.';
+    else if(response.status===401||response.status===403){const message=await response.json().catch(()=>({}));await client.auth.signOut();status.textContent=message.error||'Please sign in again to continue.';}
+    else {paint();status.textContent='We couldn’t verify your sign-in. Please reload to retry.';return null;}
   }
   paint();
   if(oldId&&oldId!==account?.id){location.replace('/');return;}
@@ -60,6 +60,7 @@ window.reactionAuth={ready,getAccessToken,showDialog:showSignIn,get account(){re
   const headers=new Headers(options.headers);headers.set('Authorization',`Bearer ${token}`);
   const response=await fetch(url,{...options,headers});
   if(response.status===401)lock('Your sign-in has expired. Please sign in again.');
+  if(response.status===403){const data=await response.clone().json().catch(()=>({}));if(data.restriction)lock(data.error||'Account access is restricted.');}
   return response;
 }};
 button.onclick=showSignIn;
