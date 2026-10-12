@@ -699,3 +699,13 @@ Moderator Queue starts with five collapsed sections: Automatic discoveries, Memb
 - Resets clear current follows and deactivate the active group while retaining saved groups. A separate reactor or song reset saves the active group’s current follows first; Master Reset retains its last saved snapshot. Switching to a saved group restores that snapshot.
 
 - View followed reactions opens the Following feed. Other feed filters still apply. Following groups choose who and what you follow; Saved Views store filters and layout.
+
+# Discovery coverage and performer searches
+
+Eligible channels whose latest uploads have not been checked in 24 hours receive priority over repeat checks of active channels. API failures retain retry delays. Moderator diagnostics list up to 50 coverage gaps with the last successful check, retry time, and error; a new eligible channel may have no successful check yet.
+
+Performer discovery alternates broad performer searches with a name-only search and up to three recent dated song searches. Song titles come from stored official MS Journey titles in “Song by Artist” format or existing catalog song fields. Missing song information leaves broad searches in rotation. Search windows overlap by seven days; video IDs prevent duplicate catalog entries and existing moderation decisions remain intact.
+
+With the default 20-page UTC daily budget, search pages are spaced at least 75 minutes apart, including continuations. Lower limits increase the interval. Existing legacy cursors finish with their original fixed windows. Runtime limits or API failures may delay a search; the daily cap is never increased by this update.
+
+Moderator query diagnostics show cumulative pages, newly cataloged videos, newly eligible reactors, and nonnegative publication-to-discovery delays up to seven days. Metrics start with this update; already known videos do not count as new discoveries.
