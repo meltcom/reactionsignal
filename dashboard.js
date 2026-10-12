@@ -140,7 +140,7 @@ let catalogRefreshRunning=false;
 setInterval(async()=>{
  if(!ready||!reactionAuth.account||document.hidden||catalogRefreshRunning||!['feed','reactors'].includes(page))return;
  catalogRefreshRunning=true;
- try{await reloadMemberCatalog();if(communityState?.moderator&&page==='reactors')await refreshDiscoveryDiagnostics();renderDiscovery();}catch{ /* Preserve the current feed during a temporary outage. */ }
+ try{await reloadMemberCatalog();if(communityState?.moderator)await refreshDiscoveryDiagnostics();renderDiscovery();}catch{ /* Preserve the current feed during a temporary outage. */ }
  finally{catalogRefreshRunning=false;}
 },60000);
 
