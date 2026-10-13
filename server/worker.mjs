@@ -1,6 +1,7 @@
 import {discoveryCycle} from './rss.mjs';
 import { missionedSouls, scheduledMissionedSouls } from './missioned-souls.mjs';
 import { database, seedDatabase, catalog, status } from './db.mjs';
+import {finishConnection,checkYoutubeConnections} from './youtube-connection.mjs';
 import { youtubeSubscriptions } from './youtube-subscriptions.mjs';
 import { social } from './social.mjs';
 import { community, profilePicture } from './community.mjs';
@@ -38,6 +39,7 @@ export default {
     return response;
   },
   async scheduled(event,env,ctx){
+    ctx.waitUntil(checkYoutubeConnections(env).catch(()=>console.error('YouTube permission checks failed')));
     ctx.waitUntil(refreshChannelStats(env).catch(()=>recordOperationalEvent(env,'channel-refresh-failed')));
     ctx.waitUntil((async()=>{
       try{
@@ -55,6 +57,7 @@ async function handleRequest(request,env,ctx){
     try{
       if(path.startsWith('/api/profile-pictures/'))return await profilePicture(request,env);
       if(path==='/api/youtube/push')return await youtubePush(request,env,seed,ctx);
+      if(path==='/api/youtube/subscriptions/callback'&&request.method==='GET')return await finishConnection(request,env);
       if(path.startsWith('/api/youtube/subscriptions/')){
         const result=await member(request,env);if(result.error)return result.error;
         return await youtubeSubscriptions(request,env,seed,result.user);

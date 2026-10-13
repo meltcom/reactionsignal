@@ -48,13 +48,13 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - Review the matched catalog reactors, change the selections, then choose Follow selected reactors. Select 1–100 per confirmation. Already followed, hidden, and outside-catalog channels are counted separately and are not added as new follows.
 
-- Repeat Import / re-import YouTube subscriptions anytime to check newly subscribed channels or another YouTube account. It adds selected follows without removing existing follows; it is not an automatic synchronization.
+- Repeat Import / re-import YouTube subscriptions anytime to check newly subscribed channels or another YouTube account after disconnecting the current connection. It adds selected follows without removing existing follows; it is not an automatic synchronization.
 
-- Cancel clears the current preview without changing follows. The import does not change your YouTube subscriptions. Only confirmed reactor IDs are saved; the complete subscription list and Google access token are not stored by Reaction Journey.
+- Cancel clears the current preview without changing follows. The import does not change your YouTube subscriptions. Only confirmed reactor IDs are saved as tracked imported follows. The full subscription response is not retained. An encrypted Google refresh token is stored on the server for daily permission checks and on-demand imports.
 
-- After a reset, re-import can help rebuild reactor follows. Revoking Google permission does not remove follows already saved in Reaction Journey. Manage that permission through the Google account connections link in the import panel.
+- After a reset, re-import can help rebuild reactor follows. Disconnect YouTube and delete imported follows removes follows tracked to your connection and requests Google revocation. Revocation in Google settings is detected during daily permission checks or the next import, and tracked imported follows are removed. Manual follows, ratings and favorites remain. Tracked imports stay outside saved following groups and remain followed when you switch groups. Older imports cannot be distinguished from manual follows; review them in Following or contact support.
 
-- If the Google popup is closed or blocked, retry Connect YouTube. For origin_mismatch or access restrictions, report the exact message and site address to the administrator. Domain ownership verification and permission to use this OAuth feature are separate checks.
+- Connect YouTube redirects to Google and returns to Reaction Journey. If authorization is cancelled, retry Connect YouTube. For origin_mismatch or access restrictions, report the exact message and site address to the administrator. Domain ownership verification and permission to use this OAuth feature are separate checks.
 
 ### Reset follows or use Master Reset
 
@@ -709,3 +709,7 @@ Performer discovery alternates broad performer searches with a name-only search 
 With the default 20-page UTC daily budget, search pages are spaced at least 75 minutes apart, including continuations. Lower limits increase the interval. Existing legacy cursors finish with their original fixed windows. Runtime limits or API failures may delay a search; the daily cap is never increased by this update.
 
 Moderator query diagnostics show cumulative pages, newly cataloged videos, newly eligible reactors, and nonnegative publication-to-discovery delays up to seven days. Metrics start with this update; already known videos do not count as new discoveries.
+
+### Moderator discovery timing
+
+Fresh-upload timing uses observations recorded in the past 24 hours where discovery was within 24 hours of publication. It shows sample count, median, average and maximum, including a source breakdown. Older discoveries (more than 24 hours after publication) are reported separately, including historical finds older than seven days. Missing or negative timing, such as advance premieres, is excluded and counted separately. The median is the middle delay, or the average of the two middle delays for an even number of observations. The two timing groups use the same discovery window; old finds do not inflate the fresh-upload measurement. These reporting and database-batching changes do not change polling intervals or the daily search quota.
