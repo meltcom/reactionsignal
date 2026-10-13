@@ -31,10 +31,15 @@ export async function saveVideos(db,items,performers,runTime,source){
   const unique=[...new Map(items.filter(item=>/^[\w-]{11}$/.test(item.id)&&item.snippet&&item.status?.privacyStatus==='public').map(item=>[item.id,item])).values()];
   let inserted=0;
   for(let offset=0;offset<unique.length;offset+=50){
-    const chunk=unique.slice(offset,offset+50),ids=chunk.map(x=>x.id),marks=ids.map(()=>'?').join(',');
-    const old=new Map((await db.prepare(`SELECT * FROM videos WHERE id IN (${marks})`).bind(...ids).all()).results.map(v=>[v.id,v]));
-    const matches=new Set((await db.prepare(`SELECT performer_id,video_id FROM matches WHERE video_id IN (${marks})`).bind(...ids).all()).results.map(v=>v.performer_id+':'+v.video_id));
-    const excluded=new Set((await db.prepare(`SELECT performer_id,video_id FROM exclusions WHERE video_id IN (${marks})`).bind(...ids).all()).results.map(v=>v.performer_id+':'+v.video_id));
+    const chunk=unique.slice(offset,offset+50),ids=chunk.map(x=>x.id);
+    // One lookup round trip per 50-video chunk; one JSON binding stays below D1's bind limit.
+    const snapshot=await db.prepare(`WITH ids AS (SELECT value FROM json_each(?)) SELECT
+      (SELECT json_group_array(json_object('id',id,'channel_id',channel_id,'title',title,'published_at',published_at,'available',available,'checked_at',checked_at)) FROM videos WHERE id IN (SELECT value FROM ids)) old_json,
+      (SELECT json_group_array(json_object('performer_id',performer_id,'video_id',video_id)) FROM matches WHERE video_id IN (SELECT value FROM ids)) matches_json,
+      (SELECT json_group_array(json_object('performer_id',performer_id,'video_id',video_id)) FROM exclusions WHERE video_id IN (SELECT value FROM ids)) excluded_json`).bind(JSON.stringify(ids)).first();
+    const old=new Map(JSON.parse(snapshot.old_json).map(v=>[v.id,v]));
+    const matches=new Set(JSON.parse(snapshot.matches_json).map(v=>v.performer_id+':'+v.video_id));
+    const excluded=new Set(JSON.parse(snapshot.excluded_json).map(v=>v.performer_id+':'+v.video_id));
     const statements=[],channels=new Map();
     for(const item of chunk){
       const snippet=item.snippet,duration=seconds(item.contentDetails?.duration),prior=old.get(item.id);
@@ -169,20 +174,20 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
       const recordSearch=async report=>db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(`search-diagnostics:${p.id}`,JSON.stringify({at:now,dailyLimit:searchDailyLimit(env),...report})).run();
       if(searched>=4||api.calls>22||Date.now()>api.deadline-4000){await recordSearch({status:'deferred',reason:'Discovery run budget reached'});break;}
       const key=`search:${p.id}`,progressKey=`search-progress:${p.id}`;
-      const prev=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();
-      const pending=await db.prepare('SELECT value FROM state WHERE key=?').bind(progressKey).first();
-      const quotaKey=`search-budget:${now.slice(0,10)}`;
+      const quotaKey=`search-budget:${now.slice(0,10)}`,rotationKey=`search-rotation:${p.id}`,touchKey=`search-touch:${p.id}`;
+      const stateKeys=[key,progressKey,quotaKey,rotationKey,touchKey];
+      const searchState=new Map((await db.prepare('SELECT key,value FROM state WHERE key IN ('+stateKeys.map(()=>'?').join(',')+')').bind(...stateKeys).all()).results.map(r=>[r.key,r]));
+      const prev=searchState.get(key),pending=searchState.get(progressKey);
       const dailyLimit=searchDailyLimit(env);
       if(!dailyLimit){await recordSearch({status:'disabled',reason:'Daily search limit is zero'});continue;}
-      const used=Number((await db.prepare('SELECT value FROM state WHERE key=?').bind(quotaKey).first())?.value||0);
+      const used=Number(searchState.get(quotaKey)?.value||0);
       if(used>=dailyLimit){await recordSearch({status:'capped',reason:'Daily search budget reached'});final='partial';detail+='Daily search budget reached; queued searches resume tomorrow. ';break;}
       const interval=searchInterval(env);
-      const touched=await db.prepare('SELECT value FROM state WHERE key=?').bind(`search-touch:${p.id}`).first();
+      const touched=searchState.get(touchKey);
       if(touched&&(!pending||JSON.parse(pending.value).query)&&Date.parse(now)-Date.parse(touched.value)<interval){await recordSearch({status:'waiting',reason:'Budget-paced search interval',nextDueAt:new Date(Date.parse(touched.value)+interval).toISOString()});continue;}
       if(!pending&&prev&&Date.parse(now)-Date.parse(prev.value)<interval){await recordSearch({status:'waiting',reason:`${interval/60000}-minute budget-paced interval`,lastCompletedAt:prev.value,nextDueAt:new Date(Date.parse(prev.value)+interval).toISOString()});continue;}
       const terms=JSON.parse(p.aliases);
-      const rotationKey=`search-rotation:${p.id}`;
-      const rotation=Number((await db.prepare('SELECT value FROM state WHERE key=?').bind(rotationKey).first())?.value||0);
+      const rotation=Number(searchState.get(rotationKey)?.value||0);
       let cursor=pending?JSON.parse(pending.value):null;
       if(!cursor){
         const official=(await db.prepare("SELECT value FROM state WHERE key>='ms-video:' AND key<'ms-video;' ORDER BY key").all()).results.map(r=>JSON.parse(r.value));

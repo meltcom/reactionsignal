@@ -1,4 +1,12 @@
 export const EXCLUDED = ['pwNtcFZ_59I','N1VgQd6YGXY','dw3TLJ9tfdE','_605HPZxVcg','P69VWMewzQY'];
+// Fresh uploads are discovered within 24 hours of publication; older catalog finds are separate.
+export function discoveryTiming(observations){
+ const fresh=[],older=[];let unavailable=0;
+ for(const row of observations){const lag=row.delay_seconds;if(typeof lag!=='number'||!Number.isFinite(lag)||lag<0){unavailable++;continue;}(lag<=86400?fresh:older).push(row);}
+ const summarize=rows=>{const values=rows.map(r=>r.delay_seconds).sort((a,b)=>a-b),n=values.length;return {samples:n,average_seconds:n?values.reduce((a,b)=>a+b,0)/n:null,median_seconds:n?(values[Math.floor((n-1)/2)]+values[Math.floor(n/2)])/2:null,max_seconds:n?values[n-1]:null};};
+ const sources=rows=>[...new Set(rows.map(r=>r.source))].sort().map(source=>({source,...summarize(rows.filter(r=>r.source===source))}));
+ return {delay:summarize(fresh),delaySources:sources(fresh),olderDiscoveryDelay:summarize(older),olderDelaySources:sources(older),delayWindow:{discoveredWithinHours:24,freshWithinHours:24,unavailableSamples:unavailable}};
+}
 export function database(env) { if (!env.DB) throw new Error('Catalog storage is unavailable'); return env.DB; }
 export async function batches(db, statements) { for(let i=0;i<statements.length;i+=50) await db.batch(statements.slice(i,i+50)); }
 export async function seedDatabase(db, seed) {
@@ -49,9 +57,9 @@ export async function status(db,env) {
   const heldChannels=(await db.prepare("SELECT id,name,discovery_scope FROM channels WHERE discovery_scope<>'eligible' ORDER BY name LIMIT 50").all()).results;
   const requestDay=new Date().toISOString().slice(0,10);
   const youtubeRequests=(await db.prepare('SELECT key,value FROM state WHERE key>=? AND key<?').bind('youtube-requests:'+requestDay+':','youtube-requests:'+requestDay+';').all()).results;
-  const delay=await db.prepare("SELECT COUNT(*) samples,AVG(delay_seconds) average_seconds,MAX(delay_seconds) max_seconds FROM discovery_observations WHERE discovered_at>=? AND source IN ('Recent-upload check','YouTube upload notification','RSS fallback','Performer discovery search') AND delay_seconds BETWEEN 0 AND 604800").bind(new Date(Date.now()-86400000).toISOString()).first();
   const since=new Date(Date.now()-86400000).toISOString();
-  const delaySources=(await db.prepare("SELECT source,COUNT(*) samples,AVG(delay_seconds) average_seconds,MAX(delay_seconds) max_seconds FROM discovery_observations WHERE discovered_at>=? AND delay_seconds BETWEEN 0 AND 604800 GROUP BY source ORDER BY source").bind(since).all()).results;
+  const observations=(await db.prepare('SELECT source,delay_seconds FROM discovery_observations WHERE discovered_at>=?').bind(since).all()).results;
+  const {delay,delaySources,olderDiscoveryDelay,olderDelaySources,delayWindow}=discoveryTiming(observations);
   const notificationDelays=(await db.prepare("SELECT r.source,COUNT(*) receipts,SUM(CASE WHEN r.processed_at IS NOT NULL THEN 1 ELSE 0 END) processed,SUM(CASE WHEN v.published_at IS NOT NULL AND julianday(r.received_at)>=julianday(v.published_at) THEN 1 ELSE 0 END) publication_samples,AVG(CASE WHEN julianday(r.received_at)>=julianday(v.published_at) THEN (julianday(r.received_at)-julianday(v.published_at))*86400 END) publication_to_receipt_seconds,AVG((julianday(r.processed_at)-julianday(r.received_at))*86400) receipt_to_processed_seconds FROM notification_receipts r LEFT JOIN videos v ON v.id=r.video_id WHERE r.received_at>=? GROUP BY r.source").bind(since).all()).results;
   const rssLast=await db.prepare("SELECT value FROM state WHERE key='rss-last-batch'").first();
   const rssCoverage=await db.prepare("SELECT COUNT(*) total,SUM(CASE WHEN r.checked_at>=? AND r.error IS NULL THEN 1 ELSE 0 END) checked,SUM(CASE WHEN r.error IS NOT NULL THEN 1 ELSE 0 END) errors FROM channels c LEFT JOIN rss_checks r ON r.channel_id=c.id WHERE c.discovery_scope='eligible'").bind(since).first();
@@ -72,7 +80,7 @@ export async function status(db,env) {
   const queryMetrics=(await db.prepare("SELECT value FROM state WHERE key>='search-query:missioned-souls:' AND key<'search-query:missioned-souls;' ORDER BY key").all()).results.map(r=>JSON.parse(r.value));
   discoverySearch.queries=queryMetrics;
   coverage.overdueChannels=overdueChannels;
-  return {discoverySearch,repairBaseline,repairDelays,delaySources,notificationDelays,rss:{lastBatch:rssLast?JSON.parse(rssLast.value):null,coverage:rssCoverage,errors:rssErrors},channelStats:channelStats?JSON.parse(channelStats.value):null,unavailableChannels,heldChannels,scopes,youtubeRequests,requestDay,delay,apiConfigured:Boolean(env.YOUTUBE_API_KEY),automation,lastScheduledAt:scheduled?.value||null,lastSuccessfulBatchAt:last?.finished_at||null,coverage,historyBacklog:backlog?.channels||0,lastDiscoveryRunAt:history.results.find(r=>r.finished_at)?.finished_at||null,runs:history.results,message};
+  return {olderDiscoveryDelay,olderDelaySources,delayWindow,discoverySearch,repairBaseline,repairDelays,delaySources,notificationDelays,rss:{lastBatch:rssLast?JSON.parse(rssLast.value):null,coverage:rssCoverage,errors:rssErrors},channelStats:channelStats?JSON.parse(channelStats.value):null,unavailableChannels,heldChannels,scopes,youtubeRequests,requestDay,delay,apiConfigured:Boolean(env.YOUTUBE_API_KEY),automation,lastScheduledAt:scheduled?.value||null,lastSuccessfulBatchAt:last?.finished_at||null,coverage,historyBacklog:backlog?.channels||0,lastDiscoveryRunAt:history.results.find(r=>r.finished_at)?.finished_at||null,runs:history.results,message};
 }
 export async function catalog(db,seed,env) {
   const rows=await db.prepare("SELECT v.*,m.performer_id,m.status,m.source,c.name channel_name FROM videos v JOIN matches m ON v.id=m.video_id LEFT JOIN channels c ON c.id=v.channel_id JOIN performers p ON p.id=m.performer_id WHERE p.status='active' AND p.id='missioned-souls' AND v.available=1 AND m.status IN ('CONFIRMED','PROBABLE') AND NOT EXISTS (SELECT 1 FROM exclusions e WHERE e.video_id=v.id AND e.performer_id=m.performer_id) ORDER BY v.published_at DESC").all();

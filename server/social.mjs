@@ -63,7 +63,7 @@ export async function social(request,env,seed,user){try{
  if(request.headers.get('Origin')!==url.origin||request.headers.get('Sec-Fetch-Site')==='cross-site')fail('Use the Reaction Journey website.',403);
  if(!request.headers.get('Content-Type')?.startsWith('application/json'))fail('JSON required.',415);
  const raw=await request.text();if(raw.length>16000)fail('Request too large.',413);let b;try{b=JSON.parse(raw);}catch{fail('Invalid JSON.');}if(!b||typeof b!=='object')fail('Invalid request.');
- const snapshot="COALESCE((SELECT json_group_array(json_object('kind',kind,'target',target)) FROM follows WHERE user_id=? AND kind IN ('reactor','song')),'[]')";
+ const snapshot="COALESCE((SELECT json_group_array(json_object('kind',kind,'target',target)) FROM follows f WHERE user_id=? AND kind IN ('reactor','song') AND NOT EXISTS(SELECT 1 FROM youtube_imported_follows i WHERE i.user_id=f.user_id AND i.target=f.target AND f.kind='reactor')),'[]')";
  if(path==='/following-group'){
   if(!['create','rename','delete','activate','save'].includes(b.action))fail('Choose a group action.');
   const id=b.action==='create'?crypto.randomUUID():txt(b.id,1,100);
@@ -78,7 +78,7 @@ export async function social(request,env,seed,user){try{
   if(b.action==='activate')await db.batch([
    db.prepare(`UPDATE following_groups SET follows=${snapshot} WHERE user_id=? AND active=1`).bind(user.id,user.id),
    db.prepare(`UPDATE following_groups SET follows=${snapshot},active=0 WHERE user_id=? AND active=1`).bind(user.id,user.id),
-   db.prepare("DELETE FROM follows WHERE user_id=? AND kind IN ('reactor','song')").bind(user.id),
+   db.prepare("DELETE FROM follows WHERE user_id=? AND kind IN ('reactor','song') AND NOT EXISTS(SELECT 1 FROM youtube_imported_follows i WHERE i.user_id=follows.user_id AND i.target=follows.target AND follows.kind='reactor')").bind(user.id),
    db.prepare("INSERT OR IGNORE INTO follows(user_id,kind,target) SELECT ?,json_extract(value,'$.kind'),json_extract(value,'$.target') FROM following_groups,json_each(following_groups.follows) WHERE following_groups.id=? AND user_id=?").bind(user.id,id,user.id),
    db.prepare('UPDATE following_groups SET active=1 WHERE id=? AND user_id=?').bind(id,user.id)
   ]);

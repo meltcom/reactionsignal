@@ -257,3 +257,21 @@ test('candidate hold repair retains the record, audits it, and never overrides r
  sql.exec(migration);assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(id).status,'PROBABLE');
  assert.equal((await d.prepare('SELECT status FROM matches WHERE video_id=?').bind(id).first()).status,'PENDING');
 });
+
+test('fresh delay median excludes older catalog finds and unknown or negative timestamps',async()=>{
+ const {discoveryTiming}=await import('../server/db.mjs');
+ const timing=discoveryTiming([{source:'RSS fallback',delay_seconds:60},{source:'RSS fallback',delay_seconds:180},{source:'Performer discovery search',delay_seconds:86400},{source:'Historical upload scan',delay_seconds:86401},{source:'Performer discovery search',delay_seconds:20*86400},{source:'RSS fallback',delay_seconds:null},{source:'RSS fallback',delay_seconds:-60}]);
+ assert.equal(timing.delay.samples,3);assert.equal(timing.delay.median_seconds,180);assert.equal(timing.olderDiscoveryDelay.samples,2);assert.equal(timing.olderDiscoveryDelay.median_seconds,(86401+20*86400)/2);assert.equal(timing.delayWindow.unavailableSamples,2);
+ assert.equal(timing.delaySources.find(x=>x.source==='RSS fallback').median_seconds,120);
+ assert.deepEqual(discoveryTiming([]).delay,{samples:0,average_seconds:null,median_seconds:null,max_seconds:null});
+});
+test('video batch snapshots use one lookup per chunk and retain exclusion guards',async()=>{
+ const {saveVideos}=await import('../server/discovery.mjs');const d=db();await seedDatabase(d,seed);
+ const performers=(await d.prepare('SELECT * FROM performers').all()).results;
+ const items=Array.from({length:51},(_,n)=>item('batch'+String(n).padStart(6,'0')));
+ await d.prepare('INSERT INTO exclusions(performer_id,video_id,reason) VALUES(?,?,?)').bind('missioned-souls',items[0].id,'fixture exclusion').run();
+ let lookups=0;const measured={prepare(query){if(query.startsWith('WITH ids AS'))lookups++;return d.prepare(query);},batch:statements=>d.batch(statements)};
+ assert.equal(await saveVideos(measured,items,performers,'2026-09-24T13:00:00Z','Performer discovery search'),50);assert.equal(lookups,2);
+ assert.equal((await d.prepare('SELECT COUNT(*) n FROM videos WHERE id=?').bind(items[0].id).first()).n,0);
+ lookups=0;assert.equal(await saveVideos(measured,items,performers,'2026-09-24T13:00:00Z','Performer discovery search'),0);assert.equal(lookups,2);
+});
