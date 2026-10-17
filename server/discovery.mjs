@@ -81,16 +81,66 @@ export function searchDailyLimit(env){
   const limit=Number(value);return Number.isFinite(limit)?Math.max(0,Math.min(80,Math.floor(limit))):20;
 }
 export function searchInterval(env){return Math.max(75,Math.ceil(1440/Math.max(1,searchDailyLimit(env))/15)*15)*60000;}
-export function performerQueries(p,songs=[]){
+export function performerQueries(p,songs=[],rotation=0){
   const quote=s=>'"'+String(s).replace(/["\\]/g,' ').trim()+'"';
   const names=[...new Set([p.name,...JSON.parse(p.aliases)])].filter(Boolean);
-  const broad=names.map(name=>`${quote(name)} reaction`);
-  // Alternate broad searches with one supplemental query; never replace name discovery.
-  const extra=[quote(p.name),...songs.slice(0,3).map(song=>`${quote(p.name)} ${quote(song)}`)];
-  return extra.flatMap((q,i)=>[broad[i%broad.length],q]);
+  const main=quote(p.name), mainReaction=`${main} reaction`;
+  const aliasQueries=names.filter(name=>normalize(name)!==normalize(p.name)).map(name=>`${quote(name)} reaction`);
+  const songQueries=[...new Set(songs.map(song=>String(song).trim()).filter(Boolean))].map(song=>`${quote(song)} reaction`);
+  // Keep 20 weighted query windows per rotation: 12 exact-name, 6 name+reaction,
+  // and 2 experiments. The experiment slots retain alias coverage and test the
+  // newest song title without requiring the band name to appear in a reactor title.
+  const experiments=[];
+  if(songQueries.length)experiments.push(songQueries[rotation% songQueries.length]);
+  if(aliasQueries.length)experiments.push(aliasQueries[Math.floor(rotation/20)%aliasQueries.length]);
+  else if(songQueries.length>1)experiments.push(songQueries[(rotation+1)%songQueries.length]);
+  while(experiments.length<2)experiments.push(experiments.length?mainReaction:main);
+  const slots=[0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,2,3];
+  return slots.map(slot=>slot===0?main:slot===1?mainReaction:experiments[slot-2]);
 }
 export function recentSongTitles(videos){
-  return [...new Set(videos.filter(v=>Number.isFinite(Date.parse(v.publishedAt))).sort((a,b)=>Date.parse(b.publishedAt)-Date.parse(a.publishedAt)).map(v=>v.song||(/^(.+?)\s+by\s+/i.exec(v.title||'')?.[1])).filter(s=>typeof s==='string'&&s.trim().length>=3&&s.length<=100).map(s=>s.trim()))].slice(0,3);
+  const extract=v=>{
+    if(typeof v.song==='string'&&v.song.trim())return v.song.trim();
+    const parts=String(v.title||'').split(/\s*\|\s*/).map(s=>s.trim()).filter(Boolean);
+    // Prefer a title segment with an explicit “by Artist” marker (for example,
+    // “DECODE by Paramore”) over location/series text elsewhere in the title.
+    const by=parts.map(s=>/^(.+?)\s+by\s+.+$/i.exec(s)?.[1]).find(Boolean);
+    let candidate=by||parts[0]||'';
+    candidate=candidate.replace(/^Missioned\s+Souls\s*[-:–—]\s*/i,'').trim();
+    if(!by)candidate=candidate.split(/\s[-–—]\s/)[0].trim();
+    return candidate;
+  };
+  return [...new Set(videos.filter(v=>Number.isFinite(Date.parse(v.publishedAt))).sort((a,b)=>Date.parse(b.publishedAt)-Date.parse(a.publishedAt)).map(extract).filter(s=>typeof s==='string'&&s.trim().length>=3&&s.length<=100).map(s=>s.trim()))].slice(0,3);
+}
+function decodeXml(value){return value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1').replace(/&#(\d+);/g,(_,n)=>String.fromCodePoint(Number(n))).replace(/&#x([\da-f]+);/gi,(_,n)=>String.fromCodePoint(parseInt(n,16))).replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').trim();}
+function xmlValue(xml,name){const match=new RegExp('<(?:[\\w.-]+:)?'+name+'\\b[^>]*>([\\s\\S]*?)<\\/(?:[\\w.-]+:)?'+name+'\\s*>','i').exec(xml);return match?decodeXml(match[1]):'';}
+async function boundedText(response,limit=512*1024){
+  const reader=response.body?.getReader();if(!reader){const text=await response.text();if(new TextEncoder().encode(text).byteLength>limit)throw new Error('Official video feed too large');return text;}
+  const chunks=[];let size=0;while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>limit){await reader.cancel();throw new Error('Official video feed too large');}chunks.push(value);}
+  const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}return new TextDecoder().decode(bytes);
+}
+// The official channel's Atom feed provides a fresh song hint without consuming
+// YouTube Data API quota. Keep the most recent valid snapshot if the feed is down.
+export async function refreshOfficialSearchFeed(db,fetcher=fetch){
+  const state=(await db.prepare("SELECT value FROM state WHERE key='ms-refresh'").first())?.value;
+  if(!state)return [];
+  const channelId=JSON.parse(state).channelId;
+  if(!/^UC[\w-]{22}$/.test(channelId||''))return [];
+  const key='search-official-feed:missioned-souls';
+  const cached=(await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first())?.value;
+  try{
+    const response=await fetcher('https://www.youtube.com/feeds/videos.xml?channel_id='+encodeURIComponent(channelId),{signal:AbortSignal.timeout(4000),redirect:'manual',headers:{Accept:'application/atom+xml, application/xml, text/xml'}});
+    if(!response.ok)throw new Error('Official video feed unavailable');
+    const xml=await boundedText(response);
+    if(!/<feed\b/i.test(xml)||!/<\/feed\s*>/i.test(xml))throw new Error('Invalid official video feed');
+    const entries=[...xml.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry\s*>/gi)];
+    if(entries.length>50)throw new Error('Official video feed has too many entries');
+    const videos=entries.map(([,entry])=>({id:xmlValue(entry,'videoId'),channelId:xmlValue(entry,'channelId'),title:xmlValue(entry,'title'),publishedAt:xmlValue(entry,'published')})).filter(v=>/^[\w-]{11}$/.test(v.id)&&v.channelId===channelId&&v.title&&Number.isFinite(Date.parse(v.publishedAt)));
+    if(!videos.length)return cached?JSON.parse(cached).videos:[];
+    const value={at:new Date().toISOString(),channelId,videos};
+    await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,JSON.stringify(value)).run();
+    return videos;
+  }catch{return cached?JSON.parse(cached).videos:[];}
 }
 export async function runDiscovery(env,seed,fetcher=fetch,options={}){
   const startedMs=Date.now(),metrics={dbMs:0,examined:0,rowsRead:0,rowsWritten:0};const db=measuredDatabase(database(env),metrics);await seedDatabase(db,seed);
@@ -108,6 +158,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
     }
     const performers=(await db.prepare("SELECT p.* FROM performers p LEFT JOIN state s ON s.key='search-touch:'||p.id WHERE p.discovery_enabled=1 AND p.id='missioned-souls' ORDER BY COALESCE(s.value,''),p.id").all()).results;
     if(!performers.length)return {id,status:'succeeded',calls:0,channels:0,added:0,detail:'No discovery-enabled performers.'};
+    const officialFeedVideos=await refreshOfficialSearchFeed(db,fetcher);
     // Fresh uploads get the first allocation. Historical cursors are independent.
     const batchSize=Math.max(1,Math.min(14,Number.parseInt(env.DISCOVERY_RECENT_BATCH_SIZE,10)||7));
     const historyLimit=Math.max(0,Math.min(2,Number.parseInt(env.DISCOVERY_HISTORY_PAGES??'1',10)||0));
@@ -191,7 +242,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
       let cursor=pending?JSON.parse(pending.value):null;
       if(!cursor){
         const official=(await db.prepare("SELECT value FROM state WHERE key>='ms-video:' AND key<'ms-video;' ORDER BY key").all()).results.map(r=>JSON.parse(r.value));
-        const queries=performerQueries(p,recentSongTitles([...official,...(seed.videos||[])]));
+        const queries=performerQueries(p,recentSongTitles([...official,...officialFeedVideos,...(seed.videos||[])]),rotation);
         cursor={term:0,page:null,query:queries[rotation%queries.length],rotation,startedAt:now,after:prev?new Date(Date.parse(prev.value)-7*86400000).toISOString():p.lookback_days===0?null:new Date(Date.now()-p.lookback_days*86400000).toISOString()};
       }
       const query=cursor.query||`"${terms[cursor.term]||p.name}" reaction`;
