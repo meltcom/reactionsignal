@@ -98,8 +98,6 @@ async function init() {
 }
 
 $('searchInput').addEventListener('input', (event) => { state.query = event.target.value; renderVideos(); });
-$('formatFilter').addEventListener('change', (event) => { state.format = event.target.value; renderVideos(); });
-$('confidenceFilter').addEventListener('change', (event) => { state.confidence = event.target.value; renderVideos(); });
 $('followButton').addEventListener('click', () => document.querySelector('.performer-strip').scrollIntoView({ behavior:'smooth' }));
 $('sortFilter').addEventListener('change',e=>{state.sort=e.target.value;renderVideos();});
 $('moreVideos').addEventListener('click',()=>{state.visible+=24;renderVideos();});

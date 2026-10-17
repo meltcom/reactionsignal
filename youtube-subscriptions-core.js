@@ -11,7 +11,7 @@ export async function readSubscriptions(token,{fetcher=fetch,signal,onProgress=(
   if(++count>200)throw new Error('This account has too many subscriptions for one import. No follows were changed.');
   const url=new URL('https://www.googleapis.com/youtube/v3/subscriptions');
   url.search=new URLSearchParams({part:'snippet',mine:'true',maxResults:'50',...(pageToken?{pageToken}:{})}).toString();
-  const response=await fetcher(url,{headers:{Authorization:`Bearer ${token}`},signal,cache:'no-store',redirect:'error'});
+  const response=await fetcher(url,{headers:{Authorization:`Bearer ${token}`},signal,cache:'no-store',redirect:'manual'});
   if(!response.ok){let data;try{data=await response.json();}catch{}const reason=data?.error?.errors?.[0]?.reason;
    throw new Error(response.status===401?'YouTube access expired. Connect again.':reason==='quotaExceeded'||reason==='dailyLimitExceeded'?'YouTube’s daily API quota has been reached. Try again tomorrow.':reason==='youtubeSignupRequired'?'Choose a Google account with a YouTube channel.':'Could not read YouTube subscriptions. Check permission and try again.');
   }

@@ -55,6 +55,15 @@ export default {
 async function handleRequest(request,env,ctx){
     const path=new URL(request.url).pathname;
     try{
+      if(path.startsWith('/private-guides/'))return new Response('Not found',{status:404});
+      if(path.startsWith('/api/member-guides/')){
+        if(request.method!=='GET'&&request.method!=='HEAD')return json({error:'Method not allowed'},405);
+        const result=await member(request,env);if(result.error)return result.error;
+        const names={overview:'reaction-journey-overview.pdf','app-guide':'reaction-journey-app-guide.pdf'},name=names[path.slice('/api/member-guides/'.length)];
+        if(!name)return json({error:'Guide not found.'},404);
+        const file=assets['/private-guides/'+name];if(!file?.base64)return json({error:'Guide unavailable.'},404);
+        return new Response(request.method==='HEAD'?null:Uint8Array.from(atob(file.base64),c=>c.charCodeAt(0)),{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="'+name+'"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Vary':'Authorization'}});
+      }
       if(path.startsWith('/api/profile-pictures/'))return await profilePicture(request,env);
       if(path==='/api/youtube/push')return await youtubePush(request,env,seed,ctx);
       if(path==='/api/youtube/subscriptions/callback'&&request.method==='GET')return await finishConnection(request,env);
@@ -97,10 +106,12 @@ async function handleRequest(request,env,ctx){
         const db=database(env);await seedDatabase(db,seed);
         if(path==='/api/status')return result.user.moderator?json(await status(db,env)):json({error:'Moderator access required.'},403);
         const revision=await db.prepare("SELECT value FROM state WHERE key='catalog-revision'").first();
-        const etag=revision?`"catalog-${revision.value}"`:null;
+        const officialRevision=await db.prepare("SELECT value FROM state WHERE key='ms-updated'").first();
+        const version=encodeURIComponent((revision?.value||'none')+':'+(officialRevision?.value||'none'));
+        const etag=`"catalog-${version}"`;
         // Always authenticate before checking the tag; no member response is publicly cached.
         if(etag&&request.headers.get('If-None-Match')===etag)return new Response(null,{status:304,headers:{ETag:etag,'Cache-Control':'private, no-store'}});
-        const data=await sharedCache(db,`catalog:${revision?.value||'none'}`,15000,()=>catalog(db,seed,env));
+        const data=await sharedCache(db,`catalog:${version}`,15000,()=>catalog(db,seed,env));
         const response=json(data);if(etag)response.headers.set('ETag',etag);return response;
       }
       if(path==='/missioned-souls'||path==='/missioned-souls/')return Response.redirect(new URL('/#missioned-souls',request.url),302);

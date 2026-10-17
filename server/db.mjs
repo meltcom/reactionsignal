@@ -1,3 +1,4 @@
+import {officialFeedVideos} from './official-feed.mjs';
 export const EXCLUDED = ['pwNtcFZ_59I','N1VgQd6YGXY','dw3TLJ9tfdE','_605HPZxVcg','P69VWMewzQY'];
 // Fresh uploads are discovered within 24 hours of publication; older catalog finds are separate.
 export function discoveryTiming(observations){
@@ -105,5 +106,5 @@ export async function catalog(db,seed,env) {
     if(live.updatedAt){c.subscribers=live.subscribers;c.subscribersHidden=live.subscribersHidden;c.subscribersUpdatedAt=live.updatedAt;c.channelViews=live.channelViews;c.channelVideoCount=live.channelVideoCount;c.description=live.description;c.thumbnailUrl=live.thumbnailUrl;c.youtubeName=live.youtubeName;}
     c.youtubeAvailability=live.availability||'unknown';c.subscriberRefreshError=live.error||null;
   }
-  return {performers,channels:[...known.values()],videos,stats:{channels:new Set([...known.values()].map(c=>c.id)).size,videos:videos.length,performers:performers.length}};
+  return {performers,channels:[...known.values()],videos,officialVideos:await officialFeedVideos(db,seed.missionedSouls||{videos:[]}),stats:{channels:new Set([...known.values()].map(c=>c.id)).size,videos:videos.length,performers:performers.length}};
 }

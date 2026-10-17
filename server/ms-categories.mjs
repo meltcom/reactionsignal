@@ -1,8 +1,10 @@
+import snapshot from '../ms-playlist-catalog.json' with {type:'json'};
+import {playlistCatalog} from '../ms-journey-catalog.mjs';
 import {categories} from '../missioned-souls-core.mjs';
 const json=(v,status=200)=>Response.json(v,{status,headers:{'Cache-Control':'private, no-store'}});
-export async function categoryRegistry(db){const row=await db.prepare('SELECT value FROM state WHERE key=?').bind('ms-categories').first();return row?JSON.parse(row.value):{revision:0,items:categories.map(id=>({id,name:id,archived:false}))};}
+export async function categoryRegistry(db){const row=await db.prepare('SELECT value FROM state WHERE key=?').bind('ms-categories').first();const registry=row?JSON.parse(row.value):{revision:0,items:categories.map(id=>({id,name:id,archived:false}))};const sync=await db.prepare('SELECT value FROM state WHERE key=?').bind('ms-playlists').first();const playlists=sync?JSON.parse(sync.value):snapshot;return {...registry,items:playlistCatalog([],registry.items,playlists.playlists).categoryDefinitions};}
 export async function manageCategories(db,b){
- const old=await categoryRegistry(db);
+ const row=await db.prepare('SELECT value FROM state WHERE key=?').bind('ms-categories').first();const old=row?JSON.parse(row.value):{revision:0,items:categories.map(id=>({id,name:id,archived:false}))};
  if(b.revision!==old.revision)return json({error:'Categories changed. Reload and try again.'},409);
  const items=old.items.map(c=>({...c})),index=items.findIndex(c=>c.id===b.id);
  if(['add','rename'].includes(b.operation)){
