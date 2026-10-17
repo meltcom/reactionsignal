@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { seedDatabase, catalog, status, EXCLUDED } from '../server/db.mjs';
-import { classify, seconds, saveVideo, runDiscovery, YouTube, searchDailyLimit, searchInterval, performerQueries, recentSongTitles } from '../server/discovery.mjs';
+import { classify, seconds, saveVideo, runDiscovery, YouTube, searchDailyLimit, searchInterval, performerQueries, recentSongTitles, refreshOfficialSearchFeed } from '../server/discovery.mjs';
 function db(historical=false){
   const sql=new DatabaseSync(':memory:');
   for(const name of readdirSync(new URL('../drizzle/',import.meta.url)).filter(x=>x.endsWith('.sql')).sort())sql.exec(readFileSync(new URL(`../drizzle/${name}`,import.meta.url),'utf8'));
@@ -146,7 +146,7 @@ test('Missioned Souls history resumes pages, honors daily budgets and holds unce
  const fetcher=async request=>{
   const u=new URL(request);
   if(u.pathname.endsWith('/search')){
-   searches++;assert.equal(u.searchParams.get('q'),'"Missioned Souls" reaction');
+   searches++;assert.equal(u.searchParams.get('q'),'"Missioned Souls"');
    if(searches===1){firstWindow=u.searchParams.get('publishedAfter');return Response.json({items:[{id:{videoId:'abcdefghijk'}}],nextPageToken:'next-page'});}
    assert.equal(u.searchParams.get('pageToken'),'next-page');assert.equal(u.searchParams.get('publishedAfter'),firstWindow);
    return Response.json({items:[]});
@@ -173,12 +173,31 @@ test('Missioned Souls history resumes pages, honors daily budgets and holds unce
 test('unknown durations no longer block clear title matches',()=>{
  assert.equal(classify('New Act reaction',['New Act'],null),'CONFIRMED');
 });
-test('rotation keeps broad searches between supplemental queries and uses recent dated songs',()=>{
+test('weighted query rotation favors proven name searches and retains song and alias experiments',()=>{
  const p={name:'Missioned Souls',aliases:JSON.stringify(['Missioned Souls','MissionedSoul'])};
- const songs=recentSongTitles([{title:'Old Song by Artist',publishedAt:'2020-01-01'},{title:'Hysteria by Muse | Missioned Souls',publishedAt:'2026-10-11'},{title:'Undated by Artist'}]);
- assert.deepEqual(songs,['Hysteria','Old Song']);
- const q=performerQueries(p,songs);assert.equal(q[0],'"Missioned Souls" reaction');assert.equal(q[1],'"Missioned Souls"');assert.ok(q.includes('"Missioned Souls" "Hysteria"'));assert.ok(q.filter((_,i)=>i%2===0).every(x=>x.endsWith(' reaction')));
+ const songs=recentSongTitles([
+  {title:'Old Song by Artist',publishedAt:'2020-01-01'},
+  {title:'Missioned Souls - Live in Zambales | DECODE by Paramore',publishedAt:'2026-10-12'},
+  {title:'I HATE MYSELF FOR LOVING YOU - Joan Jett & The Blackhearts | Missioned Souls | studio cover',publishedAt:'2026-10-13'},
+  {title:'Undated by Artist'}
+ ]);
+ assert.deepEqual(songs,['I HATE MYSELF FOR LOVING YOU','DECODE','Old Song']);
+ const q=performerQueries(p,songs);assert.equal(q.length,20);
+ assert.equal(q.filter(x=>x==='"Missioned Souls"').length,12);
+ assert.equal(q.filter(x=>x==='"Missioned Souls" reaction').length,6);
+ assert.ok(q.includes('"I HATE MYSELF FOR LOVING YOU" reaction'));
+ assert.ok(q.includes('"MissionedSoul" reaction'));
  assert.equal(searchInterval({}),75*60000);assert.equal(searchInterval({DISCOVERY_DAILY_SEARCH_LIMIT:10}),150*60000);
+});
+test('official channel RSS refreshes recent song hints without Data API calls and falls back to cache',async()=>{
+ const d=db(),channelId='UCabcdefghijklmnopqrstuv';
+ await d.prepare("INSERT INTO state(key,value) VALUES('ms-refresh',?)").bind(JSON.stringify({channelId})).run();
+ let calls=0;
+ const xml=`<?xml version="1.0"?><feed xmlns:yt="http://www.youtube.com/xml/schemas/2015"><entry><yt:videoId>abcdefghijk</yt:videoId><yt:channelId>${channelId}</yt:channelId><title>Missioned Souls - Live in Zambales | DECODE by Paramore</title><published>2026-10-17T12:00:00Z</published></entry></feed>`;
+ const videos=await refreshOfficialSearchFeed(d,async(url,options)=>{calls++;assert.match(url,new RegExp(encodeURIComponent(channelId)+'$'));assert.ok(options.signal);return new Response(xml);});
+ assert.equal(calls,1);assert.equal(videos[0].id,'abcdefghijk');assert.deepEqual(recentSongTitles(videos),['DECODE']);
+ const cached=await refreshOfficialSearchFeed(d,async()=>{throw new Error('temporary feed outage');});
+ assert.deepEqual(cached,videos);
 });
 test('paced rotation overlaps windows, preserves pagination, and counts unique discoveries only once',async()=>{
  const d=await isolatedDiscovery();await d.prepare("UPDATE channels SET discovery_scope='other'").run();
