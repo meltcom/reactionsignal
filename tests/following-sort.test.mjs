@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {settings} from '../server/social.mjs';
-const code=readFileSync(new URL('../dashboard.js',import.meta.url),'utf8').split('function followingName(f)')[1];
+const code=readFileSync(new URL('../dashboard.js',import.meta.url),'utf8').split('function followingName(f)')[1].split(';(()=>{')[0];
 test('following sorts use names, personal/community ranking, song averages and unrated last',()=>{
  const context={catalog:{channels:[{id:'a',name:'Zulu'},{id:'b',name:'Alpha'},{id:'c',name:'Beta'}],videos:[{id:'v1',title:'Hysteria reaction',channelId:'a'},{id:'v2',song:'Hysteria',title:'Reaction',channelId:'b'}]},dashboard:{follows:[],hiddenReactors:[]},scoreMap:new Map([['v1',{average:5}],['v2',{average:3}]]),reactorScore:id=>({a:{average:90},b:{average:60}}[id]),myReactorRating:id=>({a:20,b:80}[id])};
  vm.createContext(context);vm.runInContext('function followingName(f)'+code,context);

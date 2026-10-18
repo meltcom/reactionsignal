@@ -7,7 +7,7 @@ const block=source.slice(source.indexOf('let reactorPage=0'),source.indexOf('\nf
 function setup(){
  const elements=new Map();const $=id=>{if(!elements.has(id))elements.set(id,{value:'',querySelectorAll:()=>[]});return elements.get(id);};
  $('reactorSort').value='ranked';$('reactorPageSize').value='25';
- const ctx=vm.createContext({$,renderReactors:null,catalog:{channels:Array.from({length:61},(_,i)=>({id:String(i),name:`Reactor ${String(i).padStart(2,'0')}`,performerId:'ms'}))},state:{performer:'ms'},dashboard:{hiddenReactors:[]},reactorRankValue:id=>Number(id),reactorScore:()=>({count:1}),myReactorRating:id=>id==='0'?100:undefined,escapeHtml:s=>s,num:String,reactorRankLabel:()=>'',follows:()=>false,hiddenReactorsMarkup:()=>'',bindHiddenReactors:()=>{},bindReactorRatings:()=>{},loadMyReactorRequests:()=>{}});
+ const ctx=vm.createContext({$,renderReactors:null,catalog:{videos:[],channels:Array.from({length:61},(_,i)=>({id:String(i),name:`Reactor ${String(i).padStart(2,'0')}`,performerId:'ms'}))},state:{performer:'ms'},dashboard:{hiddenReactors:[],follows:[]},reactorRankValue:id=>Number(id),reactorScore:()=>({count:1}),myReactorRating:id=>id==='0'?100:undefined,escapeHtml:s=>s,num:String,reactorRankLabel:()=>'',follows:()=>false,hiddenReactorsMarkup:()=>'',bindHiddenReactors:()=>{},bindReactorRatings:()=>{},loadMyReactorRequests:()=>{}});
  vm.runInContext(block,ctx);ctx.renderReactors();return {ctx,$};
 }
 test('shorter reactor pages clamp and reset when filters change',()=>{

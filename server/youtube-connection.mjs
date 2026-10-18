@@ -1,4 +1,5 @@
 import {database} from './db.mjs';
+import {recordOperationalEvent} from './operations.mjs';
 export const scope='https://www.googleapis.com/auth/youtube.readonly';
 const day=86400000;
 const encoder=new TextEncoder();
@@ -10,7 +11,9 @@ export function configured(env){return /^[\w-]+\.apps\.googleusercontent\.com$/.
 async function key(env){if(!configured(env))throw new Error('YouTube connection setup is incomplete.');return crypto.subtle.importKey('raw',bytes(env.YOUTUBE_TOKEN_ENCRYPTION_KEY),{name:'AES-GCM'},false,['encrypt','decrypt']);}
 export async function seal(env,value,aad){const iv=crypto.getRandomValues(new Uint8Array(12));const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:encoder.encode(aad)},await key(env),encoder.encode(value));return b64(iv)+'.'+b64(cipher);}
 export async function unseal(env,value,aad){const [iv,cipher]=value.split('.');return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(iv),additionalData:encoder.encode(aad)},await key(env),bytes(cipher)));}
-export async function google(env,url,params){return (env.YOUTUBE_FETCH||fetch)(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(params),signal:AbortSignal.timeout(10000),redirect:'error'});}
+// Workers accepts manual/follow, but rejects redirect:'error'. Keep credentials
+// on the intended Google endpoint by never following redirects.
+export async function google(env,url,params){return (env.YOUTUBE_FETCH||fetch)(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(params),signal:AbortSignal.timeout(10000),redirect:'manual'});}
 export async function revoke(env,token){const r=await google(env,'https://oauth2.googleapis.com/revoke',{token});if(r.ok)return true;if(r.status===400){const d=await r.json().catch(()=>({}));return d.error==='invalid_token';}return false;}
 export async function deleteConnection(env,row,{revokeToken=false}={}){
  const db=database(env),ops=[];
@@ -58,19 +61,27 @@ export async function finishConnection(request,env){
  const url=new URL(request.url),state=url.searchParams.get('state')||'',cookie=request.headers.get('Cookie')||'';
  const headers={'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Set-Cookie':'rj_youtube_state=; HttpOnly; Secure; SameSite=Lax; Path=/api/youtube/subscriptions/callback; Max-Age=0'};
  const back=status=>new Response(null,{status:303,headers:{...headers,Location:env.YOUTUBE_OAUTH_ORIGIN+'/?youtube='+status+'#reactors'}});
+ const outcome=async(status,reason)=>{await recordOperationalEvent(env,'youtube-oauth-'+reason,status==='failed'?'error':'info');return back(status);};
  if(!configured(env)||url.origin!==env.YOUTUBE_OAUTH_ORIGIN)return new Response('YouTube connection setup is incomplete.',{status:503,headers});
  if(!/^[\w-]{43}$/.test(state)||!cookie.split(';').some(c=>c.trim()==='rj_youtube_state='+state))return new Response('Invalid connection request. Start again in Reaction Journey.',{status:400,headers});
  const hash=await digest(state),db=database(env);
  // Consume once, but retain the row during exchange so disconnect can cancel it.
  const states=await db.prepare('UPDATE youtube_oauth_states SET used=1 WHERE hash=? AND used=0 RETURNING *').bind(hash).all();const row=states.results[0];
  if(!row||row.expires_at<Date.now())return new Response('Connection request expired. Start again.',{status:400,headers});
- if(url.searchParams.has('error'))return back('cancelled');
- const code=url.searchParams.get('code');if(!code||code.length>4096)return back('failed');
+ if(url.searchParams.has('error'))return outcome('cancelled','consent-cancelled');
+ const code=url.searchParams.get('code');if(!code||code.length>4096)return outcome('failed','missing-code');
+ let stage='connection-check';
  try{
   if(await db.prepare('SELECT id FROM youtube_connections WHERE user_id=?').bind(row.user_id).first())return back('already-connected');
-  const r=await google(env,'https://oauth2.googleapis.com/token',{client_id:env.GOOGLE_YOUTUBE_CLIENT_ID,client_secret:env.GOOGLE_YOUTUBE_CLIENT_SECRET,code,code_verifier:await unseal(env,row.verifier_cipher,'state:'+hash),grant_type:'authorization_code',redirect_uri:env.YOUTUBE_OAUTH_ORIGIN+'/api/youtube/subscriptions/callback'});
+  stage='state-decryption';const verifier=await unseal(env,row.verifier_cipher,'state:'+hash);
+  stage='token-exchange';const r=await google(env,'https://oauth2.googleapis.com/token',{client_id:env.GOOGLE_YOUTUBE_CLIENT_ID,client_secret:env.GOOGLE_YOUTUBE_CLIENT_SECRET,code,code_verifier:verifier,grant_type:'authorization_code',redirect_uri:env.YOUTUBE_OAUTH_ORIGIN+'/api/youtube/subscriptions/callback'});
   const data=await r.json().catch(()=>({}));
-  if(!r.ok||!data.refresh_token||!data.scope?.split(' ').includes(scope)){if(data.refresh_token)await revoke(env,data.refresh_token);return back('failed');}
-  const id=crypto.randomUUID(),now=Date.now();const inserted=await db.prepare('INSERT INTO youtube_connections SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM youtube_oauth_states WHERE hash=? AND expires_at>?) RETURNING id').bind(row.user_id,id,await seal(env,data.refresh_token,'connection:'+id),now,now,now,hash,now).all();await db.prepare('DELETE FROM youtube_oauth_states WHERE hash=?').bind(hash).run();if(!inserted.results.length){await revoke(env,data.refresh_token);return back('cancelled');}return back('connected');
- }catch{return back('failed');}
+  if(!r.ok||!data.refresh_token||!data.scope?.split(' ').includes(scope)){
+   const reason=!r.ok?('token-'+(['invalid_client','invalid_grant','redirect_uri_mismatch','unauthorized_client','invalid_request'].includes(data.error)?data.error:'rejected')):!data.refresh_token?'refresh-token-missing':'scope-missing';
+   await recordOperationalEvent(env,'youtube-oauth-'+reason);if(data.refresh_token){try{await revoke(env,data.refresh_token);}catch{}}return back('failed');
+  }
+  const id=crypto.randomUUID(),now=Date.now();stage='token-encryption';const cipher=await seal(env,data.refresh_token,'connection:'+id);
+  stage='connection-save';const inserted=await db.prepare('INSERT INTO youtube_connections SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM youtube_oauth_states WHERE hash=? AND expires_at>?) RETURNING id').bind(row.user_id,id,cipher,now,now,now,hash,now).all();
+  stage='state-cleanup';await db.prepare('DELETE FROM youtube_oauth_states WHERE hash=?').bind(hash).run();if(!inserted.results.length){try{await revoke(env,data.refresh_token);}catch{}return outcome('cancelled','save-cancelled');}return outcome('connected','connected');
+ }catch{return outcome('failed',stage);}
 }
