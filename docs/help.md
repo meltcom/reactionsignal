@@ -715,3 +715,8 @@ Moderator query diagnostics show cumulative pages, newly cataloged videos, newly
 ### Moderator discovery timing
 
 Fresh-upload timing uses observations recorded in the past 24 hours where discovery was within 24 hours of publication. It shows sample count, median, average and maximum, including a source breakdown. Older discoveries (more than 24 hours after publication) are reported separately, including historical finds older than seven days. Missing or negative timing, such as advance premieres, is excluded and counted separately. The median is the middle delay, or the average of the two middle delays for an even number of observations. The two timing groups use the same discovery window; old finds do not inflate the fresh-upload measurement. These reporting and database-batching changes do not change polling intervals or the daily search quota.
+
+
+### Dedicated YouTube imports group
+
+YouTube imports are saved in a separate system-managed Following group named YouTube imports. Importing does not switch your active group or add reactors to other groups. Select YouTube imports in Following to use those reactors in the Following feed. Re-importing adds newly selected reactors without duplicates. You can remove individual reactors while that group is active; manual groups can independently contain the same reactor. The import group cannot be renamed, deleted, cloned, or overwritten by saving current follows. Disconnecting or revoking YouTube clears tracked imports while preserving manual groups. Older imports without tracking cannot be identified automatically. Existing group contents already lost are not reconstructed.

@@ -58,3 +58,10 @@ test('release retains compact cards, app navigation and optimized branding',()=>
  }
  assert.ok(assets['/index.html'].body.includes('images/reaction-journey-logo-small.webp'));
 });
+
+test('release describes dedicated YouTube membership while keeping import matching separate from active follows',()=>{
+ const html=assets['/index.html'].body,imports=assets['/youtube-subscriptions.js'].body,dashboard=assets['/dashboard.js'].body;
+ assert.ok(html.includes('separate system-managed Following group named YouTube imports'));
+ assert.ok(imports.includes('youtubeImports')&&imports.includes('dedicated YouTube imports group'));
+ assert.ok(dashboard.includes("active?.kind==='youtube'"));
+});

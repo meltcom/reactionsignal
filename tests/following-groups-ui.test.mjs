@@ -20,6 +20,16 @@ function setup({fail=false,confirm=true,active=true}={}){
  return {context,choice,buttons,calls,notices};
 }
 
+test('YouTube group cannot be renamed, deleted or saved over through group controls',async()=>{
+ const {context,choice,buttons,calls,notices}=setup();
+ context.dashboard.followingGroups[0].kind='youtube';
+ vm.runInContext('bindFollowingGroups();',context);
+ for(const button of buttons.filter(b=>b.dataset.groupAction!=='activate')){
+  assert.equal(button.disabled,true);await button.onclick();
+ }
+ assert.equal(calls.length,0);assert.equal(notices.length,3);assert.equal(choice.value,'rock');
+});
+
 test('choosing saved groups activates them and refreshes follows in both directions',async()=>{
  const {context,choice,calls}=setup();
  choice.value='empty';const pending=choice.onchange();assert.equal(choice.disabled,true);await pending;

@@ -31,17 +31,17 @@ test('errors for expired permission, quota, malformed pagination, cancellation; 
  await assert.rejects(()=>readSubscriptions('x',{fetcher:async()=>Response.json({})}),/invalid/);
  const c=new AbortController();c.abort();await assert.rejects(()=>readSubscriptions('x',{signal:c.signal,fetcher:async(u,o)=>{o.signal.throwIfAborted();}}),{name:'AbortError'});
 });
-test('import counts follows rather than trigger writes and remains idempotent',async()=>{
+test('import counts dedicated memberships rather than activity writes and remains idempotent',async()=>{
  const {sql,call}=setup();
  assert.deepEqual((await call({channelIds:[id(1),id(2),id(3)]})).data,{added:3,skipped:0});
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-a' AND kind='reactor'").get().n,3);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM youtube_imported_follows WHERE user_id='member-a'").get().n,3);assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-a' AND kind='reactor'").get().n,0);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM user_activity WHERE user_id='member-a' AND kind='follow'").get().n,0);
  assert.deepEqual((await call({channelIds:[id(1),id(2),id(3)]})).data,{added:0,skipped:3});
 });
 
 test('import is add-only, duplicate safe, account isolated and rechecks hidden state',async()=>{
  const {sql,call}=setup();await call({channelIds:[id(1)]});sql.prepare('INSERT INTO hidden_reactors VALUES(?,?,?)').run('member-a',id(2),'now');sql.prepare('INSERT INTO follows VALUES(?,?,?)').run('member-a','song','existing');
- const r=await call({channelIds:[id(1),id(1),id(2),id(3)],userId:'member-b'});assert.deepEqual(r.data,{added:1,skipped:2});assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-a'").get().n,3);assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-b'").get().n,0);assert.equal((await call({channelIds:[id(3)]})).data.added,0);assert.equal((await call({channelIds:[id(2)]},{id:'member-b'})).data.added,1);assert.equal(sql.prepare('SELECT COUNT(*) n FROM hidden_reactors').get().n,1);
+ const r=await call({channelIds:[id(1),id(1),id(2),id(3)],userId:'member-b'});assert.deepEqual(r.data,{added:1,skipped:2});assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-a'").get().n,1);assert.equal(sql.prepare("SELECT COUNT(*) n FROM youtube_imported_follows WHERE user_id='member-a'").get().n,2);assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-b'").get().n,0);assert.equal((await call({channelIds:[id(3)]})).data.added,0);assert.equal((await call({channelIds:[id(2)]},{id:'member-b'})).data.added,1);assert.equal(sql.prepare('SELECT COUNT(*) n FROM hidden_reactors').get().n,1);
 });
 test('rejects unauthenticated, cross-origin, oversized, invalid or unknown channels before writing',async()=>{
  const {sql,call}=setup();assert.equal((await call({channelIds:[id(1)]},null)).status,401);assert.equal((await call({channelIds:[id(1)]},undefined,'https://evil.test')).status,403);assert.equal((await call({channelIds:[]})).status,400);assert.equal((await call({channelIds:['@name']})).status,400);assert.equal((await call({channelIds:Array(101).fill(id(1))})).status,400);assert.equal((await call({channelIds:[id(1),id(99)]})).status,409);assert.equal(sql.prepare('SELECT COUNT(*) n FROM follows').get().n,0);
@@ -58,7 +58,7 @@ test('disconnect deletes only tracked imports and cancels pending authorization'
  assert.equal((await call({confirm:true},undefined,'https://evil.test','POST','disconnect')).status,403);
  assert.equal((await call({confirm:true},undefined,undefined,'POST','disconnect')).status,200);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-a'").get().n,2);
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-b'").get().n,1);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-b'").get().n,0);assert.equal(sql.prepare("SELECT COUNT(*) n FROM youtube_imported_follows WHERE user_id='member-b'").get().n,1);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM user_activity WHERE user_id='member-a' AND target=?").get(id(1)).n,0);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM youtube_connections WHERE user_id='member-a'").get().n,0);
  assert.equal(sql.prepare('SELECT COUNT(*) n FROM youtube_revoke_jobs').get().n,0);
@@ -67,7 +67,7 @@ test('disconnect deletes only tracked imports and cancels pending authorization'
 test('scheduled check distinguishes revocation from temporary and configuration failures',async()=>{
  const {sql,call,env}=setup();await call({channelIds:[id(1)]});
  sql.prepare('UPDATE youtube_connections SET checked_at=0').run();env.YOUTUBE_FETCH=async()=>Response.json({error:'server_error'},{status:503});await checkYoutubeConnections(env);
- assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-a'").get().n,1);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM youtube_imported_follows WHERE user_id='member-a'").get().n,1);
  sql.prepare('UPDATE youtube_connections SET checked_at=0').run();env.YOUTUBE_FETCH=async()=>Response.json({error:'invalid_client'},{status:400});await checkYoutubeConnections(env);assert.equal(sql.prepare('SELECT COUNT(*) n FROM youtube_connections').get().n,2);
  sql.prepare('UPDATE youtube_connections SET checked_at=0').run();env.YOUTUBE_FETCH=async()=>Response.json({error:'invalid_grant'},{status:400});await checkYoutubeConnections(env);
  assert.equal(sql.prepare('SELECT COUNT(*) n FROM youtube_connections').get().n,0);assert.equal(sql.prepare('SELECT COUNT(*) n FROM youtube_imported_follows').get().n,0);assert.equal(sql.prepare('SELECT COUNT(*) n FROM follows').get().n,0);
@@ -78,9 +78,21 @@ test('bounded retention removes unverifiable connections and revocation retries 
  const cipher=sql.prepare('SELECT token_cipher FROM youtube_revoke_jobs LIMIT 1').get().token_cipher;assert.equal(cipher.includes('fixture-refresh'),false);
  env.YOUTUBE_FETCH=async()=>new Response(null,{status:200});await checkYoutubeConnections(env);assert.equal(sql.prepare('SELECT COUNT(*) n FROM youtube_revoke_jobs').get().n,0);
 });
-test('unfollowing an import removes provenance so a later manual follow survives disconnect',async()=>{
- const {sql,call}=setup();await call({channelIds:[id(1)]});sql.prepare("DELETE FROM follows WHERE user_id='member-a'").run();sql.prepare('INSERT INTO follows VALUES(?,?,?)').run('member-a','reactor',id(1));await call({confirm:true},undefined,undefined,'POST','disconnect');assert.equal(sql.prepare('SELECT COUNT(*) n FROM follows').get().n,1);
+test('removing an import explicitly permits a later independent manual follow',async()=>{
+ const context=setup();const {sql,call}=context;await call({channelIds:[id(1)]});
+ await socialCall(context,'following-group',{action:'activate',id:'youtube:member-a'});
+ await socialCall(context,'follow',{kind:'reactor',target:id(1),remove:true});
+ assert.equal(sql.prepare('SELECT COUNT(*) n FROM youtube_imported_follows').get().n,0);
+ const empty=await socialCall(context,'following-group',{action:'activate',id:'youtube:member-a'});
+ const response=await socialCall(context,'follow',{kind:'reactor',target:id(1)},'member-a',400);
+ assert.match(response.error,/manual group/);
+ const manualId='manual-empty';sql.prepare("INSERT INTO following_groups(id,user_id,name,follows,active,created_at) VALUES(?,?,?,'[]',0,'now')").run(manualId,'member-a','Manual');
+ await socialCall(context,'following-group',{action:'activate',id:manualId});
+ await socialCall(context,'follow',{kind:'reactor',target:id(1)});
+ await call({confirm:true},undefined,undefined,'POST','disconnect');
+ assert.equal(sql.prepare('SELECT COUNT(*) n FROM follows WHERE target=?').get(id(1)).n,1);
 });
+
 test('preview is server-side and stale connection confirmations fail closed',async()=>{
  const {call}=setup();const result=await call({},undefined,undefined,'POST','preview');assert.deepEqual(result.data,{channelIds:[id(1)],connectionId:'member-a'});assert.equal((await call({channelIds:[id(1)],connectionId:'old'})).status,409);
 });
@@ -111,7 +123,7 @@ test('saved groups cannot retain or resurrect tracked imported follows',async()=
  const {social}=await import('../server/social.mjs');const {sql,db,env,call}=setup();await call({channelIds:[id(1)]});sql.prepare('INSERT INTO follows VALUES(?,?,?)').run('member-a','reactor',id(2));
  const group=async body=>{const response=await social(new Request('https://reactionjourney.com/api/social/following-group',{method:'POST',headers:{Origin:'https://reactionjourney.com','Content-Type':'application/json'},body:JSON.stringify(body)}),env,{performers:[],channels:[],videos:[]},{id:'member-a'});assert.equal(response.status,200);return response.json();};
  const created=await group({action:'create',name:'My group'});let stored=JSON.parse(sql.prepare('SELECT follows FROM following_groups WHERE id=?').get(created.id).follows);assert.deepEqual(stored,[{kind:'reactor',target:id(2)}]);
- await group({action:'activate',id:created.id});assert.equal(sql.prepare('SELECT COUNT(*) n FROM youtube_imported_follows').get().n,1);assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-a'").get().n,2);
+ await group({action:'activate',id:created.id});assert.equal(sql.prepare('SELECT COUNT(*) n FROM youtube_imported_follows').get().n,1);assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE user_id='member-a'").get().n,1);
  await call({confirm:true},undefined,undefined,'POST','disconnect');await group({action:'activate',id:created.id});assert.equal(sql.prepare("SELECT COUNT(*) n FROM follows WHERE target=?").get(id(1)).n,0);
 });
 test('browser connection and disconnect controls use authenticated routes without tokens',async()=>{
@@ -138,4 +150,61 @@ test('browser connection and disconnect controls use authenticated routes withou
  await elements.get('youtubeImportForm').onsubmit({preventDefault(){}});assert.deepEqual(posts.find(p=>p.path.endsWith('/import')).body,{channelIds:[id(1)],connectionId:'connection-one'});
  await elements.get('disconnectYoutubeImport').onclick();assert.deepEqual(posts.at(-1).body,{confirm:true});assert.ok(refreshes>=3);assert.equal(JSON.stringify(posts).includes('access_token'),false);assert.equal(elements.get('youtubeImportForm').hidden,true);
  listeners['reaction-auth-change']();assert.equal(elements.get('youtubeImportMatches').children.length,0);
+});
+
+async function socialCall(context,path,body,userId='member-a',status=200){
+ const {social}=await import('../server/social.mjs');
+ const response=await social(new Request('https://reactionjourney.com/api/social/'+path,{method:body?'POST':'GET',headers:{Origin:'https://reactionjourney.com','Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),context.env,{performers:[],channels:[],videos:[]},{id:userId});
+ const data=await response.json();assert.equal(response.status,status,JSON.stringify(data));return data;
+}
+test('dedicated group isolates import, preserves overlapping manual snapshots, and clears only imports on disconnect',async()=>{
+ const c=setup();const {sql,call}=c;await call({channelIds:[id(3)]});
+ await socialCall(c,'follow',{kind:'reactor',target:id(1)});
+ const a=await socialCall(c,'following-group',{action:'create',name:'Group A'});
+ await socialCall(c,'follow',{kind:'reactor',target:id(1),remove:true});
+ await socialCall(c,'follow',{kind:'reactor',target:id(2)});
+ const b=await socialCall(c,'following-group',{action:'create',name:'Group B'});
+ await socialCall(c,'following-group',{action:'activate',id:b.id});
+ assert.equal((await call({channelIds:[id(1)]})).data.added,1);
+ let dashboard=await socialCall(c,'dashboard');
+ assert.deepEqual(dashboard.follows,[{kind:'reactor',target:id(2)}]);
+ assert.equal(dashboard.followingGroups.find(g=>g.id===b.id).active,1);
+ assert.equal(dashboard.followingGroups.find(g=>g.kind==='youtube').follows.length,2);
+ for(let i=0;i<2;i++){
+  await socialCall(c,'following-group',{action:'activate',id:a.id});
+  assert.deepEqual((await socialCall(c,'dashboard')).follows,[{kind:'reactor',target:id(1)}]);
+  await socialCall(c,'following-group',{action:'activate',id:b.id});
+ }
+ assert.deepEqual(JSON.parse(sql.prepare('SELECT follows FROM following_groups WHERE id=?').get(a.id).follows),[{kind:'reactor',target:id(1)}]);
+ await socialCall(c,'following-group',{action:'activate',id:'youtube:member-a'});
+ assert.equal((await socialCall(c,'dashboard')).follows.length,2);
+ assert.equal((await call({channelIds:[id(2)]})).data.added,1);
+ assert.equal((await socialCall(c,'dashboard')).follows.length,3);
+ assert.equal((await call({channelIds:[id(2)]})).data.added,0);
+ for(const action of ['rename','delete','save'])await socialCall(c,'following-group',{action,id:'youtube:member-a',name:'Overwrite'},'member-a',400);
+ await socialCall(c,'following-group',{action:'create',name:'Clone imports'},'member-a',400);
+ await socialCall(c,'following-group',{action:'save',id:a.id},'member-a',400);
+ await socialCall(c,'following-group',{action:'activate',id:a.id});
+ await call({confirm:true},undefined,undefined,'POST','disconnect');
+ dashboard=await socialCall(c,'dashboard');
+ assert.deepEqual(dashboard.follows,[{kind:'reactor',target:id(1)}]);
+ assert.deepEqual(dashboard.followingGroups.find(g=>g.kind==='youtube').follows,[]);
+ await socialCall(c,'following-group',{action:'activate',id:'youtube:member-a'});
+ assert.deepEqual((await socialCall(c,'dashboard')).follows,[]);
+ await socialCall(c,'following-group',{action:'activate',id:a.id});
+ assert.deepEqual((await socialCall(c,'dashboard')).follows,[{kind:'reactor',target:id(1)}]);
+});
+
+test('active import group handles individual removal, reset and revocation without leaking into manual groups',async()=>{
+ const c=setup(),{sql,call,env}=c;await call({channelIds:[id(1),id(2)]});
+ await socialCall(c,'following-group',{action:'activate',id:'youtube:member-a'});
+ await socialCall(c,'reset-follows',{kind:'song',confirm:true});
+ assert.equal((await socialCall(c,'dashboard')).followingGroups.find(g=>g.kind==='youtube').active,1);
+ await socialCall(c,'follow',{kind:'reactor',target:id(1),remove:true});
+ assert.deepEqual((await socialCall(c,'dashboard')).youtubeImports,[{kind:'reactor',target:id(2)}]);
+ await call({channelIds:[id(1)]},{id:'member-b'});
+ sql.prepare("UPDATE youtube_connections SET checked_at=0 WHERE user_id='member-a'").run();
+ env.YOUTUBE_FETCH=async()=>Response.json({error:'invalid_grant'},{status:400});await checkYoutubeConnections(env);
+ const d=await socialCall(c,'dashboard');assert.deepEqual(d.follows,[]);assert.deepEqual(d.youtubeImports,[]);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM youtube_imported_follows WHERE user_id='member-b'").get().n,1);
 });

@@ -39,12 +39,14 @@ export async function youtubeSubscriptions(request,env,seed,user){
  const unique=[...new Set(ids)];await seedDatabase(db,seed);
  const known=new Set((await catalog(db,seed,env)).channels.map(c=>c.id));
  if(unique.some(id=>!known.has(id)))return json({error:'A selected reactor is no longer in the catalog. Refresh the preview.'},409);
- const ops=[];
+ const ops=[db.prepare("INSERT OR IGNORE INTO following_groups(id,user_id,name,follows,active,created_at,kind) VALUES(?,?,'YouTube imports','[]',0,?,'youtube')").bind('youtube:'+user.id,user.id,new Date().toISOString())];
  for(const id of unique){
-  // Marker precedes the follow within the same transaction so activity triggers omit imported data.
-  ops.push(db.prepare("INSERT OR IGNORE INTO youtube_imported_follows SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM youtube_connections WHERE user_id=? AND id=?) AND NOT EXISTS(SELECT 1 FROM follows WHERE user_id=? AND kind='reactor' AND target=?) AND NOT EXISTS(SELECT 1 FROM hidden_reactors WHERE user_id=? AND channel_id=?)").bind(user.id,id,row.id,user.id,row.id,user.id,id,user.id,id));
-  ops.push(db.prepare("INSERT OR IGNORE INTO follows(user_id,kind,target) SELECT ?,'reactor',? WHERE EXISTS(SELECT 1 FROM youtube_imported_follows WHERE user_id=? AND target=? AND connection_id=?) AND EXISTS(SELECT 1 FROM youtube_connections WHERE user_id=? AND id=?) RETURNING target").bind(user.id,id,user.id,id,row.id,user.id,row.id));
+  // Connection tracking is the group's source of truth. Only the selected
+  // YouTube group gets materialized follows; other active groups stay untouched.
+  ops.push(db.prepare("INSERT OR IGNORE INTO youtube_imported_follows SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM youtube_connections WHERE user_id=? AND id=?) AND NOT EXISTS(SELECT 1 FROM hidden_reactors WHERE user_id=? AND channel_id=?) RETURNING target").bind(user.id,id,row.id,user.id,row.id,user.id,id));
+  ops.push(db.prepare("INSERT OR IGNORE INTO follows(user_id,kind,target) SELECT ?,'reactor',? WHERE EXISTS(SELECT 1 FROM youtube_imported_follows WHERE user_id=? AND target=? AND connection_id=?) AND EXISTS(SELECT 1 FROM youtube_connections WHERE user_id=? AND id=?) AND EXISTS(SELECT 1 FROM following_groups WHERE user_id=? AND active=1 AND kind='youtube')").bind(user.id,id,user.id,id,row.id,user.id,row.id,user.id));
  }
+ // Index 0 creates the group; odd indexes insert new import memberships.
  const results=await db.batch(ops),added=results.reduce((n,r,i)=>n+(i%2?r.results.length:0),0);
  return json({added,skipped:unique.length-added});
  }catch(error){return json({error:error.status?error.message:'YouTube connection could not be completed. Try again.'},error.status||503);}
