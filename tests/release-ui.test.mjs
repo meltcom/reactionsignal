@@ -3,6 +3,16 @@ import assert from 'node:assert/strict';
 import {assets} from '../dist/server/assets.mjs';
 import worker from '../dist/server/index.js';
 import {performerQueries} from '../server/discovery.mjs';
+import {readFileSync} from 'node:fs';
+import {configured} from '../server/youtube-connection.mjs';
+
+test('production deployment retains the required public YouTube OAuth configuration',()=>{
+ const config=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
+ assert.equal(config.vars.YOUTUBE_OAUTH_ORIGIN,'https://reactionjourney.com');
+ assert.equal(configured({...config.vars,GOOGLE_YOUTUBE_CLIENT_SECRET:'test-only-secret',YOUTUBE_TOKEN_ENCRYPTION_KEY:'x'.repeat(43)}),true);
+ assert.equal(config.vars.GOOGLE_YOUTUBE_CLIENT_SECRET,undefined);
+ assert.equal(config.vars.YOUTUBE_TOKEN_ENCRYPTION_KEY,undefined);
+});
 
 test('release packages the approved member UI and keeps PR44 search rotation',()=>{
  const html=assets['/index.html'].body, dashboard=assets['/dashboard.js'].body, ms=assets['/missioned-souls.js'].body;
