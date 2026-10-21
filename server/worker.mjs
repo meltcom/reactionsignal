@@ -1,3 +1,4 @@
+import {secureRedirect,secureResponse} from './security.mjs';
 import {discoveryCycle} from './rss.mjs';
 import { missionedSouls, scheduledMissionedSouls } from './missioned-souls.mjs';
 import { database, seedDatabase, catalog, status } from './db.mjs';
@@ -29,9 +30,10 @@ async function member(request,env){
 }
 export default {
   async fetch(request,env,ctx){
+    const redirect=secureRedirect(request);if(redirect)return redirect;
     const started=Date.now(),requestId=crypto.randomUUID();
     const original=await handleRequest(request,env,ctx);
-    const response=new Response(original.body,{status:original.status,statusText:original.statusText,headers:new Headers(original.headers)});
+    const response=secureResponse(request,original);
     const route=new URL(request.url).pathname.replace(/\/api\/profile-pictures\/.*/, '/api/profile-pictures/:id');
     console.log(JSON.stringify({event:'request',requestId,route,method:request.method,status:response.status,durationMs:Date.now()-started}));
     response.headers.set('X-Request-ID',requestId);
