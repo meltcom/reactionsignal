@@ -22,7 +22,7 @@ The redirect uses random state, a secure HttpOnly SameSite=Lax callback cookie, 
 
 Refresh tokens and temporary PKCE verifiers are AES-GCM encrypted with connection/state identifiers as authenticated context. The browser never receives Google tokens. Subscription responses are processed server-side only on demand; extracted channel IDs are sent to browser memory. No subscription list is persisted. The server refreshes/checks permission before every preview and follow confirmation. Each confirmation includes its connection ID, and atomic inserts require that connection to still exist. A disconnect racing with confirmation cannot recreate orphan imported follows.
 
-Imported follow provenance precedes follow insertion in the same transaction. Activity triggers omit tracked import additions/removals so Google-derived data is not recorded in moderator activity. Unfollow/reset clears provenance, allowing later manual follows to survive disconnect. No ratings or unrelated preferences are deleted. Saved following groups exclude tracked imported follows; group switching preserves imports separately so snapshots cannot retain or resurrect Google-derived follows after disconnection.
+Imported follow provenance precedes follow insertion in the same transaction. Activity triggers omit tracked import additions/removals so Google-derived data is not recorded in moderator activity. Unfollow/reset clears provenance, allowing later manual follows to survive disconnect. No ratings or unrelated preferences are deleted. Saved following groups exclude tracked imported follows; group switching selects either a manual group or the dedicated import group; import membership is read from its connection tracking records and is never copied into manual snapshots.
 
 ## Existing imports
 
@@ -33,3 +33,8 @@ The old database did not record provenance. Migration 0040 does not guess or mar
 Run npm run build and node --test tests/youtube-subscriptions.test.mjs tests/cloudflare.test.mjs tests/social.test.mjs. Tests cover encryption binding, OAuth state/cookie/PKCE replay checks, disconnect during exchange, transient versus definitive failures, account isolation, stale confirmations, provenance, and revocation retries.
 
 Production validation after secrets/redirect setup: connect a Google test account; import selected channels; confirm manual follows survive disconnect; revoke in Google settings and run/wait for the permission-check batch; verify tracked follows/connection are removed. Check consent denied and cancelled, service errors preserving follows, and safe callback URLs. Never use a real member's connection for destructive verification.
+
+
+### Dedicated YouTube imports group
+
+YouTube imports are saved in a separate system-managed Following group named YouTube imports. Importing does not switch your active group or add reactors to other groups. Select YouTube imports in Following to use those reactors in the Following feed. Re-importing adds newly selected reactors without duplicates. You can remove individual reactors while that group is active; manual groups can independently contain the same reactor. The import group cannot be renamed, deleted, cloned, or overwritten by saving current follows. Disconnecting or revoking YouTube clears tracked imports while preserving manual groups. Older imports without tracking cannot be identified automatically. Existing group contents already lost are not reconstructed.

@@ -19,7 +19,7 @@ export async function deleteConnection(env,row,{revokeToken=false}={}){
  const db=database(env),ops=[];
  // Queue before deleting so a network failure never leaves the member's data accessible.
  if(revokeToken)ops.push(db.prepare('INSERT OR IGNORE INTO youtube_revoke_jobs(id,token_cipher,created_at) VALUES(?,?,?)').bind(row.id,row.token_cipher,Date.now()));
- ops.push(db.prepare("DELETE FROM follows WHERE user_id=? AND kind='reactor' AND target IN(SELECT target FROM youtube_imported_follows WHERE user_id=? AND connection_id=?)").bind(row.user_id,row.user_id,row.id));
+ ops.push(db.prepare("DELETE FROM follows WHERE user_id=? AND kind='reactor' AND EXISTS(SELECT 1 FROM following_groups g WHERE g.user_id=follows.user_id AND g.active=1 AND g.kind='youtube') AND target IN(SELECT target FROM youtube_imported_follows WHERE user_id=? AND connection_id=?)").bind(row.user_id,row.user_id,row.id));
  ops.push(db.prepare('DELETE FROM youtube_imported_follows WHERE user_id=? AND connection_id=?').bind(row.user_id,row.id));
  ops.push(db.prepare('DELETE FROM youtube_connections WHERE user_id=? AND id=?').bind(row.user_id,row.id));
  ops.push(db.prepare('DELETE FROM youtube_oauth_states WHERE user_id=?').bind(row.user_id));
