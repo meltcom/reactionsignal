@@ -49,3 +49,89 @@ footer{flex-wrap:wrap}footer nav[aria-label="Policies"]{display:flex;flex-wrap:w
 .reactor-bulk{margin:12px 0}.reactor-bulk-buttons{display:flex;flex-wrap:wrap;gap:10px}.reactor-bulk p{margin:10px 0 0}.reactor-bulk [role=status]:empty{display:none}.following-groups>summary{cursor:pointer;display:list-item}.following-groups>summary h2{display:inline;margin:0;font-size:20px}.following-groups-content{padding-top:14px}.following-groups>summary:focus-visible{outline:2px solid var(--teal);outline-offset:5px}@media(max-width:600px){.reactor-bulk-buttons{flex-direction:column}.reactor-bulk-buttons button{width:100%}}
 
 .guide-download-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.guide-download-grid article{display:flex;flex-direction:column;align-items:flex-start;padding:20px;border:1px solid var(--line);border-radius:10px}.guide-download-grid h3{margin:0 0 10px}.guide-download-grid p{line-height:1.6;margin:0 0 12px}.guide-download-grid button{margin-top:auto}.guide-downloads>summary{cursor:pointer}.guide-downloads[open]>summary{margin-bottom:14px}.guide-downloads [role=status]:empty{display:none}@media(max-width:650px){.guide-download-grid{grid-template-columns:1fr;gap:14px}}
+
+/* My Feed: tighter cards and direct thumbnail playback. */
+#videoGrid{gap:12px}
+#videoGrid .video-card{min-width:0;border-radius:10px}
+#videoGrid .card-content{padding:10px 12px}
+#videoGrid .video-card h3{font-size:15px;line-height:1.35;margin:5px 0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+#videoGrid .reactor-name{font-size:13px;margin-bottom:6px}
+#videoGrid .card-metadata{gap:3px 10px;line-height:1.4}
+#videoGrid .card-footer{padding-top:6px;margin-top:auto}
+#videoGrid .card-footer select{margin:0;min-height:32px}
+#videoGrid .video-community{margin-top:6px;padding-top:6px;gap:4px 10px;flex-wrap:wrap}
+#videoGrid .video-community button{min-height:32px;font-size:12px}
+#videoGrid .eyebrow{font-size:10px}
+.video-play-link{position:absolute;inset:0;display:block;color:white}
+.video-play-link:focus-visible{outline-offset:-4px;z-index:1}
+.play-indicator{position:absolute;inset:0;display:grid;place-content:center;font-size:22px;color:white;text-shadow:0 1px 5px #000;opacity:0;background:#0002;transition:opacity .15s}
+.video-play-link:hover .play-indicator,.video-play-link:focus-visible .play-indicator{opacity:1}
+#videoGrid .thumb-tag{pointer-events:none;left:7px;bottom:7px;font-size:10px;padding:2px 5px}
+#videoGrid.layout-compact .video-thumb{min-height:120px}
+body[data-density=spacious] #videoGrid .card-content{padding:16px}
+@media(max-width:760px){
+ #videoGrid:not(.layout-table):not(.layout-large){grid-template-columns:1fr}
+ #videoGrid:not(.layout-table):not(.layout-large) .video-card{flex-direction:row;align-items:stretch}
+ #videoGrid:not(.layout-table):not(.layout-large) .video-thumb{width:32%;max-width:160px;min-height:0;aspect-ratio:auto;flex-shrink:0}
+ #videoGrid .card-content{min-width:0;padding:9px 10px}
+ #videoGrid .video-card h3{font-size:14px;margin-top:3px}
+ #videoGrid .card-metadata{font-size:11px;gap:2px 8px}
+ #videoGrid .thumb-tag{max-width:calc(100% - 12px);line-height:1.3;left:6px;bottom:6px}
+ #videoGrid .favorite-button{right:6px;top:6px}
+ #videoGrid .play-indicator{opacity:1}
+ #videoGrid .video-community{gap:2px 10px}
+}
+#videoGrid .video-card h3 button{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;width:100%}
+
+/* Keep watch status in the shared card action row. */
+#videoGrid .video-community select[data-watch]{width:auto;max-width:100px;min-height:32px;padding:3px 4px;margin:0;font-size:11px;line-height:1.3;flex:0 0 auto}
+#videoGrid .video-community{justify-content:flex-start}
+
+/* Preserve landscape thumbnails instead of stretching them to the card height. */
+@media(max-width:760px){
+ #videoGrid:not(.layout-table):not(.layout-large) .video-thumb{width:38%;max-width:160px;aspect-ratio:16/9;align-self:flex-start;margin-top:10px;margin-left:8px;border-radius:6px}
+ #videoGrid:not(.layout-table):not(.layout-large) .thumb-tag{display:none}
+ #videoGrid:not(.layout-table):not(.layout-large) .favorite-button{width:28px;height:28px;right:4px;top:4px;font-size:18px}
+}
+
+#videoGrid .video-community .rate-discuss-button{background:var(--teal);color:var(--white);font-size:13px;font-weight:650;min-height:36px;padding:7px 14px;border-radius:7px}
+body[data-theme=dark] #videoGrid .rate-discuss-button{color:#102329}
+.video-discussion-actions{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px;padding:12px;background:var(--cream);border-radius:8px;margin:12px 0 16px}
+.video-discussion-actions label{margin:0;font-size:12px}
+.video-discussion-actions select{display:block;margin:4px 0 0;min-height:36px;padding:6px 8px;font-size:13px}
+.video-discussion-actions button{min-height:36px;padding:7px 10px;font-size:13px}
+
+/* Apply the customization settings to compact feed cards too. */
+body[data-density=compact] #videoGrid{gap:8px}
+body[data-density=compact] #videoGrid .card-content{padding:8px}
+body[data-density=spacious] #videoGrid{gap:24px}
+body[data-density=spacious] #videoGrid .card-content{padding:20px}
+body[data-density=spacious] #videoGrid .video-community{margin-top:12px;padding-top:12px}
+@media(max-width:760px){
+ body[data-thumb=small] #videoGrid:not(.layout-table):not(.layout-large) .video-thumb{width:28%}
+ body[data-thumb=large] #videoGrid:not(.layout-table):not(.layout-large) .video-thumb{width:45%}
+}
+
+/* Feed card status and playback action, shared by App and Web views. */
+#videoGrid .card-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+#videoGrid .card-heading .eyebrow{margin:0;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#videoGrid .card-watch-status{flex-shrink:0;margin-left:auto;font-size:10px;line-height:1.4;white-space:nowrap;color:var(--muted)}
+#videoGrid .card-watch-status[data-watch-status=watched]{color:var(--teal);font-weight:650}
+#videoGrid .video-community{flex-wrap:nowrap;justify-content:space-between;gap:8px}
+#videoGrid .video-community .rate-discuss-button{flex:0 1 auto;min-width:0;padding:7px 8px;font-size:12px}
+#videoGrid .card-watch-link{display:inline-flex;align-items:center;justify-content:flex-end;flex-shrink:0;min-height:36px;margin-left:auto;font-size:12px;white-space:nowrap;color:var(--teal);text-decoration:underline;text-underline-offset:3px}
+@media(max-width:360px){#videoGrid .card-heading{gap:5px}#videoGrid .card-heading .eyebrow{font-size:9px}#videoGrid .card-watch-status{font-size:9px}}
+
+.feed-search-actions{flex-wrap:wrap}#clearFeedFilters{min-height:44px}
+
+.card-metadata .following-match{flex-basis:100%;color:var(--teal);font-weight:600;overflow-wrap:anywhere}
+
+.youtube-import .youtube-import-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+
+.following-reactor-pagination{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:16px 0}
+.following-reactor-pagination label{display:flex;align-items:center;gap:8px;margin:0}
+.following-reactor-pagination select{width:auto;margin:0}
+
+.following-song-pagination{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:16px 0}
+.following-song-pagination label{display:flex;align-items:center;gap:8px;margin:0}
+.following-song-pagination select{width:auto;margin:0}

@@ -36,3 +36,15 @@ test('release packages MS Journey visibility controls with matching help and exi
  for(const action of ['Hide from members','Remove from MS Journey','Restore to MS Journey'])assert.ok(ms.includes(action),action);
  assert.ok(html.includes('Visibility decisions survive official-channel refreshes and repeated imports.'));
 });
+
+test('release retains compact cards, app navigation and optimized branding',()=>{
+ const dashboard=assets['/dashboard.js'].body,css=assets['/dashboard.css'].body,mobile=assets['/mobile-app.js'].body;
+ for(const feature of ['card-watch-status','card-watch-link','video-play-link','videoDiscussionActionsMarkup','lastFeedMarkup','dataIndexes'])assert.ok(dashboard.includes(feature),feature);
+ assert.ok(css.includes('.card-heading')&&css.includes('.card-watch-link'));
+ assert.ok(mobile.includes('reaction-journey-interface-')&&mobile.includes('Customize feed'));
+ for(const name of ['reaction-journey-logo-small','reaction-journey-app-logo-small','ms-journey-logo-small','sunset-coastal-highway-badge-small']){
+  const image=assets['/images/'+name+'.webp'];assert.ok(image,name);
+  const bytes=Buffer.from(image.base64,'base64');assert.equal(bytes.toString('ascii',8,12),'WEBP');assert.ok(bytes.length<100000,name+' must remain optimized');
+ }
+ assert.ok(assets['/index.html'].body.includes('images/reaction-journey-logo-small.webp'));
+});

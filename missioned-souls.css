@@ -28,3 +28,6 @@
 
 /* Search and filters are available on demand. */
 .ms-search-toggle{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:10px}.ms-search-toggle[aria-expanded="true"]{background:#174f44;color:white}#ms-browse-filters{margin-top:14px}#ms-ranking-note[hidden]{display:none!important}
+
+/* Match My Feed: Shorts, clear, then search; keep controls visible when collapsed. */
+.ms-feed-actions{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:16px;margin:14px 0}.ms-feed-actions #ms-clear{min-height:44px}.ms-feed-actions .ms-search-toggle{width:44px;height:44px;min-width:44px;padding:0;border-radius:50%;background:var(--white);color:var(--teal);border:1px solid var(--line)}.ms-feed-actions .ms-search-toggle[aria-expanded="true"]{background:var(--teal);color:var(--white)}
