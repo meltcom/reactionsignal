@@ -1,3 +1,6 @@
+import snapshot from '../ms-playlist-catalog.json' with {type:'json'};
+import {playlistCatalog,yearCatalog} from '../ms-journey-catalog.mjs';
+import {refreshPlaylists} from './ms-playlists.mjs';
 import {categoryRegistry,manageCategories} from "./ms-categories.mjs";
 import {normalizeVideo,suggestCategories,classifyShort} from '../missioned-souls-core.mjs';
 const json=(v,status=200)=>new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store'}});
@@ -9,7 +12,10 @@ export async function readMissionedSouls(db,seed){
  const videos=new Map(seed.videos.map(v=>{const n=normalizeVideo(v,registry.items.map(c=>c.id));return [n.id,n];})),history=new Map(),visibility=new Map();
  for(const r of rows){const v=JSON.parse(r.value);if(r.key.startsWith('ms-video:'))videos.set(v.id,v);else if(r.key.startsWith('ms-visibility:'))visibility.set(v.id,v.visibility);else{const h=history.get(v.id)||[];h.push(v);history.set(v.id,h);}}
  const refresh=await state(db,'ms-refresh');
- return {categoryDefinitions:registry.items,categoryRevision:registry.revision,videos:[...videos.values()].map(v=>({...v,visibility:visibility.get(v.id)||'visible',history:history.get(v.id)||[]})),coverage:refresh?.lastCompleteAt?'Official-channel upload scan completed '+refresh.lastCompleteAt+'. Category review and Facebook / other-source coverage may still be incomplete.':(await state(db,'ms-coverage'))?.message||seed.coverage,refresh,updatedAt:(await state(db,'ms-updated'))?.at||null};
+ const playlists=await state(db,'ms-playlists')||snapshot;
+ const catalog=playlistCatalog([...videos.values()].map(v=>({...v,visibility:visibility.get(v.id)||'visible',history:history.get(v.id)||[]})),registry.items,playlists.playlists);
+ const dated=yearCatalog(catalog.videos,catalog.categoryDefinitions);
+ return {...dated,categoryRevision:registry.revision,playlistRefresh:await state(db,'ms-playlist-refresh'),playlistUpdatedAt:playlists.updatedAt||playlists.fetchedAt||null,coverage:refresh?.lastCompleteAt?'Official-channel upload scan completed '+refresh.lastCompleteAt+'. Category review and Facebook / other-source coverage may still be incomplete.':(await state(db,'ms-coverage'))?.message||seed.coverage,refresh,updatedAt:(await state(db,'ms-updated'))?.at||null};
 }
 async function saveVideos(db,items,{manual=false}={}){
  const registry=await categoryRegistry(db);
@@ -27,7 +33,7 @@ async function saveVideos(db,items,{manual=false}={}){
  for(let i=0;i<ops.length;i+=50)await db.batch(ops.slice(i,i+50));
  await upsert(db,'ms-updated',{at:new Date().toISOString()}).run();return normalized.length;
 }
-export async function refreshMissionedSouls(env,seed,fetcher=fetch){
+export async function refreshMissionedSouls(env,seed,fetcher=fetch,{latestOnly=false}={}){
  const db=env.DB;if(!db)return {status:'blocked',message:'Catalog storage is unavailable.'};
  if(!env.YOUTUBE_API_KEY)return {status:'blocked',message:'YouTube API access is not configured. Import a saved catalog, or configure YOUTUBE_API_KEY on the server.'};
  const now=new Date().toISOString();
@@ -38,9 +44,9 @@ export async function refreshMissionedSouls(env,seed,fetcher=fetch){
  const api=async(endpoint,params)=>{const u=new URL('https://www.googleapis.com/youtube/v3/'+endpoint);for(const [k,v]of Object.entries({...params,key:env.YOUTUBE_API_KEY}))u.searchParams.set(k,v);const r=await fetcher(u,{signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error('YouTube refresh failed ('+r.status+'). Existing catalog preserved.');return r.json();};
  try{
   if(!progress.uploads){const c=await api('channels',{part:'contentDetails',forHandle:'@MissionedSouls'});if(!c.items?.[0])throw new Error('Official YouTube channel not found.');progress.uploads=c.items[0].contentDetails.relatedPlaylists.uploads;progress.channelId=c.items[0].id;}
-  let pageToken=progress.nextPage||'',added=0,done=false;
+  let pageToken=latestOnly?'':progress.nextPage||'',added=0,done=false;
   // Four upload pages per invocation; the next invocation resumes older uploads.
-  for(let page=0;page<4;page++){
+  for(let page=0;page<(latestOnly?1:4);page++){
    const p=await api('playlistItems',{part:'contentDetails',playlistId:progress.uploads,maxResults:'50',...(pageToken?{pageToken}:{})});
    const ids=p.items.map(x=>x.contentDetails.videoId);
    if(ids.length){const data=await api('videos',{part:'snippet,statistics,contentDetails',id:ids.join(',')});
@@ -50,9 +56,10 @@ export async function refreshMissionedSouls(env,seed,fetcher=fetch){
    }
    pageToken=p.nextPageToken||'';if(!pageToken){done=true;break;}
   }
+  if(latestOnly){progress={...progress,lastLatestAt:now,latestStatus:'complete'};await upsert(db,'ms-refresh',progress).run();return {status:'latest-refreshed',count:added};}
   progress={...progress,nextPage:pageToken,status:done?'complete':'continuing',lastBatchAt:now,lastCompleteAt:done?now:progress.lastCompleteAt||null,message:done?'Full upload pass complete.':'More uploads remain; next refresh continues the scan.',count:added};
   await upsert(db,'ms-refresh',progress).run();return progress;
- }catch(error){progress={...progress,status:'error',message:error.message,lastAttemptAt:now};await upsert(db,'ms-refresh',progress).run();return progress;}
+ }catch(error){if(latestOnly){await upsert(db,'ms-refresh',{...progress,latestStatus:'error',latestError:error.message,lastLatestAttemptAt:now}).run();return {status:'error',message:error.message};}progress={...progress,status:'error',message:error.message,lastAttemptAt:now};await upsert(db,'ms-refresh',progress).run();return progress;}
  finally{await db.prepare("DELETE FROM state WHERE key='ms-lock'").run();}
 }
 export async function missionedSouls(request,env,seed,user){
@@ -64,6 +71,7 @@ export async function missionedSouls(request,env,seed,user){
   if(Number(request.headers.get('Content-Length'))>2000000)return json({error:'Import is too large.'},413);
   const raw=await request.text();if(raw.length>2000000)return json({error:'Import is too large.'},413);const b=JSON.parse(raw);
   if(b.action==='categories')return manageCategories(env.DB,b);
+  if(b.action==='playlists')return json(await refreshPlaylists(env,saveVideos));
   if(b.action==='refresh')return json(await refreshMissionedSouls(env,seed));
   if(b.action==='visibility'){
    if(typeof b.id!=='string'||!['visible','hidden','removed'].includes(b.visibility))return json({error:'Choose a video and a valid visibility.'},400);
@@ -91,8 +99,15 @@ export async function missionedSouls(request,env,seed,user){
 // Start only after a moderator initiates collection; then continue bounded batches.
 export async function scheduledMissionedSouls(env,seed,fetcher=fetch){
  if(!env.DB||!env.YOUTUBE_API_KEY)return {status:'idle'};
+ const playlistProgress=await state(env.DB,'ms-playlist-refresh');
+ if(playlistProgress&&(!playlistProgress.updatedAt||Date.now()-Date.parse(playlistProgress.updatedAt)>86400000)&&(!playlistProgress.lastAttemptAt||Date.now()-Date.parse(playlistProgress.lastAttemptAt)>3600000))await refreshPlaylists(env,saveVideos,fetcher);
  const progress=await state(env.DB,'ms-refresh');
  if(!progress)return {status:'idle'};
+ const latestAt=Date.parse(progress.lastLatestAt||progress.lastCompleteAt||0);
+ if(!Number.isFinite(latestAt)||Date.now()-latestAt>=14*60000){
+  const latest=await refreshMissionedSouls(env,seed,fetcher,{latestOnly:true});
+  if(latest.status!=='latest-refreshed')return latest;
+ }
  const since=Date.now()-Date.parse(progress.lastCompleteAt||0);
  if(progress.status==='complete'&&since<86400000)return {status:'waiting'};
  if(progress.status==='error'&&Date.now()-Date.parse(progress.lastAttemptAt)<3600000)return {status:'waiting'};

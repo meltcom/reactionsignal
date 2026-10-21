@@ -1,6 +1,6 @@
 # Reaction Journey Help
 
-Choose a topic to expand its guide. Guides for members, moderators, and administrators. Updated October 7, 2026, for the current Missioned Souls service.
+Choose a topic to expand its guide. Guides for members, moderators, and administrators. Updated October 11, 2026, for the current Missioned Souls service.
 
 - Sign in and get started
 
@@ -10,7 +10,9 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - Following and Reactors
 
-- Reactor ratings and ranking
+- Following groups
+
+- Reactor comments, ratings and ranking
 
 - Hide and unhide reactors
 
@@ -24,7 +26,7 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - My Profile & Activity and submitting reactions
 
-- Points & Reputation
+- Points & Trust
 
 - Discovery status & catalog coverage
 
@@ -46,21 +48,21 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - Review the matched catalog reactors, change the selections, then choose Follow selected reactors. Select 1–100 per confirmation. Already followed, hidden, and outside-catalog channels are counted separately and are not added as new follows.
 
-- Repeat Import / re-import YouTube subscriptions anytime to check newly subscribed channels or another YouTube account. It adds selected follows without removing existing follows; it is not an automatic synchronization.
+- Repeat Import / re-import YouTube subscriptions anytime to check newly subscribed channels or another YouTube account after disconnecting the current connection. It adds selected follows without removing existing follows; it is not an automatic synchronization.
 
-- Cancel clears the current preview without changing follows. The import does not change your YouTube subscriptions. Only confirmed reactor IDs are saved; the complete subscription list and Google access token are not stored by Reaction Journey.
+- Cancel clears the current preview without changing follows. The import does not change your YouTube subscriptions. Only confirmed reactor IDs are saved as tracked imported follows. The full subscription response is not retained. An encrypted Google refresh token is stored on the server for daily permission checks and on-demand imports.
 
-- After a reset, re-import can help rebuild reactor follows. Revoking Google permission does not remove follows already saved in Reaction Journey. Manage that permission through the Google account connections link in the import panel.
+- After a reset, re-import can help rebuild reactor follows. Disconnect YouTube and delete imported follows removes follows tracked to your connection and requests Google revocation. Revocation in Google settings is detected during daily permission checks or the next import, and tracked imported follows are removed. Manual follows, ratings and favorites remain. Tracked imports stay outside saved following groups and remain followed when you switch groups. Older imports cannot be distinguished from manual follows; review them in Following or contact support.
 
-- If the Google popup is closed or blocked, retry Connect YouTube. For origin_mismatch or access restrictions, report the exact message and site address to the administrator. Domain ownership verification and permission to use this OAuth feature are separate checks.
+- Connect YouTube redirects to Google and returns to Reaction Journey. If authorization is cancelled, retry Connect YouTube. For origin_mismatch or access restrictions, report the exact message and site address to the administrator. Domain ownership verification and permission to use this OAuth feature are separate checks.
 
 ### Reset follows or use Master Reset
 
-- Open Following. Reset all reactor follows removes every reactor follow in your account, including follows of hidden channels. Reset all song follows removes only your song follows.
+- Open Following. Performer follows are at the bottom of the page. Reset all reactor follows removes every reactor follow in your account, including follows of hidden channels. Reset all song follows removes only your song follows.
 
 - Each separate reset asks for confirmation. Other follow types, hidden reactors, ratings, and YouTube subscriptions stay unchanged.
 
-- Master Reset removes your reactor follows, song follows, hidden reactors, and reactor ratings together. Confirm only if you want to clear all four; these choices cannot be automatically restored.
+- At the bottom of Following, expand Advanced: Master Reset and select Master Reset… to open the confirmation. Master Reset removes your reactor follows, song follows, hidden reactors, and reactor ratings together. Confirm only if you want to clear all four. Saved Following groups remain available but are deactivated; switching to one can restore its saved reactor and song follows. Hidden choices and reactor ratings cannot be restored from groups.
 
 - Master Reset preserves video ratings, performer follows, favorites, watch status, appearance and account settings, earned points, and your YouTube subscriptions. It affects only your own Reaction Journey account.
 
@@ -110,7 +112,7 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - All reactions shows the catalog subject to your filters.
 
-- New today shows videos newly cataloged today using your browser’s local date, not necessarily uploaded today.
+- New today includes videos discovered today or published today, using your browser’s local date. An older upload can appear when discovered; a premiere discovered earlier can appear again on its publication day once its recorded publication time has passed. It remains one catalog entry. The catalog must have the current publication date. Your filters and hidden reactors still apply.
 
 - Following shows matches to your account’s follows.
 
@@ -148,9 +150,9 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - Every member’s rating has equal weight; changing your rating does not earn more points.
 
-- Submit comment for review sends your comment to moderators before public display.
+- Trusted Members publish comments and replies directly. Other members submit them for moderator review; pending comments are visible only to their author until approved.
 
-- Reply starts a response; Edit resubmits an existing comment for review; Delete removes your own contribution.
+- Reply starts a response; Edit publishes directly for Trusted Members or resubmits for review when approval is required; Delete removes your own contribution.
 
 - Like, Block, and Report appear where available.
 
@@ -162,13 +164,32 @@ Choose a topic to expand its guide. Guides for members, moderators, and administ
 
 - Disagreement or a low rating alone is not grounds for removal.
 
+### Reactor comments and ratings
+
+- Open Reactors and choose Rate & comment beside a reactor.
+
+- Save or clear your overall reactor rating (1–100), and post a comment of 10–2,000 characters.
+
+- Reactor discussions apply to the channel; video comments apply to one video.
+
+- Use Reply, Helpful, Edit, Delete, Report, or Block just as in video discussions.
+
+- Trusted Members publish directly; other comments and edits await moderator approval and are visible only to their author until approved.
+
+- Useful reactor and video comments/replies share the same +3 Contribution Points award, up to three awards per day.
+
+- Removing a comment reverses its award.
+
+- Reactor ratings do not earn video-rating points.
+
 ### Reactor ratings
 
 - Open Reactors to rate a channel from 1 to 100; 100 is highest.
 
 - Each member has one editable rating per channel. Community score is the average; rating counts show how many members contributed.
 
-- Sort Reactors by Highest ranked, subscribers, or name.
+- Sort Reactors by Community rank (average member rating), My ranking (your own saved 1–100 ratings), subscribers, or name. Both rating sorts put highest scores first and unrated reactors last.
+- Choose 10, 25 (default), 50, or All reactors per page. Previous and Next browse the shorter list. Searching or changing the sort or list size returns to the first page.
 
 - In My Feed choose Highest ranked reactors to sort videos by their channels’ community scores.
 
@@ -276,41 +297,44 @@ In Reactors, use Import YouTube subscriptions, then Connect YouTube. Grant optio
 
 ### My Profile & Activity and submitting reactions
 
+- In My Profile & Activity, choose a Profile icon and Background color, preview the result, then use Save display name to save your profile. Initials returns to the initials icon. Contribution badges remain separate from pictures and icons.
+
+- Upload profile picture accepts JPG, PNG, or WebP up to 10 MB. The image is cropped to a square and resized automatically. Check the preview and use Save display name to save it; selecting a file alone does not upload it.
+
+- Your saved picture appears publicly beside your name in discussions, chat, and leaderboards. Remove picture / use icon previews removal; save your profile to confirm it.
+
 - Save display name updates the public name used on contributions and leaderboards.
 
 - Submit a reaction opens the missing-video form.
 
 - Paste a direct YouTube video URL, choose Missioned Souls, explain why it belongs, and click Suggest video.
 
-- Submissions await moderator verification; duplicates, already pending records, and exclusions can be rejected.
+- Trusted members publish valid submissions directly and earn points within daily limits. Other submissions await moderator verification. Duplicates, already pending records, and exclusions can be rejected.
 
 - Your contributions and review decisions shows outcomes and moderator notes; Your recent points shows awards.
 
 - Performer recommendations are closed because Reaction Journey is dedicated to Missioned Souls.
 
-### Points & Reputation
+### Contribution Points & Trusted Member status
 
-- First rating of a video earns +1, up to 10 awards/day.
+Contribution Points recognize helpful activity and determine your badge. Trusted Member is a separate posting status granted by moderators.
 
-- Approved comments earn +3, up to 3/day.
+| Activity | Points | Maximum awards per UTC day |
+| --- | ---: | ---: |
+| First video rating | +1 | 10 |
+| Useful comment or reply | +3 | 3 combined |
+| Valid missing reaction submission | +20 | 5 |
+| Verified catalog correction/removal report | +10 | 5 |
 
-- Accepted new reaction submissions earn +20, up to 5/day.
-
-- The first confirmed relevance correction earns +5, up to 5/day.
-
-- Daily award limits reset at midnight UTC; reviewed contributions count on the approval date.
-
-- Duplicate discoveries, unconfirmed reports, rating changes, chat, and moderator self-approvals do not earn additional points.
-
-- Hidden/reversed contributions can reverse their awards.
-
-- Contributor starts at 25 points, Reaction scout at 100, Catalog curator at 250, and Community champion at 1,000.
-
-- Point badges appear before member display names in supported chats, comments, leaderboards, and member lists. Hover over a badge to see its level and point count. Points & Reputation includes the badge legend.
-
-- Badge levels are Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000+). Badges confer recognition, not moderator permissions; points have no cash value.
-
-- The page shows your history, total, and community leaderboard.
+- Trusted members publish reactions, comments and replies directly and earn points immediately. Other members earn points after moderator approval. Correction/removal reports always require moderator verification, including trusted members’ reports.
+- The +10 correction rate applies to new awards. Earlier awards retain their original amounts.
+- Daily limits reset at midnight UTC. Direct posts count on posting date; reviewed contributions count on approval date. Each contribution earns at most one award. Duplicate discoveries, unconfirmed reports, rating changes, chat and moderator self-approvals earn no additional points.
+- Trusted edits retain earned points and cannot earn a second award. Removed comments reverse their awards. Editing a comment while approval is required returns it to review and reverses its existing award.
+- After three separate currently accepted contributions verified by another moderator, a member is flagged for trust review. Ratings, direct unreviewed posts, hidden/rejected items and self-approvals do not count. Three approvals do not grant trust automatically: a moderator checks quality and accuracy.
+- Existing trusted members keep their access. Moderators can revoke trust with a reason; previously published posts and badges remain. A posting mute prevents posting even for trusted members.
+- No separate reputation score or Verify for Reputation step is required. Previous reputation history is available in Historical reputation archive and no longer controls access or earns new awards.
+- Badge levels remain Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000+). Badges confer recognition; they do not grant trust or moderator powers. Points have no cash value and do not weight video ratings.
+- Open Points & Trust for your posting status, moderator-approved contribution count, point weights, badge legend and leaderboard. My Profile & Activity shows recent point awards.
 
 ### Discovery status & catalog coverage
 
@@ -383,6 +407,8 @@ In Reactors, use Import YouTube subscriptions, then Connect YouTube. Grant optio
 - For a saved catalog video that is rejected or excluded, use Correct video information and the deliberate Save Corrections & Restore workflow instead. Accepted submissions have no Reopen for Review button.
 
 ### MS Journey: maintain videos and categories
+
+- Open MS Journey and expand Review video on a card. Hide from members temporarily conceals it; Remove from MS Journey asks for confirmation and withdraws it from the archive. Both preserve the stored record and view history and hide it from member listings and counts. These actions do not delete the original YouTube or Facebook video. Use Moderator view → Hidden / removed videos to find withdrawn entries, then expand Review video and select Restore to MS Journey. Switching to this view clears browsing filters so hidden entries are easier to find, including unavailable videos. Restoring an unavailable video does not make its source available again. Visibility decisions survive official-channel refreshes and repeated imports. These controls apply to the MS Journey archive; reaction videos use the separate moderator catalog manager.
 
 - Open MS Journey → Catalog updates & category review. Refresh official YouTube catalog starts an official-upload scan; repeat refresh to continue it. Scheduled batches continue initiated scans after reaction discovery, then refresh counts daily after a completed pass.
 
@@ -518,9 +544,18 @@ In Reactors, use Import YouTube subscriptions, then Connect YouTube. Grant optio
 
 - Use Member Review under Moderator to search names or email, correct display names, adjust points with a reason, or mute and unmute posting.
 
-- New members are Novice until 25 points, then Contributor. Badges appear before member display names: Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000+). Hover over a badge to see its level and current points. The Reputation page shows the badge legend. Badges use participation points, not verified reputation, and reflect point adjustments or reversals on refresh.
+- New members are Novice until 25 points, then Contributor. Badges appear before member display names: Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000+). Hover over a badge to see its level and current points. The Points & Trust page shows the badge legend. Badges use Contribution Points, separate from Trusted Member status, and reflect point adjustments or reversals on refresh.
 
 ## Moderator & administrator help
+
+### Member Review: grant, defer or revoke trust
+
+1. Open **Moderator → Member Review**. Select **Ready for trust review** to see unreviewed members with at least three independent moderator-approved contributions. Use **All members** to revisit deferred or revoked members, or **Trusted members** for existing access.
+2. Expand **Review contributions and trust history**, then select **Load evidence**. Check accuracy, quality and conduct using the contribution text, video links and moderator notes. The count includes all qualifying records; the evidence list shows the latest 100 contributions.
+3. Select **Grant Trusted Member status**, enter a reason, then **Save member change**. The server requires three accepted contributions verified by another moderator and rejects changing your own trust.
+4. Select **Reviewed: keep approval required** to defer trust, or **Revoke Trusted Member status** to remove direct posting. Reasons and moderator identities are saved in trust history. A later review can grant trust again if the three-approval condition is met.
+5. Continue reviewing uncertain reactions, correction/removal requests and content reports. Trusted posts require no separate reputation verification. Mutes remain available for temporary posting restrictions.
+
 
 ### Moderator Queue: review safely
 
@@ -552,7 +587,7 @@ In Reactors, use Import YouTube subscriptions, then Connect YouTube. Grant optio
 
 - Review group filters All groups, Strong matches, Possible Shorts / excerpts, Possibly unrelated, Uncertain evidence, Moderator / performer holds, or Not rechecked yet.
 
-- Strong matches require a known reactor, exact performer evidence, reaction wording, and duration over three minutes.
+- Strong matches accept an exact performer name in the title, or reaction wording in the title with explicit performer reaction evidence in the description. Covers, Shorts and missing duration do not block approval. Watch parties, tour updates and comparison titles await review.
 
 - Metadata cannot prove video contents.
 
@@ -576,7 +611,7 @@ In Reactors, use Import YouTube subscriptions, then Connect YouTube. Grant optio
 
 - Initial history scan offers 30 days, 90 days, one year, or older history; changing aliases or the window starts a fresh search.
 
-- Review policy either holds matches or publishes clear full-length reactions automatically; ambiguous/short matches remain for review.
+- Review policy either holds matches or publishes clear performer matches automatically on any channel. Ambiguous context and explicit moderator holds remain for review.
 
 - Enable ongoing discovery controls new discovery for Missioned Souls.
 
@@ -642,4 +677,41 @@ In Reactors, use Import YouTube subscriptions, then Connect YouTube. Grant optio
 
 - A successful deployment does not guarantee healthy discovery: verify recent runs, catalog loading, login, and moderation.
 
-Members with more than 15 verified reputation points (16+) publish reactions and comments, including replies and edits, directly. Members with 15 or fewer remain subject to moderator approval. Participation points do not unlock direct publishing. Direct reactions require successful YouTube metadata lookup and appear as Confirmed. Existing exclusions, duplicate checks, mutes, and daily posting limits apply. Reports and removal requests still require review. Direct publishing earns no verification rewards; moderators can hide published comments.
+Trusted Member is a moderator-managed status, separate from Contribution Points and badges. After three currently accepted contributions verified by another moderator, members are flagged for trust review. A moderator checks quality and accuracy before granting trust; access is not automatic. Existing trusted members retain access during migration. Moderators can defer or revoke trust with a recorded reason. Trusted reactions, comments and replies publish directly and earn Contribution Points immediately within daily limits. Other members require approval. Corrections and removal reports always require verification. Direct reactions require successful YouTube metadata lookup and appear as Confirmed. Existing exclusions, duplicate checks, mutes and daily posting limits remain in force. The former reputation ledger is retained as history and no longer earns new awards or controls access.
+
+
+Moderators can use Video Classification Review → Manage catalog approvals to search any catalog status. Unapprove returns an entry to the review queue; Hide removes it for all members; Delete removes it and blocks rediscovery. Each action requires a reason and records the moderator, timestamp and previous decision. Comments, ratings and saved metadata are retained. Correct / restore approval opens the existing correction workflow, which explicitly restores an available video and records a restoration reason. These catalog actions do not delete YouTube uploads.
+
+
+Moderator Queue starts with five collapsed sections: Automatic discoveries, Member contributions, Content reports & member mutes, Review history & recovery, and Discovery tools & settings. Open a section to load its list; only one section remains open at a time. Automatic discoveries use pages of 25 videos and keep bulk actions on the current page. Click the section heading or Close section & return to overview to collapse a long list. Reviewed member submissions and previously excluded Shorts load only when their history list is opened. Refresh counts / open section refreshes counts and the section being reviewed. Manage published catalog videos opens Video Classification Review.
+
+
+### Following groups
+
+- Open Following and add the reactors and songs you want in a group. Enter a New group name, then choose Save current follows as new group. Save up to 50 private groups with names of 1–60 characters.
+
+- Choose a Saved group, then Switch group to replace current reactor and song follows with its saved follows. Saving a new group does not activate it; use Switch group to activate it.
+
+- Changes to an active group are saved automatically when you switch groups. If no group is active, save current follows before switching if you want to keep them.
+
+- Replace with current follows overwrites the selected group after confirmation. Rename changes its name; Delete group removes the saved group after confirmation and leaves current follows in place.
+
+- Groups contain reactor and song follows. Performer follows, hidden reactors, ratings, favorites, and appearance are account choices outside groups. An empty active group shows no followed reactions. Hidden reactors stay hidden in every group.
+
+- Resets clear current follows and deactivate the active group while retaining saved groups. A separate reactor or song reset saves the active group’s current follows first; Master Reset retains its last saved snapshot. Switching to a saved group restores that snapshot.
+
+- View followed reactions opens the Following feed. Other feed filters still apply. Following groups choose who and what you follow; Saved Views store filters and layout.
+
+# Discovery coverage and performer searches
+
+Eligible channels whose latest uploads have not been checked in 24 hours receive priority over repeat checks of active channels. API failures retain retry delays. Moderator diagnostics list up to 50 coverage gaps with the last successful check, retry time, and error; a new eligible channel may have no successful check yet.
+
+Performer discovery alternates broad performer searches with a name-only search and up to three recent dated song searches. Song titles come from stored official MS Journey titles in “Song by Artist” format or existing catalog song fields. Missing song information leaves broad searches in rotation. Search windows overlap by seven days; video IDs prevent duplicate catalog entries and existing moderation decisions remain intact.
+
+With the default 20-page UTC daily budget, search pages are spaced at least 75 minutes apart, including continuations. Lower limits increase the interval. Existing legacy cursors finish with their original fixed windows. Runtime limits or API failures may delay a search; the daily cap is never increased by this update.
+
+Moderator query diagnostics show cumulative pages, newly cataloged videos, newly eligible reactors, and nonnegative publication-to-discovery delays up to seven days. Metrics start with this update; already known videos do not count as new discoveries.
+
+### Moderator discovery timing
+
+Fresh-upload timing uses observations recorded in the past 24 hours where discovery was within 24 hours of publication. It shows sample count, median, average and maximum, including a source breakdown. Older discoveries (more than 24 hours after publication) are reported separately, including historical finds older than seven days. Missing or negative timing, such as advance premieres, is excluded and counted separately. The median is the middle delay, or the average of the two middle delays for an even number of observations. The two timing groups use the same discovery window; old finds do not inflate the fresh-upload measurement. These reporting and database-batching changes do not change polling intervals or the daily search quota.

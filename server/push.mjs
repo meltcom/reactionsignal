@@ -57,7 +57,7 @@ export async function signatureValid(secret,bytes,header){
  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:algorithm},false,['verify']);
  return crypto.subtle.verify('HMAC',key,Uint8Array.from(match[2].match(/../g),v=>parseInt(v,16)),bytes);
 }
-async function boundedBody(request,max=262144){
+export async function boundedBody(request,max=262144){
  if(Number(request.headers.get('Content-Length'))>max)throw new Error('Too large');
  const reader=request.body?.getReader();if(!reader)return new Uint8Array();
  const chunks=[];let size=0;
@@ -85,7 +85,7 @@ export async function youtubePush(request,env,seed,ctx){
  if(!await signatureValid(sub.secret,bytes,request.headers.get('X-Hub-Signature')))return reply('Invalid signature',403);
  let entries;try{entries=feedEntries(new TextDecoder().decode(bytes),channel);}catch{return reply('Invalid feed',400);}
  const received=new Date().toISOString();
- await db.batch([...entries.map(video=>db.prepare(`INSERT INTO push_jobs(video_id,channel_id,received_at) VALUES(?,?,?) ON CONFLICT(video_id) DO UPDATE SET received_at=excluded.received_at,status='pending',attempts=0,next_attempt=0,error=NULL
+ await db.batch([...entries.map(video=>db.prepare('INSERT OR IGNORE INTO notification_receipts(video_id,source,received_at) VALUES(?,?,?)').bind(video,'YouTube upload notification',received)),...entries.map(video=>db.prepare(`INSERT INTO push_jobs(video_id,channel_id,received_at) VALUES(?,?,?) ON CONFLICT(video_id) DO UPDATE SET received_at=excluded.received_at,status='pending',attempts=0,next_attempt=0,error=NULL,source='YouTube upload notification'
   WHERE push_jobs.status<>'pending' AND (push_jobs.processed_at IS NULL OR push_jobs.processed_at<?)`).bind(video,channel,received,new Date(now-300000).toISOString())),
   db.prepare("INSERT INTO state(key,value) VALUES('last-push-received',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(received)]);
  // Acknowledge only after persistence. A scheduler retries work if background processing fails.
@@ -113,8 +113,8 @@ export async function processPushJobs(env,seed,fetcher=fetch){
     await db.prepare('UPDATE push_jobs SET attempts=?,next_attempt=?,status=?,error=?,processed_at=? WHERE video_id=? AND received_at=?').bind(attempts,Date.now()+Math.min(6*3600000,60000*2**Math.min(attempts,8)),state,failed?'YouTube temporarily unavailable':'Video details not yet available',state==='failed'?at:null,job.video_id,job.received_at).run();continue;
    }
    // Treat hub IDs as hints: YouTube metadata must confirm the subscribed channel.
-   if(item.snippet?.channelId===job.channel_id)added+=await saveVideo(db,item,performers,at,'YouTube upload notification');
-   await db.prepare("UPDATE push_jobs SET status='done',processed_at=?,error=NULL WHERE video_id=? AND received_at=?").bind(at,job.video_id,job.received_at).run();processed++;
+   if(item.snippet?.channelId===job.channel_id)added+=await saveVideo(db,item,performers,at,job.source);
+   await db.prepare("UPDATE push_jobs SET status='done',processed_at=?,error=NULL WHERE video_id=? AND received_at=?").bind(at,job.video_id,job.received_at).run();await db.prepare('UPDATE notification_receipts SET processed_at=COALESCE(processed_at,?) WHERE video_id=?').bind(at,job.video_id).run();processed++;
   }
  }finally{await db.prepare("DELETE FROM state WHERE key='push-process-lease' AND value=?").bind(leaseValue).run();}
  return {status:'processed',processed,added};

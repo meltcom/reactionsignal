@@ -10,7 +10,7 @@ test('manual Shorts classification preserves metadata and survives later refresh
  const mark=isShort=>missionedSouls(new Request('https://reactionjourney.com/api/missioned-souls',{method:'POST',body:JSON.stringify({action:'set-short',id:'yt:C1yfkA_0_Sg',isShort})}),env,seed,{id:'member',moderator:true});
  assert.equal((await mark(true)).status,200);
  let current=(await readMissionedSouls(db,seed)).videos[0];
- assert.deepEqual(current.tags,['OPM','Shorts']);assert.equal(current.views,123);assert.equal(current.reviewed,false);
+ assert.deepEqual(current.tags.filter(t=>!t.startsWith('playlist:')&&!t.startsWith('year:')),['OPM','Shorts']);assert.equal(current.views,123);assert.equal(current.reviewed,false);
  const fetcher=async url=>{const p=new URL(url).pathname;return Response.json(p.endsWith('/channels')?{items:[{id:'official',contentDetails:{relatedPlaylists:{uploads:'uploads'}}}]}:p.endsWith('/playlistItems')?{items:[{contentDetails:{videoId:'C1yfkA_0_Sg'}}]}:{items:[{id:'C1yfkA_0_Sg',snippet:{title:'Studio cover #shorts',channelId:'official',publishedAt:'2026-01-01'},statistics:{viewCount:'456'}}]});};
  await refreshMissionedSouls(env,seed,fetcher);
  current=(await readMissionedSouls(db,seed)).videos[0];assert.ok(current.tags.includes('Shorts'));assert.equal(current.views,456);
@@ -66,7 +66,7 @@ test('imports retain view history, reviewed tags survive refresh, and duplicate 
  const channel='UC1234567890123456789012';let calls=0;
  const fetcher=async url=>{calls++;const p=new URL(url).pathname;return new Response(JSON.stringify(p.endsWith('/channels')?{items:[{id:channel,contentDetails:{relatedPlaylists:{uploads:'uploads'}}}]}:p.endsWith('/playlistItems')?{items:[{contentDetails:{videoId:'C1yfkA_0_Sg'}}]}:{items:[{id:'C1yfkA_0_Sg',snippet:{title:'Studio cover',channelId:channel,publishedAt:'2026-01-01T00:00:00Z'},statistics:{viewCount:'500',likeCount:'20'}}]}));};
  const env={DB:db,YOUTUBE_API_KEY:'test-secret'};await refreshMissionedSouls(env,seed,fetcher);await refreshMissionedSouls(env,seed,fetcher);
- const data=await readMissionedSouls(db,seed);assert.equal(data.videos.length,1);assert.deepEqual(data.videos[0].tags,['OPM']);assert.equal(data.videos[0].reviewed,true);assert.equal(data.videos[0].views,500);assert.equal(data.videos[0].comments,null);assert.equal(data.videos[0].history.length,3);assert.ok(data.refresh.lastCompleteAt);assert.equal(calls,5);
+ const data=await readMissionedSouls(db,seed);assert.equal(data.videos.length,1);assert.deepEqual(data.videos[0].tags.filter(t=>!t.startsWith('playlist:')&&!t.startsWith('year:')),['OPM']);assert.equal(data.videos[0].reviewed,true);assert.equal(data.videos[0].views,500);assert.equal(data.videos[0].comments,null);assert.equal(data.videos[0].history.length,3);assert.ok(data.refresh.lastCompleteAt);assert.equal(calls,5);
  const bad=await missionedSouls(req({action:'import',videos:[{...v,history:[{at:'invalid',views:3}]}]}),{DB:db},seed,{id:'member',moderator:true});assert.equal(bad.status,400);assert.equal((await readMissionedSouls(db,seed)).videos[0].views,500);
 });
 test('category lifecycle preserves assignments and rejects stale updates and member writes',async()=>{
@@ -76,15 +76,15 @@ test('category lifecycle preserves assignments and rejects stale updates and mem
  let catalog=await readMissionedSouls(db,seed);
  const act=async body=>{const r=await missionedSouls(request({action:'categories',revision:catalog.categoryRevision,...body}),env,seed,mod);assert.equal(r.status,200);catalog=await readMissionedSouls(db,seed);};
  await act({operation:'add',name:'Favorites'});
- const custom=catalog.categoryDefinitions.at(-1).id;
+ const custom=catalog.categoryDefinitions.find(c=>c.name==='Favorites').id;
  const saved=await missionedSouls(request({action:'save',video:{...catalog.videos[0],tags:['OPM',custom]}}),env,seed,mod);assert.equal(saved.status,200,JSON.stringify(await saved.json()));
  await act({operation:'rename',id:custom,name:'Family favorites'});
  await act({operation:'move',id:custom,direction:-1});
  await act({operation:'archive',id:custom,archived:true});
- assert.deepEqual(catalog.videos[0].tags,['OPM',custom]);
+ assert.deepEqual(catalog.videos[0].tags.filter(t=>!t.startsWith('playlist:')&&!t.startsWith('year:')),['OPM',custom]);
  await act({operation:'archive',id:custom,archived:false});
  assert.equal(catalog.categoryDefinitions.find(c=>c.id===custom).name,'Family favorites');
- assert.deepEqual(catalog.videos[0].tags,['OPM',custom]);
+ assert.deepEqual(catalog.videos[0].tags.filter(t=>!t.startsWith('playlist:')&&!t.startsWith('year:')),['OPM',custom]);
  assert.equal((await missionedSouls(request({action:'categories',revision:0,operation:'add',name:'Stale'}),env,seed,mod)).status,409);
  assert.equal((await missionedSouls(request({action:'categories',revision:catalog.categoryRevision,operation:'archive',id:custom,archived:true}),env,seed,{id:'member',moderator:false})).status,403);
  assert.equal((await missionedSouls(new Request('https://local/api/missioned-souls'),env,seed,null)).status,401);
@@ -105,7 +105,7 @@ test('moderator hide/remove survives refresh and import, filters member API, and
   const member=await (await missionedSouls(new Request('https://local/api/missioned-souls'),env,seed,{id:'member'})).json();
   assert.equal(member.videos.length,0);
   const catalog=await readMissionedSouls(db,seed);assert.equal(catalog.videos[0].visibility,visibility);
-  assert.deepEqual(catalog.videos[0].tags,['OPM']);assert.ok(catalog.videos[0].history.length);
+  assert.deepEqual(catalog.videos[0].tags.filter(t=>!t.startsWith('playlist:')&&!t.startsWith('year:')),['OPM']);assert.ok(catalog.videos[0].history.length);
   assert.equal(selectVideos(catalog.videos).length,0);
   assert.equal(selectVideos(catalog.videos,{visibility:'managed'}).length,1);
  }
@@ -116,4 +116,14 @@ test('hidden unknown-date and unavailable records remain recoverable',()=>{
  const hidden=video(undefined,{visibility:'hidden',available:false});
  assert.equal(selectVideos([hidden]).length,0);
  assert.equal(selectVideos([hidden],{visibility:'managed'}).length,1);
+});
+
+test('managed newest-first lists dated, undated and unavailable videos once and respects year',()=>{
+ const dated=video(undefined,{visibility:'hidden',publishedAt:'2026-01-01'});
+ const undated=video('3DzA_GoOE60',{visibility:'removed',available:false});
+ const unavailable=video('abcdefghijk',{visibility:'removed',available:false,publishedAt:'2025-01-01'});
+ const items=[dated,undated,unavailable];
+ assert.deepEqual(selectVideos(items,{visibility:'managed'}).map(v=>v.id),[dated.id,unavailable.id,undated.id]);
+ assert.deepEqual(selectVideos(items,{visibility:'managed',year:'2026'}).map(v=>v.id),[dated.id]);
+ assert.deepEqual(selectVideos(items),[]);
 });

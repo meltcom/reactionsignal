@@ -1,4 +1,13 @@
+import {officialFeedVideos} from './official-feed.mjs';
 export const EXCLUDED = ['pwNtcFZ_59I','N1VgQd6YGXY','dw3TLJ9tfdE','_605HPZxVcg','P69VWMewzQY'];
+// Fresh uploads are discovered within 24 hours of publication; older catalog finds are separate.
+export function discoveryTiming(observations){
+ const fresh=[],older=[];let unavailable=0;
+ for(const row of observations){const lag=row.delay_seconds;if(typeof lag!=='number'||!Number.isFinite(lag)||lag<0){unavailable++;continue;}(lag<=86400?fresh:older).push(row);}
+ const summarize=rows=>{const values=rows.map(r=>r.delay_seconds).sort((a,b)=>a-b),n=values.length;return {samples:n,average_seconds:n?values.reduce((a,b)=>a+b,0)/n:null,median_seconds:n?(values[Math.floor((n-1)/2)]+values[Math.floor(n/2)])/2:null,max_seconds:n?values[n-1]:null};};
+ const sources=rows=>[...new Set(rows.map(r=>r.source))].sort().map(source=>({source,...summarize(rows.filter(r=>r.source===source))}));
+ return {delay:summarize(fresh),delaySources:sources(fresh),olderDiscoveryDelay:summarize(older),olderDelaySources:sources(older),delayWindow:{discoveredWithinHours:24,freshWithinHours:24,unavailableSamples:unavailable}};
+}
 export function database(env) { if (!env.DB) throw new Error('Catalog storage is unavailable'); return env.DB; }
 export async function batches(db, statements) { for(let i=0;i<statements.length;i+=50) await db.batch(statements.slice(i,i+50)); }
 export async function seedDatabase(db, seed) {
@@ -49,13 +58,30 @@ export async function status(db,env) {
   const heldChannels=(await db.prepare("SELECT id,name,discovery_scope FROM channels WHERE discovery_scope<>'eligible' ORDER BY name LIMIT 50").all()).results;
   const requestDay=new Date().toISOString().slice(0,10);
   const youtubeRequests=(await db.prepare('SELECT key,value FROM state WHERE key>=? AND key<?').bind('youtube-requests:'+requestDay+':','youtube-requests:'+requestDay+';').all()).results;
-  const delay=await db.prepare("SELECT COUNT(*) samples,AVG(delay_seconds) average_seconds,MAX(delay_seconds) max_seconds FROM discovery_observations WHERE discovered_at>=? AND source IN ('Recent-upload check','YouTube upload notification') AND delay_seconds BETWEEN 0 AND 604800").bind(new Date(Date.now()-86400000).toISOString()).first();
+  const since=new Date(Date.now()-86400000).toISOString();
+  const observations=(await db.prepare('SELECT source,delay_seconds FROM discovery_observations WHERE discovered_at>=?').bind(since).all()).results;
+  const {delay,delaySources,olderDiscoveryDelay,olderDelaySources,delayWindow}=discoveryTiming(observations);
+  const notificationDelays=(await db.prepare("SELECT r.source,COUNT(*) receipts,SUM(CASE WHEN r.processed_at IS NOT NULL THEN 1 ELSE 0 END) processed,SUM(CASE WHEN v.published_at IS NOT NULL AND julianday(r.received_at)>=julianday(v.published_at) THEN 1 ELSE 0 END) publication_samples,AVG(CASE WHEN julianday(r.received_at)>=julianday(v.published_at) THEN (julianday(r.received_at)-julianday(v.published_at))*86400 END) publication_to_receipt_seconds,AVG((julianday(r.processed_at)-julianday(r.received_at))*86400) receipt_to_processed_seconds FROM notification_receipts r LEFT JOIN videos v ON v.id=r.video_id WHERE r.received_at>=? GROUP BY r.source").bind(since).all()).results;
+  const rssLast=await db.prepare("SELECT value FROM state WHERE key='rss-last-batch'").first();
+  const rssCoverage=await db.prepare("SELECT COUNT(*) total,SUM(CASE WHEN r.checked_at>=? AND r.error IS NULL THEN 1 ELSE 0 END) checked,SUM(CASE WHEN r.error IS NOT NULL THEN 1 ELSE 0 END) errors FROM channels c LEFT JOIN rss_checks r ON r.channel_id=c.id WHERE c.discovery_scope='eligible'").bind(since).first();
+  const rssErrors=(await db.prepare("SELECT r.error,COUNT(*) channels FROM rss_checks r JOIN channels c ON c.id=r.channel_id WHERE c.discovery_scope='eligible' AND r.error IS NOT NULL GROUP BY r.error ORDER BY channels DESC LIMIT 10").all()).results;
+  const searchState=(await db.prepare("SELECT key,value FROM state WHERE key IN ('search:missioned-souls','search-progress:missioned-souls','search-error:missioned-souls','search-diagnostics:missioned-souls',?)").bind('search-budget:'+requestDay).all()).results;
+  const searchValues=new Map(searchState.map(x=>[x.key,x.value]));
+  const searchDiagnostic=searchValues.get('search-diagnostics:missioned-souls');
+  const discoverySearch={lastBatch:searchDiagnostic?JSON.parse(searchDiagnostic):null,lastCompletedAt:searchValues.get('search:missioned-souls')||null,pending:Boolean(searchValues.get('search-progress:missioned-souls')),error:searchValues.get('search-error:missioned-souls')||null,usedToday:Number(searchValues.get('search-budget:'+requestDay)||0)};
+  const repairState=await db.prepare("SELECT value FROM state WHERE key='discovery-repair-baseline-v1'").first();
+  const repairBaseline=repairState?JSON.parse(repairState.value):null;
+  const repairDelays=repairBaseline?(await db.prepare("SELECT source,COUNT(*) samples,AVG(delay_seconds) average_seconds,MAX(delay_seconds) max_seconds FROM discovery_observations WHERE discovered_at>=? AND delay_seconds BETWEEN 0 AND 604800 GROUP BY source ORDER BY source").bind(repairBaseline.at>since?repairBaseline.at:since).all()).results:[];
   const channelStats=await db.prepare("SELECT value FROM state WHERE key='channel-stats-last-batch'").first();
   const age=scheduled?.value?Date.now()-Date.parse(scheduled.value):Infinity;
   const automation=age>=0&&age<24*3600000?'active':scheduled?'stale':'not_connected';
   const message=!env.YOUTUBE_API_KEY?'Automatic discovery is inactive: YouTube API access is not configured.':automation==='active'?'Scheduled discovery is running. Check the recent batches and channel coverage below.':automation==='stale'?'Scheduled discovery has not fired in the past 24 hours. Check the scheduler.':'Discovery worker ready; scheduled execution is not connected.';
   const unavailableChannels=(await db.prepare("SELECT id,name,recent_failures,recent_retry_at,recent_error FROM channels WHERE discovery_scope='eligible' AND recent_failures>0 ORDER BY recent_retry_at LIMIT 50").all()).results;
-  return {channelStats:channelStats?JSON.parse(channelStats.value):null,unavailableChannels,heldChannels,scopes,youtubeRequests,requestDay,delay,apiConfigured:Boolean(env.YOUTUBE_API_KEY),automation,lastScheduledAt:scheduled?.value||null,lastSuccessfulBatchAt:last?.finished_at||null,coverage,historyBacklog:backlog?.channels||0,lastDiscoveryRunAt:history.results.find(r=>r.finished_at)?.finished_at||null,runs:history.results,message};
+  const overdueChannels=(await db.prepare("SELECT id,name,recent_checked_at,recent_attempted_at,recent_retry_at,recent_error FROM channels WHERE discovery_scope='eligible' AND (recent_checked_at IS NULL OR recent_checked_at<?) ORDER BY recent_checked_at,recent_attempted_at,id LIMIT 50").bind(since).all()).results.map(c=>({...c,reason:c.recent_retry_at&&c.recent_retry_at>new Date().toISOString()?'Waiting for API retry':!c.recent_checked_at?'No successful recent-upload check yet':'Overdue; awaiting scheduler',error:c.recent_error||null}));
+  const queryMetrics=(await db.prepare("SELECT value FROM state WHERE key>='search-query:missioned-souls:' AND key<'search-query:missioned-souls;' ORDER BY key").all()).results.map(r=>JSON.parse(r.value));
+  discoverySearch.queries=queryMetrics;
+  coverage.overdueChannels=overdueChannels;
+  return {olderDiscoveryDelay,olderDelaySources,delayWindow,discoverySearch,repairBaseline,repairDelays,delaySources,notificationDelays,rss:{lastBatch:rssLast?JSON.parse(rssLast.value):null,coverage:rssCoverage,errors:rssErrors},channelStats:channelStats?JSON.parse(channelStats.value):null,unavailableChannels,heldChannels,scopes,youtubeRequests,requestDay,delay,apiConfigured:Boolean(env.YOUTUBE_API_KEY),automation,lastScheduledAt:scheduled?.value||null,lastSuccessfulBatchAt:last?.finished_at||null,coverage,historyBacklog:backlog?.channels||0,lastDiscoveryRunAt:history.results.find(r=>r.finished_at)?.finished_at||null,runs:history.results,message};
 }
 export async function catalog(db,seed,env) {
   const rows=await db.prepare("SELECT v.*,m.performer_id,m.status,m.source,c.name channel_name FROM videos v JOIN matches m ON v.id=m.video_id LEFT JOIN channels c ON c.id=v.channel_id JOIN performers p ON p.id=m.performer_id WHERE p.status='active' AND p.id='missioned-souls' AND v.available=1 AND m.status IN ('CONFIRMED','PROBABLE') AND NOT EXISTS (SELECT 1 FROM exclusions e WHERE e.video_id=v.id AND e.performer_id=m.performer_id) ORDER BY v.published_at DESC").all();
@@ -71,7 +97,8 @@ export async function catalog(db,seed,env) {
   for(const c of imported) if(activeIds.has('missioned-souls')) known.set(`missioned-souls:${c.id}`,{...known.get(`missioned-souls:${c.id}`),performerId:'missioned-souls',id:c.id,name:c.name,url:`https://www.youtube.com/channel/${c.id}`,status:c.currentDiscovery?'NEW REACTOR':'CATALOGED',reactions:c.reactions,discoveredAt:seed.importRun.startedAt,currentDiscovery:c.currentDiscovery});
   const masterChannels=(await db.prepare("SELECT value FROM state WHERE key >= 'master-channel-snapshot:' AND key < 'master-channel-snapshot;'").all()).results;
   for(const row of masterChannels)if(activeIds.has('missioned-souls')){const c=JSON.parse(row.value);const key=`missioned-souls:${c.id}`;known.set(key,{...known.get(key),...c,performerId:'missioned-souls',url:`https://www.youtube.com/channel/${c.id}`,currentDiscovery:false});}
-  for(const v of videos) if(!known.has(`${v.performerId}:${v.channelId}`)) known.set(`${v.performerId}:${v.channelId}`,{performerId:v.performerId,id:v.channelId,name:v.channelName,url:`https://www.youtube.com/channel/${v.channelId}`,status:'CATALOGED',reactions:videos.filter(x=>x.channelId===v.channelId&&x.performerId===v.performerId).length});
+  const videoCounts=new Map();for(const v of videos){const key=`${v.performerId}:${v.channelId}`;videoCounts.set(key,(videoCounts.get(key)||0)+1);}
+  for(const v of videos) if(!known.has(`${v.performerId}:${v.channelId}`)) known.set(`${v.performerId}:${v.channelId}`,{performerId:v.performerId,id:v.channelId,name:v.channelName,url:`https://www.youtube.com/channel/${v.channelId}`,status:'CATALOGED',reactions:videoCounts.get(`${v.performerId}:${v.channelId}`)});
   const liveStats=(await db.prepare("SELECT key,value FROM state WHERE key >= 'youtube-channel-stats:' AND key < 'youtube-channel-stats;'").all()).results;
   const byId=new Map(liveStats.map(row=>[row.key.slice('youtube-channel-stats:'.length),JSON.parse(row.value)]));
   for(const c of known.values()){
@@ -79,5 +106,5 @@ export async function catalog(db,seed,env) {
     if(live.updatedAt){c.subscribers=live.subscribers;c.subscribersHidden=live.subscribersHidden;c.subscribersUpdatedAt=live.updatedAt;c.channelViews=live.channelViews;c.channelVideoCount=live.channelVideoCount;c.description=live.description;c.thumbnailUrl=live.thumbnailUrl;c.youtubeName=live.youtubeName;}
     c.youtubeAvailability=live.availability||'unknown';c.subscriberRefreshError=live.error||null;
   }
-  return {performers,channels:[...known.values()],videos,stats:{channels:new Set([...known.values()].map(c=>c.id)).size,videos:videos.length,performers:performers.length},discovery:await status(db,env)};
+  return {performers,channels:[...known.values()],videos,officialVideos:await officialFeedVideos(db,seed.missionedSouls||{videos:[]}),stats:{channels:new Set([...known.values()].map(c=>c.id)).size,videos:videos.length,performers:performers.length}};
 }

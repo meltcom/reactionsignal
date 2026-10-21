@@ -24,67 +24,42 @@ async function setup(){
 test('requires verified identity, same origin, and server-side moderator authorization',async()=>{const {call}=await setup();assert.equal((await call('/summary',null,null)).status,401);assert.equal((await call('/profile',{name:'unsafe'},'fan',{Origin:'https://evil.test'})).status,403);assert.equal((await call('/queue',null,'fan')).status,403);assert.equal((await call('/moderate',{id:'x',moderator:true},'fan')).status,403);});
 test('ratings are one per user and video; first-rating points have a daily cap',async()=>{const {call,video,points}=await setup();for(let i=0;i<12;i++){const id=String(i).padStart(11,'0');video(id);assert.equal((await call('/rating',{videoId:id,performerId:'missioned-souls',score:5})).status,200);}assert.equal(points('fan'),10);assert.equal((await call('/rating',{videoId:'00000000000',performerId:'missioned-souls',score:1})).status,200);assert.equal(points('fan'),10);const r=await call('/summary');const s=r.data.scores.find(x=>x.video_id==='00000000000');assert.equal(s.count,1);assert.equal(s.average,1);assert.equal((await call('/rating',{videoId:'00000000000',performerId:'missioned-souls',score:6})).status,400);});
 test('comments remain private until accepted; hiding reverses points exactly once',async()=>{const {call,video,points}=await setup();video();const body={kind:'comment',performerId:'missioned-souls',videoId:'abcdefghijk',body:'A detailed and thoughtful reaction.'};assert.equal((await call('/contribute',body)).status,200);assert.equal((await call('/contribute',body)).status,409);assert.equal((await call('/video?id=abcdefghijk')).data.comments.length,0);const id=(await call('/summary')).data.mine[0].id;assert.equal((await call('/moderate',{id,decision:'accept',note:'Constructive relevant comment'},'owner')).status,200);assert.equal(points('fan'),3);assert.equal((await call('/video?id=abcdefghijk')).data.comments.length,1);assert.equal((await call('/moderate',{id,decision:'accept',note:'Approve a second time'},'owner')).status,409);assert.equal((await call('/moderate',{id,decision:'hide',note:'Spam discovered after review'},'owner')).status,200);assert.equal(points('fan'),0);assert.equal((await call('/video?id=abcdefghijk')).data.comments.length,0);});
-test('submitted videos are canonicalized and only published after verified approval',async()=>{const {call,sql,points}=await setup();const body={kind:'submission',performerId:'missioned-souls',url:'https://youtu.be/abcdefghijk?t=5',body:'This new reaction features Missioned Souls.'};assert.equal((await call('/contribute',body)).status,200);assert.equal((await call('/contribute',{...body,url:'https://www.youtube.com/watch?v=abcdefghijk'},'other')).status,409);assert.equal(sql.prepare('SELECT COUNT(*) n FROM videos').get().n,0);const id=(await call('/summary')).data.mine[0].id;assert.equal((await call('/moderate',{id,decision:'accept',note:'Verified on YouTube'},'owner')).status,400);assert.equal((await call('/moderate',{id,decision:'accept',note:'Verified full reaction on YouTube',title:'Missioned Souls reaction',channelName:'Sample reactor',channelId:channel},'owner')).status,200);assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get('abcdefghijk').status,'CONFIRMED');assert.equal(points('fan'),20);assert.equal((await call('/contribute',body,'other')).status,409);});
-test('confirmed flag excludes only the selected match and rewards one correction',async()=>{const {call,video,sql,points}=await setup();video();for(const user of ['fan','other'])assert.equal((await call('/contribute',{kind:'flag',performerId:'missioned-souls',videoId:'abcdefghijk',reason:'wrong-performer',body:'This video features another performer.'},user)).status,200);const id=(await call('/summary')).data.mine[0].id;assert.equal((await call('/moderate',{id,decision:'accept',note:'Confirmed another performer'},'owner')).status,200);assert.equal(points('fan'),5);assert.equal(sql.prepare('SELECT COUNT(*) n FROM videos').get().n,1);assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get('abcdefghijk').status,'REJECTED');const other=(await call('/summary',null,'other')).data.mine[0].id;assert.equal((await call('/moderate',{id:other,decision:'accept',note:'Duplicate flag accepted'},'owner')).status,409);assert.equal(points('other'),0);});
+test('submitted videos are canonicalized and only published after verified approval',async()=>{const {call,sql,points}=await setup();const body={kind:'submission',performerId:'missioned-souls',url:'https://youtu.be/abcdefghijk?t=5',body:'This new reaction features Missioned Souls.'};assert.equal((await call('/contribute',body)).status,200);assert.equal((await call('/contribute',{...body,url:'https://www.youtube.com/watch?v=abcdefghijk'},'other')).status,409);assert.equal(sql.prepare("SELECT COUNT(*) n FROM videos WHERE id='abcdefghijk'").get().n,0);const id=(await call('/summary')).data.mine[0].id;assert.equal((await call('/moderate',{id,decision:'accept',note:'Verified on YouTube'},'owner')).status,400);assert.equal((await call('/moderate',{id,decision:'accept',note:'Verified full reaction on YouTube',title:'Missioned Souls reaction',channelName:'Sample reactor',channelId:channel},'owner')).status,200);assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get('abcdefghijk').status,'CONFIRMED');assert.equal(points('fan'),20);assert.equal((await call('/contribute',body,'other')).status,409);});
+test('confirmed flag excludes only the selected match and rewards one correction',async()=>{const {call,video,sql,points}=await setup();video();for(const user of ['fan','other'])assert.equal((await call('/contribute',{kind:'flag',performerId:'missioned-souls',videoId:'abcdefghijk',reason:'wrong-performer',body:'This video features another performer.'},user)).status,200);const id=(await call('/summary')).data.mine[0].id;assert.equal((await call('/moderate',{id,decision:'accept',note:'Confirmed another performer'},'owner')).status,200);assert.equal(points('fan'),10);assert.equal(sql.prepare("SELECT COUNT(*) n FROM videos WHERE id='abcdefghijk'").get().n,1);assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get('abcdefghijk').status,'REJECTED');const other=(await call('/summary',null,'other')).data.mine[0].id;assert.equal((await call('/moderate',{id:other,decision:'accept',note:'Duplicate flag accepted'},'owner')).status,409);assert.equal(points('other'),0);});
 test('self approvals do not award points; prior exclusions cannot be submitted',async()=>{const {call,video,points}=await setup();video();await call('/contribute',{kind:'comment',performerId:'missioned-souls',videoId:'abcdefghijk',body:'The owner can test a thoughtful comment.'},'owner');const id=(await call('/summary',null,'owner')).data.mine[0].id;assert.equal((await call('/moderate',{id,decision:'accept',note:'Owner test comment approval'},'owner')).status,200);assert.equal(points('owner'),0);assert.equal((await call('/contribute',{kind:'submission',performerId:'missioned-souls',url:'https://youtu.be/pwNtcFZ_59I',body:'Previously excluded reaction video.'})).status,409);});
-test('only YouTube HTTPS video URLs accepted and tier thresholds are explicit',()=>{assert.equal(youtubeId('https://youtube.com/shorts/P69VWMewzQY'),'P69VWMewzQY');for(const url of ['https://youtube.com.evil.test/watch?v=abcdefghijk','http://youtu.be/abcdefghijk','https://evil.test/abcdefghijk','https://youtu.be/a','https://u:p@youtu.be/abcdefghijk'])assert.equal(youtubeId(url),null);assert.equal(tier(100),'Reaction scout');assert.equal(tier(0),'New member');});
-test('coverage recommendations persist, stay account-isolated, and require moderator review',async()=>{
- const {call,sql}=await setup();
- const suggestion={name:'Franz Rhythm',url:'https://www.youtube.com/@FranzRhythm',body:'Please cover their family performances and the reactions to them.'};
- assert.equal((await call('/coverage',suggestion)).status,200);
- assert.equal((await call('/coverage',{...suggestion,name:'  FRANZ   RHYTHM  '})).status,409);
- assert.equal((await call('/coverage',null,'other')).data.items.length,0);
- const saved=(await call('/coverage')).data.items[0];assert.equal(saved.status,'pending');
+test('only YouTube HTTPS video URLs accepted and tier thresholds are explicit',()=>{assert.equal(youtubeId('https://youtube.com/shorts/P69VWMewzQY'),'P69VWMewzQY');for(const url of ['https://youtube.com.evil.test/watch?v=abcdefghijk','http://youtu.be/abcdefghijk','https://evil.test/abcdefghijk','https://youtu.be/a','https://u:p@youtu.be/abcdefghijk'])assert.equal(youtubeId(url),null);assert.equal(tier(100),'Reaction scout');assert.equal(tier(0),'Novice');});
+test('performer recommendations remain closed with no writes and moderator-only queues',async()=>{
+ const {call,sql}=await setup();const before=sql.prepare('SELECT COUNT(*) n FROM coverage_requests').get().n;
+ for(const user of ['fan','other','owner']){
+  assert.equal((await call('/coverage',{name:'Franz Rhythm',url:'https://youtube.com/@FranzRhythm',body:'Please cover these performances.'},user)).status,400);
+  assert.deepEqual((await call('/coverage',null,user)).data.items,[]);
+ }
  assert.equal((await call('/coverage/queue',null,'fan')).status,403);
- assert.equal((await call('/coverage/review',{id:saved.id,decision:'shortlisted',note:'Good suggestion for future coverage.'},'fan')).status,403);
- assert.equal((await call('/coverage/queue',null,'owner')).data.items[0].name,'Franz Rhythm');
- assert.equal((await call('/coverage/review',{id:saved.id,decision:'shortlisted',note:'Good suggestion for future coverage.'},'owner')).status,200);
- assert.equal((await call('/coverage')).data.items[0].status,'shortlisted');
- assert.equal((await call('/coverage')).data.items[0].review_note,'Good suggestion for future coverage.');
- assert.equal((await call('/coverage/review',{id:saved.id,decision:'declined',note:'Second review'},'owner')).status,409);
- assert.equal(sql.prepare('SELECT COUNT(*) n FROM performers').get().n,1);
+ assert.deepEqual((await call('/coverage/queue',null,'owner')).data.items,[]);
+ assert.equal(sql.prepare('SELECT COUNT(*) n FROM coverage_requests').get().n,before);
 });
-test('coverage recommendations validate links, reject covered performers, and limit spam',async()=>{
- const {call,sql}=await setup();const suggestion={name:'Another performer',url:'https://example.com/artist',body:'A performer with interesting music and reactions.'};
- for(const url of ['http://example.com','javascript:alert(1)','https://name:password@example.com'])assert.equal((await call('/coverage',{...suggestion,url})).status,400);
- assert.equal((await call('/coverage',{...suggestion,name:'Missioned Souls'})).status,409);
- for(let i=0;i<5;i++)assert.equal((await call('/coverage',{...suggestion,name:'Performer '+i})).status,200);
- assert.equal((await call('/coverage',{...suggestion,name:'Performer 6'})).status,429);
- assert.equal((await call('/coverage',{...suggestion,name:'Performer 6'},'other')).status,200);
- sql.prepare('INSERT INTO mutes VALUES(?,?,?)').run('other',new Date(Date.now()+60000).toISOString(),'test');
- assert.equal((await call('/coverage',{...suggestion,name:'Muted suggestion'},'other')).status,403);
+test('closed recommendations reject unsafe links and cannot be reopened through review',async()=>{
+ const {call,sql}=await setup();
+ for(const url of ['http://example.com','javascript:alert(1)','https://user:password@example.com'])assert.equal((await call('/coverage',{name:'Another performer',url,body:'Please add this performer.'})).status,400);
+ assert.equal((await call('/coverage/review',{id:'old',decision:'shortlisted',note:'Review a former suggestion'},'owner')).status,400);
+ assert.equal(sql.prepare('SELECT COUNT(*) n FROM coverage_requests').get().n,0);
 });
-
-test('moderator onboarding supports drafts, reviews, publishing, recommendations, and dynamic member features',async()=>{
- const {env,db,call}=await setup();
- const api=async(path,body,user='owner',origin='https://pilot.test')=>{const r=await managePerformers(new Request('https://pilot.test/api/performers'+path,{method:body?'POST':'GET',headers:{Origin:origin,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,seed,{id:user,moderator:user==='owner'});return {status:r.status,data:await r.json()};};
+test('moderators can edit Missioned Souls but cannot onboard additional performers',async()=>{
+ const {env,db}=await setup();
+ const api=async(path,body,user='owner',origin='https://pilot.test')=>{
+  const r=await managePerformers(new Request('https://pilot.test/api/performers'+path,{method:body?'POST':'GET',headers:{Origin:origin,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,seed,{id:user,moderator:user==='owner'});return {status:r.status,data:await r.json()};
+ };
+ const before=(await db.prepare('SELECT COUNT(*) n FROM performers').first()).n;
  assert.equal((await api('/list',null,'fan')).status,403);
- await call('/coverage',{name:'Franz Rhythm',url:'https://youtube.com/@FranzRhythm',body:'Please cover their songs and reaction videos.'});
- const recommendation=(await call('/coverage')).data.items[0];
- const payload={name:'Franz Rhythm',officialUrl:'https://youtube.com/@FranzRhythm',aliases:['FranzRhythm'],lookbackDays:90,reviewMode:'review',status:'draft',discoveryEnabled:true,chatEnabled:true,requestId:recommendation.id};
+ const payload={id:'missioned-souls',name:'Missioned Souls',officialUrl:'https://missionedsoulsofficial.com',aliases:['Missioned Souls'],lookbackDays:90,reviewMode:'review',status:'active',discoveryEnabled:true,chatEnabled:true};
  assert.equal((await api('/save',payload,'owner','https://evil.test')).status,403);
- const saved=await api('/save',payload);assert.equal(saved.status,200);const id=saved.data.id;
- assert.equal((await api('/save',{...payload,requestId:undefined,name:'FRANZ   RHYTHM'})).status,409);
- assert.equal((await catalog(db,seed,env)).performers.some(p=>p.id===id),false);
- assert.equal((await call('/coverage')).data.items[0].status,'shortlisted');
- const profile=await db.prepare('SELECT * FROM performers WHERE id=?').bind(id).first();
- const discovered={id:'zyxwvutsrqp',snippet:{title:'FranzRhythm REACTION',channelId:channel,channelTitle:'Reactor',publishedAt:'2026-09-24T00:00:00Z'},status:{privacyStatus:'public'},contentDetails:{duration:'PT8M'}};
- await saveVideo(db,discovered,[profile],new Date().toISOString(),'test');
- assert.equal((await api('/results?id='+id)).data.items[0].status,'PENDING');
- assert.equal((await api('/review',{id,videos:['zyxwvutsrqp'],decision:'approve'},'fan')).status,403);
- assert.equal((await api('/review',{id,videos:['zyxwvutsrqp'],decision:'approve'})).status,200);
- assert.equal((await api('/save',{...payload,id,status:'active',requestId:undefined})).status,200);
- const active=await catalog(db,seed,env);assert.ok(active.performers.some(p=>p.id===id));assert.ok(active.videos.some(v=>v.performerId===id));
- assert.equal((await call('/coverage')).data.items[0].status,'covered');
- const memberApi=async(path,body)=>{const r=await social(new Request('https://pilot.test/api/social'+path,{method:body?'POST':'GET',headers:{Origin:'https://pilot.test','Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})}),env,seed,{id:'fan',moderator:false});return {status:r.status,data:await r.json()};};
- assert.equal((await memberApi('/follow',{kind:'performer',target:id})).status,200);
- assert.equal((await memberApi('/preferences',{performer:id})).status,200);
- assert.ok((await memberApi('/rooms')).data.rooms.some(r=>r.id===id));
- assert.equal((await call('/contribute',{kind:'comment',performerId:id,videoId:'zyxwvutsrqp',body:'A thoughtful reaction to this performance.'})).status,200);
- assert.equal((await api('/discover',{id})).data.result.status,'blocked');
- assert.equal((await api('/review',{id,videos:['zyxwvutsrqp'],decision:'exclude'})).status,200);
- await saveVideo(db,discovered,[profile],new Date().toISOString(),'rescan');
- assert.equal((await api('/results?id='+id)).data.items[0].status,'REJECTED');
+ assert.equal((await api('/save',payload,'fan')).status,403);
+ assert.equal((await api('/save',{...payload,id:undefined,name:'Franz Rhythm'})).status,400);
+ assert.equal((await api('/save',{...payload,id:'new-act',name:'New Act'})).status,400);
+ assert.equal((await api('/save',payload)).status,200);
+ assert.equal((await db.prepare("SELECT review_mode FROM performers WHERE id='missioned-souls'").first()).review_mode,'review');
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM performers').first()).n,before);
+ assert.equal((await api('/results?id=new-act')).status,400);
 });
 
 test('moderators can correct catalog channel details with history and without altering decisions',async()=>{
@@ -173,15 +148,54 @@ test('accepted submissions and rejected comments cannot be reopened as submissio
  for(const [id,kind,status] of [['accepted-test','submission','accepted'],['comment-test','comment','rejected']]){sql.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,status,created_at) VALUES(?,'fan',?,'missioned-souls','KYI8i2_v8nU','Test contribution',?,'2026-01-01')").run(id,kind,status);assert.equal((await call('/submission/reopen',{id,note:'Review this item again'},'owner')).status,409);}
 });
 
-test('trusted reaction submissions publish fetched metadata without rewards and preserve exclusions',async()=>{
+test('trusted reaction submissions publish fetched metadata with immediate points and preserve exclusions',async()=>{
  const {sql,call,env,points}=await setup();
- const now=new Date().toISOString();sql.prepare("INSERT INTO reputation_events VALUES('earned','fan',16,'Verified help',?)").run(now);
+ const now=new Date().toISOString();sql.prepare("UPDATE members SET trusted=1 WHERE id='fan'").run();
  const id='newvideo123';sql.prepare('INSERT INTO state(key,value) VALUES(?,?)').run('submission-metadata:'+id,JSON.stringify({title:'Missioned Souls reaction',channelName:'Trusted reactor',channelId:channel,publishedAt:'2026-09-01T00:00:00Z',format:'FULL_LENGTH',fetchedAt:Date.now()}));
  const b={kind:'submission',performerId:'missioned-souls',url:'https://youtu.be/'+id,body:'A verified reaction to Missioned Souls.'};
  const r=await call('/contribute',b);assert.equal(r.status,200);assert.equal(r.data.published,true);
- assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(id).status,'CONFIRMED');assert.equal(points('fan'),0);
+ assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(id).status,'CONFIRMED');assert.equal(points('fan'),20);
  assert.equal((await call('/contribute',b)).status,409);
  assert.equal((await call('/contribute',{...b,url:'https://youtu.be/pwNtcFZ_59I'})).status,409);
  assert.equal((await call('/contribute',{...b,url:'https://youtu.be/unavailable'})).status,503);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM contributions WHERE video_id='unavailable'").get().n,0);
+});
+
+test('trusted comments earn capped points once and hiding reverses the award',async()=>{
+ const {sql,call,video,points}=await setup();
+ sql.prepare("UPDATE members SET trusted=1 WHERE id='fan'").run();
+ for(let i=0;i<4;i++){
+  const id=String(i).padStart(11,'0');video(id);
+  const b={kind:'comment',performerId:'missioned-souls',videoId:id,body:'A thoughtful comment about this reaction.'};
+  assert.equal((await call('/contribute',b)).data.published,true);
+  assert.equal((await call('/contribute',b)).status,409);
+ }
+ assert.equal(points('fan'),9);
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM reputation_events WHERE user_id='fan'").get().n,null);
+ assert.equal((await call('/moderate',{id:'comment:fan:00000000000',decision:'hide',note:'Remove this comment'},'owner')).status,200);
+ assert.equal(points('fan'),6);
+});
+
+test('trusted points migration backfills original UTC days once, respecting caps and decisions',async()=>{
+ const {sql,points}=await setup();
+ const migration=readFileSync(new URL('../drizzle/0033_trusted_member_points_20261010.sql',import.meta.url),'utf8');
+ sql.exec("DELETE FROM state WHERE key='trusted-member-points-backfill-v1'");
+ const note='Published directly: verified reputation above 15; no verification rewards awarded.';
+ const insert=sql.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,status,created_at,review_note) VALUES(?,'fan',?,'missioned-souls',?,'Useful contribution',?,?,?)");
+ for(let i=0;i<5;i++)insert.run('old-comment-'+i,'comment',String(i).padStart(11,'0'),'accepted','2026-10-08T01:00:00Z',note);
+ insert.run('hidden','comment','00000000008','hidden','2026-10-07T00:00:00Z',note);
+ insert.run('pending','comment','00000000009','pending','2026-10-07T00:00:00Z',note);
+ insert.run('ordinary','comment','00000000010','accepted','2026-10-07T00:00:00Z','Moderator approval');
+ insert.run('old-submission','submission','00000000011','accepted','2026-10-07T00:00:00Z',note);
+ insert.run('excluded-submission','submission','pwNtcFZ_59I','accepted','2026-10-07T00:00:00Z',note);
+ sql.prepare("INSERT INTO videos(id,channel_id,title,available) VALUES('00000000011',?,'Reaction',1)").run(channel);
+ sql.exec("INSERT INTO matches VALUES('missioned-souls','00000000011','CONFIRMED','Direct submission by trusted member')");
+ sql.exec("INSERT INTO points VALUES('existing','fan','comment',3,'2026-10-08T02:00:00Z')");
+ sql.exec(migration);assert.equal(points('fan'),29);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM points WHERE id LIKE 'old-comment-%'").get().n,2);
+ assert.equal(sql.prepare("SELECT created_at FROM points WHERE id='old-submission'").get().created_at,'2026-10-07T00:00:00Z');
+ const audit=JSON.parse(sql.prepare("SELECT value FROM state WHERE key='trusted-member-points-backfill-v1'").get().value);
+ assert.equal(audit.awards,3);assert.equal(audit.points,26);
+ sql.exec(migration);assert.equal(points('fan'),29);
+ assert.equal(sql.prepare('SELECT COUNT(*) n FROM reputation_events').get().n,0);
 });
