@@ -25,7 +25,7 @@ function renderVideos() {
 
 function renderReactors() { const channels = catalog.channels.filter(c => c.performerId === state.performer).sort((a,b) => (b.reactions || 0) - (a.reactions || 0)).slice(0, 8); $('reactorGrid').innerHTML = channels.length ? channels.map((c,i) => `<article class="reactor-card"><span class="rank">0${i+1} · ${c.status || 'VERIFIED'}</span><h3>${escapeHtml(c.name)}</h3><p>${c.reactions || 0} cataloged reaction${c.reactions === 1 ? '' : 's'}</p><a href="${escapeHtml(c.url)}" target="_blank" rel="noopener">Open channel ↗</a></article>`).join('') : '<div class="empty-state">No Missioned Souls reactors match this view yet.</div>'; }
 
-function renderAll() { renderPerformers(); renderNewReactors(); renderVideos(); renderReactors(); }
+function renderAll() { renderPerformers(); renderNewReactors(); if(page==='feed')renderVideos();if(page==='reactors')renderReactors(); }
 function renderNewReactors() { const el=$('newReactors'); const channels=catalog.channels.filter(c=>c.performerId===state.performer&&c.currentDiscovery); el.hidden=!channels.length; el.innerHTML=channels.length?`<strong>New reactors found in the latest scan</strong><div>${channels.map(c=>`<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener">${escapeHtml(c.name)}</a>`).join(' · ')}</div>`:''; }
 
 function renderDiscovery() {
@@ -85,12 +85,13 @@ async function init() {
     // Start independent member reads together; only rendering needs the catalog.
     const catalogLoad=(async()=>{const response=await reactionAuth.fetch('/data.json',{cache:'no-store'});if(!response.ok)throw new Error('Unavailable');catalog=await response.json();catalogEtag=response.headers.get('ETag');$('catalogCount').textContent=catalog.stats.channels.toLocaleString();$('performerCount').textContent=catalog.performers.length;})();
     const dashboardLoad=socialApi('/dashboard');
-    const communityLoad=catalogLoad.then(()=>loadCommunity({deferSecondary:true}));
-    const [, , memberDashboard]=await Promise.all([catalogLoad,communityLoad,dashboardLoad]);
+    let communityLoad;const communityDetails=()=>communityLoad||=loadCommunity({deferSecondary:true});
+    const [,memberDashboard]=await Promise.all([catalogLoad,dashboardLoad]);
+    const requested=location.hash.slice(1),view=memberDashboard.views?.find(v=>v.id===memberDashboard.preferences?.defaultView),initialSort=view?.settings?.sort||memberDashboard.preferences?.sort;
+    if(['review','contact-inbox','classification-review','member-review','channel-update','user-activity','workbook-import'].includes(requested)||initialSort==='rated')await communityDetails();
     await loadDashboard(memberDashboard);
-    renderAll();renderDiscovery();
-    loadCoverage().catch(error=>communityMessage('communityStatus',error.message));
-    if(communityState?.moderator)refreshDiscoveryDiagnostics();
+    renderPerformers();renderNewReactors();renderDiscovery();
+    communityDetails().then(()=>{syncCommunityAccess();if(page==='feed')renderVideos();if(page==='reputation')renderReputation();refreshRooms();loadCoverage().catch(error=>communityMessage('communityStatus',error.message));if(communityState?.moderator)refreshDiscoveryDiagnostics();}).catch(()=>communityMessage('communityStatus','Community details could not be loaded. Your feed is available.'));
   } catch (error) {
     $('discoveryStatus').textContent='The catalog service is temporarily unavailable. Please reload to retry.';
     $('videoGrid').innerHTML='<div class="empty-state">The catalog is temporarily unavailable. Please try again shortly.</div>';

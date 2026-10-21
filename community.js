@@ -31,6 +31,7 @@ function communityScore(id){const s=scoreMap.get(id);return s?`${Number(s.averag
 function communityRank(id){const s=scoreMap.get(id);return s&&s.count>=3?s.ranking:-1;}
 function communityMessage(id,message){$(id).textContent=message;}
 async function loadCommunity({deferSecondary=false}={}){
+  communityMessage('communityStatus','Loading community details...');
   try{
     communityState=await communityApi('/summary');scoreMap=new Map(communityState.scores.map(s=>[s.video_id,s]));
     $('displayName').value=communityState.name;
