@@ -29,3 +29,10 @@ test('packaged guide routes require membership and do not expose PDF assets publ
   assert.equal(response.status,404,'Raw guide asset must not be public');
  }
 });
+
+test('release packages MS Journey visibility controls with matching help and existing browsing',()=>{
+ const html=assets['/index.html'].body,ms=assets['/missioned-souls.js'].body;
+ for(const id of ['ms-visibility-control','ms-visibility','ms-year','ms-playlists-refresh','ms-search-toggle'])assert.ok(html.includes('id="'+id+'"'),id);
+ for(const action of ['Hide from members','Remove from MS Journey','Restore to MS Journey'])assert.ok(ms.includes(action),action);
+ assert.ok(html.includes('Visibility decisions survive official-channel refreshes and repeated imports.'));
+});

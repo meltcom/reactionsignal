@@ -408,6 +408,8 @@ Contribution Points recognize helpful activity and determine your badge. Trusted
 
 ### MS Journey: maintain videos and categories
 
+- Open MS Journey and expand Review video on a card. Hide from members temporarily conceals it; Remove from MS Journey asks for confirmation and withdraws it from the archive. Both preserve the stored record and view history and hide it from member listings and counts. These actions do not delete the original YouTube or Facebook video. Use Moderator view → Hidden / removed videos to find withdrawn entries, then expand Review video and select Restore to MS Journey. Switching to this view clears browsing filters so hidden entries are easier to find, including unavailable videos. Restoring an unavailable video does not make its source available again. Visibility decisions survive official-channel refreshes and repeated imports. These controls apply to the MS Journey archive; reaction videos use the separate moderator catalog manager.
+
 - Open MS Journey → Catalog updates & category review. Refresh official YouTube catalog starts an official-upload scan; repeat refresh to continue it. Scheduled batches continue initiated scans after reaction discovery, then refresh counts daily after a completed pass.
 
 - Each refresh scans up to 200 uploads and retains a continuation cursor. It needs the existing server-side YOUTUBE_API_KEY. Facebook and other sources require manual entries or imports; YouTube refresh cannot collect them.
