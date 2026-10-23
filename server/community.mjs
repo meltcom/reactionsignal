@@ -269,6 +269,8 @@ export async function community(request,env,seed,user){
         if(b.action==='defer-trust'&&member.trusted===1)fail('Revoke trusted status to remove existing access.',409);
         ops.push(db.prepare('UPDATE members SET trusted=?,trust_reviewed_at=? WHERE id=?').bind(trusted,now,id));
         ops.push(db.prepare('INSERT INTO member_trust_history(id,user_id,moderator_id,trusted,reason,created_at) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),id,user.id,trusted,note,now));
+      }else if(b.action==='reset-daily-limit'){
+        ops.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind('member-daily-reset:'+id,now));
       }else if(b.action==='mute'){
         if(id===user.id)fail('Choose another member.');
         ops.push(db.prepare('INSERT INTO mutes(user_id,until,reason) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET until=excluded.until,reason=excluded.reason').bind(id,new Date(Date.now()+86400000).toISOString(),note));
@@ -276,7 +278,7 @@ export async function community(request,env,seed,user){
       else fail('Choose a valid member action.');
       ops.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('member-audit:'+crypto.randomUUID(),JSON.stringify({actor:user.id,member:id,action:b.action,amount:b.amount,name:b.name,note,at:now})));
       ops.push(auditStatement(db,user,b.action,'member',id,note,before,{name:b.name,amount:b.amount,action:b.action}));
-      await db.batch(ops);return json({ok:true,message:'Member updated. Trusted status controls direct posting; badges follow contribution points.'});
+      await db.batch(ops);return json({ok:true,message:b.action==='reset-daily-limit'?'Daily posting limit reset. Previous contributions and points are preserved.':'Member updated. Trusted status controls direct posting; badges follow contribution points.'});
     }
     if(path==='/profile'){
       const name=text(b.name,2,40,'Display name');
@@ -343,7 +345,7 @@ export async function community(request,env,seed,user){
       const metadata=direct&&b.kind==='submission'?await submissionMetadata(db,env,video):null;
       const status=direct?'accepted':'pending',note=direct?'Published directly: Trusted Member; points awarded within daily limits.':null;
       const insert=db.prepare(`INSERT OR IGNORE INTO contributions(id,user_id,kind,performer_id,video_id,body,reason,status,created_at,review_note)
-        SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=?)<20`).bind(id,user.id,b.kind,b.performerId,video,body,reason,status,now,note,user.id,now.slice(0,10));
+        SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=? AND created_at>=COALESCE((SELECT value FROM state WHERE key=?),''))<20`).bind(id,user.id,b.kind,b.performerId,video,body,reason,status,now,note,user.id,now.slice(0,10),'member-daily-reset:'+user.id);
       const statements=[insert];
       if(direct){
         const [amount,cap]=b.kind==='submission'?[20,5]:[3,3];

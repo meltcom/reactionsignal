@@ -1,5 +1,6 @@
 import { database, seedDatabase } from './db.mjs';
-import {reactionEvidence,explicitShort} from './approval-rules.mjs';
+import {reactionEvidence} from './approval-rules.mjs';
+import {videoFormat} from './video-format.mjs';
 
 const normalize = s => String(s||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 export function classify(title,aliases,duration,{description=''}={}) {
@@ -9,9 +10,14 @@ export function classify(title,aliases,duration,{description=''}={}) {
   return evidence?'CONFIRMED':'PENDING';
 }
 export function seconds(s) { const m=/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(s||''); return m?Number(m[1]||0)*3600+Number(m[2]||0)*60+Number(m[3]||0):null; }
+export function videoMetadata(item,at){
+ const count=v=>v!==undefined&&/^\d+$/.test(String(v))&&Number.isSafeInteger(Number(v))?Number(v):null;
+ return {duration:seconds(item.contentDetails?.duration),views:count(item.statistics?.viewCount),likes:count(item.statistics?.likeCount),youtubeComments:count(item.statistics?.commentCount),metadataUpdatedAt:at};
+}
 export class YouTube {
   constructor(key,fetcher=fetch,usageDb=null){this.usageDb=usageDb;this.key=key;this.fetcher=fetcher.bind(globalThis);this.calls=0;this.requestMs=0;this.deadline=Date.now()+20000;}
   async get(endpoint,params){
+    if(endpoint==='videos'&&String(params.part||'').split(',').includes('contentDetails'))params={...params,part:[...new Set([...params.part.split(','),'player','statistics'])].join(','),maxWidth:480};
     for(let attempt=0;attempt<3;attempt++){
       if(this.calls>=28||Date.now()>this.deadline) throw new Error('Batch budget reached; continuation retained');
       this.calls++;
@@ -28,6 +34,7 @@ export class YouTube {
 }
 // Bulk lookups and bounded D1 batches replace per-video round trips.
 export async function saveVideos(db,items,performers,runTime,source){
+  items=items.filter(item=>item.snippet?.channelId!=='UCeTfwcnUVurw7Qrk_KF5Idw');
   const unique=[...new Map(items.filter(item=>/^[\w-]{11}$/.test(item.id)&&item.snippet&&item.status?.privacyStatus==='public').map(item=>[item.id,item])).values()];
   let inserted=0;
   for(let offset=0;offset<unique.length;offset+=50){
@@ -51,8 +58,9 @@ export async function saveVideos(db,items,performers,runTime,source){
       const missing=eligible.filter(({p})=>!matches.has(p.id+':'+item.id));
       if(changed||stale||missing.length){
         channels.set(snippet.channelId,snippet.channelTitle||'Unknown reactor');
-        const approvedShort=explicitShort(snippet.title)&&(duration===null||duration<=180)&&eligible.some(({p,classification})=>p.review_mode==='auto'&&classification==='CONFIRMED');
-        statements.push(db.prepare('INSERT INTO videos(id,channel_id,title,published_at,discovered_at,checked_at,format,available) VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=excluded.published_at,checked_at=excluded.checked_at,format=CASE WHEN videos.format_locked=1 THEN videos.format ELSE excluded.format END,available=1').bind(item.id,snippet.channelId,snippet.title,snippet.publishedAt||null,runTime,runTime,approvedShort?'SHORT':duration!==null&&duration>180?'FULL_LENGTH':'UNKNOWN'));
+        const detectedFormat=videoFormat(item,duration);
+        statements.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind('youtube-video-metadata:'+item.id,JSON.stringify(videoMetadata(item,runTime))));
+        statements.push(db.prepare(`INSERT INTO videos(id,channel_id,title,published_at,discovered_at,checked_at,format,available) VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=excluded.published_at,checked_at=excluded.checked_at,format=CASE WHEN videos.format_locked=1 OR videos.format IN ('SHORT','FULL_LENGTH') THEN videos.format ELSE excluded.format END,available=1`).bind(item.id,snippet.channelId,snippet.title,snippet.publishedAt||null,runTime,runTime,detectedFormat));
       }
       if(!prior){inserted++;const lag=Date.parse(runTime)-Date.parse(snippet.publishedAt);statements.push(db.prepare('INSERT OR IGNORE INTO discovery_observations(video_id,source,discovered_at,published_at,delay_seconds) VALUES(?,?,?,?,?)').bind(item.id,source,runTime,snippet.publishedAt||null,Number.isFinite(lag)&&lag>=0?Math.floor(lag/1000):null));}
       for(const {p,classification:found} of missing){
@@ -211,7 +219,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
     }}
     for(let offset=0;offset<ids.length;offset+=50){
       const chunk=ids.slice(offset,offset+50);
-      const data=await api.get('videos',{part:'snippet,contentDetails,status',id:chunk.join(',')});
+      const data=await api.get('videos',{part:'snippet,contentDetails,statistics,status',id:chunk.join(',')});
       const n=await saveVideos(db,data.items||[],performers,now,'Recent-upload check');added+=n;recentAdded+=n;
       for(const id of chunk)fetched.add(id);
       await checkpointRecent();
@@ -256,7 +264,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
         const result=await api.get('search',{part:'snippet',type:'video',order:'date',maxResults:50,q:query,publishedAfter:cursor.after,publishedBefore:cursor.startedAt,pageToken:cursor.page});
         const ids=(result.items||[]).map(x=>x.id?.videoId).filter(Boolean);
         let uniqueAdded=0,newReactors=0,delaySamples=0,delayTotal=0,maxDelay=0;
-        if(ids.length){const data=await api.get('videos',{part:'snippet,contentDetails,status',id:ids.join(',')});
+        if(ids.length){const data=await api.get('videos',{part:'snippet,contentDetails,statistics,status',id:ids.join(',')});
           const before=(await db.prepare('SELECT video_id FROM discovery_observations WHERE video_id IN ('+ids.map(()=>'?').join(',')+')').bind(...ids).all()).results;
           const known=new Set(before.map(v=>v.video_id));
           const eligibleBefore=new Set((await db.prepare("SELECT id FROM channels WHERE discovery_scope='eligible'").all()).results.map(c=>c.id));
@@ -295,7 +303,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
       if(api.calls>22||Date.now()>api.deadline-6000)break;
       let page;try{page=await api.get('playlistItems',{part:'contentDetails',playlistId:channel.uploads,maxResults:50,pageToken:channel.next_page});}catch(error){if(error.message.includes('playlistNotFound')){await unavailable(channel,'Unavailable uploads playlist');continue;}throw error;}
       const ids=(page.items||[]).map(x=>x.contentDetails?.videoId).filter(Boolean);
-      if(ids.length){const data=await api.get('videos',{part:'snippet,contentDetails,status',id:ids.join(',')});const n=await saveVideos(db,data.items||[],performers,now,'Historical upload scan');added+=n;historyAdded+=n;metrics.examined+=ids.length;}
+      if(ids.length){const data=await api.get('videos',{part:'snippet,contentDetails,statistics,status',id:ids.join(',')});const n=await saveVideos(db,data.items||[],performers,now,'Historical upload scan');added+=n;historyAdded+=n;metrics.examined+=ids.length;}
       const reached=(page.items||[]).some(x=>x.contentDetails?.videoPublishedAt&&x.contentDetails.videoPublishedAt<channel.scan_before);
       const next=!reached?page.nextPageToken:null;
       await db.prepare('UPDATE channels SET next_page=?,scan_before=?,scan_started=?,checked_at=?,history_checked_at=? WHERE id=?').bind(next||null,next?channel.scan_before:null,next?channel.scan_started:null,next?channel.checked_at:channel.scan_started,now,channel.id).run();
