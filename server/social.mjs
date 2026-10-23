@@ -14,7 +14,7 @@ export function settings(input,performerIds=[]){
  for(const k of ['minSubscribers','minRating','days','columns'])if(b[k]!==undefined){if(typeof b[k]!=='number'||!Number.isFinite(b[k])||b[k]<0||b[k]>(k==='minRating'?5:k==='columns'?5:k==='days'?36500:1e10))fail(`Invalid ${k}.`);out[k]=b[k];}
  for(const k of ['startDate','endDate'])if(b[k]!==undefined){if(b[k]!==''&&(!/^\d{4}-\d{2}-\d{2}$/.test(b[k])||Number.isNaN(Date.parse(b[k]))))fail('Invalid date.');out[k]=b[k];}
  for(const k of ['query','song','genre','reactor','defaultView'])if(b[k]!==undefined)out[k]=typeof b[k]==='string'?b[k].slice(0,200):'';
- if(b.fields!==undefined){if(!Array.isArray(b.fields)||b.fields.some(x=>!['subscribers','views','likes','date','rating','comments','performer','song','genre','discovered'].includes(x)))fail('Invalid display fields.');out.fields=b.fields;}
+ if(b.fields!==undefined){if(!Array.isArray(b.fields)||b.fields.some(x=>!['subscribers','views','likes','date','rating','comments','youtubeComments','duration','performer','song','genre','discovered'].includes(x)))fail('Invalid display fields.');out.fields=b.fields;}
  return out;
 }
 export async function social(request,env,seed,user){try{
@@ -185,7 +185,7 @@ export async function social(request,env,seed,user){try{
    await db.batch(ops);return json({ok:true,status,message:direct?'Comment published directly. Each comment can earn points only once, within daily limits.':'Comment saved for review. Only you can see it until approved.'});
   }
   const id=crypto.randomUUID();
-  const insert=db.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,parent_id,status,created_at,review_note,channel_id) SELECT ?,?,'comment',?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=?)<20 AND NOT EXISTS(SELECT 1 FROM contributions WHERE user_id=? AND video_id=? AND channel_id IS ? AND body=? AND status IN ('pending','accepted'))").bind(id,user.id,b.performerId,b.videoId,body,parent,status,now,note,channel,user.id,now.slice(0,10),user.id,b.videoId,channel,body);
+  const insert=db.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,parent_id,status,created_at,review_note,channel_id) SELECT ?,?,'comment',?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=? AND created_at>=COALESCE((SELECT value FROM state WHERE key=?),''))<20 AND NOT EXISTS(SELECT 1 FROM contributions WHERE user_id=? AND video_id=? AND channel_id IS ? AND body=? AND status IN ('pending','accepted'))").bind(id,user.id,b.performerId,b.videoId,body,parent,status,now,note,channel,user.id,now.slice(0,10),'member-daily-reset:'+user.id,user.id,b.videoId,channel,body);
   const ops=[insert];
   if(direct)ops.push(award(db,id,user.id,'comment',3,3,now,"EXISTS(SELECT 1 FROM contributions WHERE id=? AND status='accepted' AND created_at=?)",[id,now]));
   const result=await db.batch(ops);if(!result[0].meta.changes)fail('Duplicate comment or daily limit reached.',409);

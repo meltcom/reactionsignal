@@ -4,6 +4,55 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { seedDatabase, catalog, status, EXCLUDED } from '../server/db.mjs';
 import { classify, seconds, saveVideo, runDiscovery, YouTube, searchDailyLimit, searchInterval, performerQueries, recentSongTitles, refreshOfficialSearchFeed } from '../server/discovery.mjs';
+import {refreshVideoMetadata} from '../server/video-metadata.mjs';
+import {videoFormat} from '../server/video-format.mjs';
+import {recheckVideoFormats} from '../server/format-recheck.mjs';
+
+test('format evidence uses description tags and real player dimensions, never thumbnails or duration alone',()=>{
+ const v={snippet:{title:'Reaction',description:'#SHORTS',publishedAt:'2026-10-19T00:00:00Z'}};
+ assert.equal(videoFormat(v,90),'SHORT');
+ assert.equal(videoFormat(v,181),'FULL_LENGTH');
+ assert.equal(videoFormat(v,null),'UNKNOWN');
+ assert.equal(videoFormat({...v,player:{embedWidth:480,embedHeight:270}},90),'FULL_LENGTH');
+ assert.equal(videoFormat({...v,snippet:{...v.snippet,description:''},player:{embedWidth:270,embedHeight:480}},90),'SHORT');
+ assert.equal(videoFormat({...v,snippet:{...v.snippet,description:'',publishedAt:'2024-01-01'},player:{embedWidth:270,embedHeight:480}},90),'UNKNOWN');
+ assert.equal(videoFormat({...v,snippet:{...v.snippet,description:''}},90),'UNKNOWN');
+ assert.equal(videoFormat({...v,snippet:{...v.snippet,description:'#shortstory'}},90),'UNKNOWN');
+});
+
+test('refresh upgrades Unknown from description evidence but preserves established and manually locked formats',async()=>{
+ const d=db();await seedDatabase(d,seed);const p=(await d.prepare('SELECT * FROM performers').all()).results;
+ const v={...item(),contentDetails:{duration:'PT1M30S'}};
+ await saveVideo(d,v,p,'2026-10-01T00:00:00Z','test');
+ assert.equal((await d.prepare('SELECT format FROM videos').first()).format,'UNKNOWN');
+ v.snippet.description='#shorts';
+ await saveVideo(d,v,p,'2026-10-09T00:00:00Z','test');
+ assert.equal((await d.prepare('SELECT format FROM videos').first()).format,'SHORT');
+ v.snippet.description='';
+ await saveVideo(d,v,p,'2026-10-17T00:00:00Z','test');
+ assert.equal((await d.prepare('SELECT format FROM videos').first()).format,'SHORT');
+ await d.prepare("UPDATE videos SET format='FULL_LENGTH',format_locked=1").run();
+ v.snippet.description='#shorts';
+ await saveVideo(d,v,p,'2026-10-25T00:00:00Z','test');
+ assert.equal((await d.prepare('SELECT format FROM videos').first()).format,'FULL_LENGTH');
+});
+
+test('Unknown recheck uses one enriched lookup, preserves locks and decisions, and does not immediately repeat',async()=>{
+ const d=db();await seedDatabase(d,seed);const p=(await d.prepare('SELECT * FROM performers').all()).results;
+ const v={...item(),contentDetails:{duration:'PT1M30S'}};
+ await saveVideo(d,v,p,'2026-10-01T00:00:00Z','test');
+ const locked={...v,id:'locked12345'};await saveVideo(d,locked,p,'2026-10-01T00:00:00Z','test');
+ await d.prepare('UPDATE videos SET format_locked=1 WHERE id=?').bind(locked.id).run();
+ let calls=0;
+ const fetcher=async url=>{calls++;assert.equal(url.searchParams.get('maxWidth'),'480');assert.ok(url.searchParams.get('part').includes('player'));assert.equal(url.searchParams.get('id'),v.id);return Response.json({items:[{...v,player:{embedWidth:270,embedHeight:480}}]});};
+ const result=await recheckVideoFormats({DB:d,YOUTUBE_API_KEY:'fixture'},fetcher);
+ assert.equal(result.updated,1);assert.equal(calls,1);
+ assert.equal((await d.prepare('SELECT format FROM videos WHERE id=?').bind(v.id).first()).format,'SHORT');
+ assert.equal((await d.prepare('SELECT format FROM videos WHERE id=?').bind(locked.id).first()).format,'UNKNOWN');
+ assert.equal((await d.prepare('SELECT status FROM matches WHERE video_id=?').bind(v.id).first()).status,'CONFIRMED');
+ assert.equal((await recheckVideoFormats({DB:d,YOUTUBE_API_KEY:'fixture'},fetcher)).status,'complete');
+ assert.equal(calls,1);
+});
 function db(historical=false){
   const sql=new DatabaseSync(':memory:');
   for(const name of readdirSync(new URL('../drizzle/',import.meta.url)).filter(x=>x.endsWith('.sql')).sort())sql.exec(readFileSync(new URL(`../drizzle/${name}`,import.meta.url),'utf8'));
@@ -13,6 +62,12 @@ function db(historical=false){
 const channel='UC1234567890123456789012';
 const seed={performers:[{id:'missioned-souls',name:'Missioned Souls'}],channels:[{id:channel,name:'Sample reactor',performerId:'missioned-souls',url:`https://www.youtube.com/channel/${channel}`}],videos:[]};
 function item(id='abcdefghijk',title='Missioned Souls reaction'){return {id,snippet:{channelId:channel,channelTitle:'Sample reactor',title,publishedAt:'2026-09-24T12:00:00Z'},contentDetails:{duration:'PT6M12S'},status:{privacyStatus:'public'}};}
+test('discovery never turns official-channel uploads into reaction matches',async()=>{
+ const d=db();await seedDatabase(d,seed);const performers=(await d.prepare('SELECT * FROM performers').all()).results;
+ const official={...item('official1234'),snippet:{...item('official1234').snippet,channelId:'UCeTfwcnUVurw7Qrk_KF5Idw'}};
+ assert.equal(await saveVideo(d,official,performers,'2026-10-21T00:00:00Z','test'),0);
+ assert.equal((await d.prepare("SELECT COUNT(*) n FROM videos WHERE id='official1234'").first()).n,0);
+});
 test('zero search budget disables requests and reports the scheduling reason',async()=>{
  const d=await isolatedDiscovery();await d.prepare("UPDATE channels SET discovery_scope='other'").run();let searches=0;
  await runDiscovery({DB:d,YOUTUBE_API_KEY:'fixture-only',DISCOVERY_DAILY_SEARCH_LIMIT:'0'},seed,async url=>{if(url.pathname.endsWith('/search'))searches++;return Response.json({items:[]});});
@@ -293,4 +348,20 @@ test('video batch snapshots use one lookup per chunk and retain exclusion guards
  assert.equal(await saveVideos(measured,items,performers,'2026-09-24T13:00:00Z','Performer discovery search'),50);assert.equal(lookups,2);
  assert.equal((await d.prepare('SELECT COUNT(*) n FROM videos WHERE id=?').bind(items[0].id).first()).n,0);
  lookups=0;assert.equal(await saveVideos(measured,items,performers,'2026-09-24T13:00:00Z','Performer discovery search'),0);assert.equal(lookups,2);
+});
+
+test('video metadata refresh backfills duration and separate YouTube statistics, retaining curated song and genre',async()=>{
+ const curatedSeed={...seed,videos:[...seed.videos,{id:'abcdefghijk',performerId:'missioned-souls',channelId:channel,channelName:'Sample reactor',title:'Missioned Souls reaction I Hate Myself for Loving You',publishedAt:'2026-09-24T12:00:00Z',format:'UNKNOWN',confidence:'CONFIRMED',song:'I Hate Myself for Loving You',genre:'Rock'}]};
+ const d=db();await seedDatabase(d,curatedSeed);const performers=(await d.prepare('SELECT * FROM performers').all()).results;
+ await saveVideo(d,item('abcdefghijk','Missioned Souls reaction I Hate Myself for Loving You'),performers,'2026-10-01T00:00:00Z','test');
+ let calls=0;const fetcher=async url=>{calls++;assert.ok(url.searchParams.get('part').includes('statistics'));return Response.json({items:[{id:'abcdefghijk',contentDetails:{duration:'PT1H2M3S'},statistics:{viewCount:'0',likeCount:'12',commentCount:'43'}}]});};
+ const result=await refreshVideoMetadata({DB:d,YOUTUBE_API_KEY:'fixture'},fetcher,new Date('2026-10-21T12:00:00Z'));
+ assert.equal(result.updated,1);const data=await catalog(d,curatedSeed,{}),v=data.videos.find(x=>x.id==='abcdefghijk');
+ assert.equal(v.duration,3723);assert.equal(v.views,0);assert.equal(v.likes,12);assert.equal(v.youtubeComments,43);assert.equal(v.song,'I Hate Myself for Loving You');assert.equal(v.genre,'Rock');
+ await refreshVideoMetadata({DB:d,YOUTUBE_API_KEY:'fixture'},fetcher,new Date('2026-10-21T12:01:00Z'));assert.equal(calls,1);
+});
+test('metadata refresh preserves previous counts when a video is not returned',async()=>{
+ const d=db();await seedDatabase(d,seed);await saveVideo(d,{...item(),statistics:{viewCount:'19'}},(await d.prepare('SELECT * FROM performers').all()).results,'2026-10-01T00:00:00Z','test');
+ await refreshVideoMetadata({DB:d,YOUTUBE_API_KEY:'fixture'},async()=>Response.json({items:[]}),new Date('2026-10-21T12:00:00Z'));
+ const value=JSON.parse((await d.prepare("SELECT value FROM state WHERE key='youtube-video-metadata:abcdefghijk'").first()).value);assert.equal(value.views,19);assert.ok(value.retryAt);
 });

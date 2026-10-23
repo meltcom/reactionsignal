@@ -64,3 +64,18 @@ test('approvals earn only contribution points and corrected reports earn ten whi
  assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,10);
  assert.equal(sql.prepare("SELECT SUM(amount) n FROM reputation_events WHERE user_id='fan'").get().n,10);
 });
+
+test('moderator daily reset preserves history and restores contribution allowance',async()=>{
+ const {sql,call}=await setup();
+ sql.exec("INSERT INTO videos(id,channel_id,title,available) VALUES('abcdefghijk','UC1234567890123456789012','Reaction',1); INSERT INTO matches VALUES('missioned-souls','abcdefghijk','CONFIRMED','test')");
+ const now=new Date().toISOString();
+ for(let i=0;i<20;i++)sql.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,status,created_at) VALUES(?,'fan','comment','missioned-souls','abcdefghijk','Previous comment','pending',?)").run('prior:'+i,now.slice(0,10)+'T00:00:00.000Z');
+ const body={kind:'comment',performerId:'missioned-souls',videoId:'abcdefghijk',body:'A useful new comment on this reaction.'};
+ assert.equal((await call('/contribute',body,'fan')).status,409);
+ const reset={id:'fan',action:'reset-daily-limit',note:'Allow another batch of contributions'};
+ assert.equal((await call('/users/update',reset,'fan')).status,403);
+ assert.equal((await call('/users/update',reset)).status,200);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM contributions WHERE user_id='fan'").get().n,20);
+ assert.equal((await call('/contribute',body,'fan')).status,200);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM state WHERE key LIKE 'member-audit:%'").get().n,1);
+});
