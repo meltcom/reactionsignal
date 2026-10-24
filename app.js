@@ -79,18 +79,24 @@ async function refreshDiscoveryDiagnostics(){
   renderDiscovery();
 }
 async function init() {
+  const feedTimingEnabled=/(?:^|[?&])feedTiming=1(?:&|$)/.test(location.search);
+  const feedNow=()=>feedTimingEnabled?performance.now():0;
+  const feedTiming=(stage,started,details={})=>{if(feedTimingEnabled)console.info('[feed-timing]',JSON.stringify({stage,elapsedMs:Math.round(performance.now()-started),...details}));};
+  const startupStarted=feedNow();
   discoveryDiagnostics=null;discoveryStatusError=null;
   $('discoveryDetails').hidden=true;
   try {
     // Start independent member reads together; only rendering needs the catalog.
-    const catalogLoad=(async()=>{const response=await reactionAuth.fetch('/data.json',{cache:'no-store'});if(!response.ok)throw new Error('Unavailable');catalog=await response.json();catalogEtag=response.headers.get('ETag');$('catalogCount').textContent=catalog.stats.channels.toLocaleString();$('performerCount').textContent=catalog.performers.length;})();
-    const dashboardLoad=socialApi('/dashboard');
+    const catalogLoad=(async()=>{const started=feedNow();const response=await reactionAuth.fetch('/data.json',{cache:'no-store'});if(!response.ok)throw new Error('Unavailable');catalog=await response.json();feedTiming('catalog-response-and-parse',started,{status:response.status});catalogEtag=response.headers.get('ETag');$('catalogCount').textContent=catalog.stats.channels.toLocaleString();$('performerCount').textContent=catalog.performers.length;})();
+    const dashboardStarted=feedNow();
+    const dashboardLoad=socialApi('/dashboard').then(result=>{feedTiming('dashboard-response-and-parse',dashboardStarted,{status:'ok'});return result;});
     let communityLoad;const communityDetails=()=>communityLoad||=loadCommunity({deferSecondary:true});
     const [,memberDashboard]=await Promise.all([catalogLoad,dashboardLoad]);
     const requested=location.hash.slice(1),view=memberDashboard.views?.find(v=>v.id===memberDashboard.preferences?.defaultView),initialSort=view?.settings?.sort||memberDashboard.preferences?.sort;
     if(['review','contact-inbox','classification-review','member-review','channel-update','user-activity','workbook-import'].includes(requested)||initialSort==='rated')await communityDetails();
     await loadDashboard(memberDashboard);
     renderPerformers();renderNewReactors();renderDiscovery();
+    feedTiming('first-card-render',startupStarted,{cards:typeof document==='undefined'?0:document.querySelectorAll('#videoGrid .video-card').length});
     communityDetails().then(()=>{syncCommunityAccess();if(page==='feed')renderVideos();if(page==='reputation')renderReputation();refreshRooms();loadCoverage().catch(error=>communityMessage('communityStatus',error.message));if(communityState?.moderator)refreshDiscoveryDiagnostics();}).catch(()=>communityMessage('communityStatus','Community details could not be loaded. Your feed is available.'));
   } catch (error) {
     $('discoveryStatus').textContent='The catalog service is temporarily unavailable. Please reload to retry.';

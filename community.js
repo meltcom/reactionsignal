@@ -27,6 +27,11 @@ async function communityApi(path,body){
   const response=await reactionAuth.fetch(`/api/community${path}`,{cache:'no-store',...(body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});
   const result=await response.json();if(!response.ok)throw new Error(result.error||'Please try again.');return result;
 }
+function renderVideoDiscussionHeading(video){
+ $('dialogTitle').textContent=video.title;$('dialogTitle').title=video.title;
+ const channel=video.channelName||catalog?.channels?.find(c=>c.id===video.channelId)?.name||'';
+ $('dialogChannel').textContent=channel?'Reactor · '+channel:'';$('dialogChannel').hidden=!channel;
+}
 function communityScore(id){const s=scoreMap.get(id);return s?`${Number(s.average).toFixed(1)} / 5 · ${s.count} rating${s.count===1?'':'s'}`:'Not rated yet';}
 function communityRank(id){const s=scoreMap.get(id);return s&&s.count>=3?s.ranking:-1;}
 function communityMessage(id,message){$(id).textContent=message;}
@@ -77,10 +82,10 @@ async function loadCoverageQueue(){
 async function openCommunityVideo(id){
   activeCommunityVideo=catalog.videos.find(v=>v.id===id&&v.performerId===state.performer);if(!activeCommunityVideo)return;
   const request=++dialogRequest;
-  $('dialogTitle').textContent=activeCommunityVideo.title;$('dialogMeta').textContent=communityScore(id);
+  renderVideoDiscussionHeading(activeCommunityVideo);$('dialogMeta').textContent=communityScore(id);
   $('commentForm').reset();$('flagForm').reset();$('myRating').value='';$('videoComments').textContent='Loading comments…';
   communityMessage('videoStatus',communityState?.name?'':'Save a display name in Community before contributing.');
-  if(!$('videoDialog').open)$('videoDialog').showModal();
+  if(!$('videoDialog').open)$('videoDialog').showModal();$('videoDialogBody').scrollTop=0;
   try{const r=await communityApi(`/video?id=${encodeURIComponent(id)}`);if(request!==dialogRequest)return;
     $('myRating').value=r.rating||'';
     $('videoComments').innerHTML=r.comments.length?r.comments.map(c=>`<article class="contribution"><strong>${memberDisplayName(c.name,c.points,c)}</strong><span> · ${prettyDate(c.created_at)}</span><p>${escapeHtml(c.body)}</p></article>`).join(''):'<p>No approved comments yet.</p>';
