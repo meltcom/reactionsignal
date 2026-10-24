@@ -1,0 +1,10 @@
+import {execFileSync} from 'node:child_process';
+import {assertReleaseCheckout} from './release-provenance.mjs';
+const git=args=>execFileSync('git',args,{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+const branch=git(['branch','--show-current']);
+if(branch&&branch!=='main')throw Error('Stop: production releases must use reviewed GitHub main, not this feature/reconciliation branch.');
+const head=git(['rev-parse','HEAD']);
+const remoteMain=git(['ls-remote','--exit-code','origin','refs/heads/main']).split(/\s+/)[0];
+const dirty=Boolean(git(['status','--porcelain','--untracked-files=normal']));
+assertReleaseCheckout({head,remoteMain,branch,dirty,allowDirty:process.argv.includes('--allow-dirty')||process.env.REACTION_ALLOW_DIRTY_RELEASE==='1'});
+console.log('Reviewed main checkout verified: '+head);
