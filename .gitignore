@@ -3,3 +3,5 @@ dist/
 .wrangler/
 *.pyc
 __pycache__/
+
+output/

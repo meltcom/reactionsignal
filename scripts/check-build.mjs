@@ -1,0 +1,11 @@
+import {readFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import {sourceFingerprint,artifactFingerprint} from './release-provenance.mjs';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const release=JSON.parse(await readFile(new URL('../dist/release.json',import.meta.url),'utf8'));
+if(await sourceFingerprint(root)!==release.sourceHash)throw Error('Stale build: source changed after the build. Rebuild before deploying.');
+const integrity=JSON.parse(await readFile(new URL('../dist/build-integrity.json',import.meta.url),'utf8'));
+if(await artifactFingerprint(fileURLToPath(new URL('../dist/',import.meta.url)))!==integrity.sha256)throw Error('Build output changed after packaging. Rebuild before deploying.');
+const {assets}=await import('../dist/server/assets.mjs');
+if(assets['/release.json']?.body!==JSON.stringify(release))throw Error('Packaged release identity differs from the build.');
+console.log('Build source fingerprint verified: '+release.sourceHash);
