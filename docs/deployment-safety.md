@@ -25,3 +25,6 @@ The guarded release now first verifies a clean main (or detached main) checkout 
 Production releases require current GitHub main (or its detached commit). Local builds and tests remain available on review branches. The production Wrangler configuration also enforces this gate, so a feature branch cannot directly deploy through it. Use separately configured preview environments for branch previews. No build automatically migrates any database.
 
 Validation without publishing: run npm test, npm run deploy:check, and npm run release:check. The latter uses an isolated local SQLite fixture; it is not a production or browser benchmark. Do not run npm run deploy as a test.
+
+## Final upload check
+Wrangler's final build step re-reads production versions after rebuilding and running regression checks, immediately before it returns control for upload. The guarded command supplies the expected versions and an in-memory credential; neither is stored in source. Direct production Wrangler uploads without that context fail closed: use npm run deploy. This narrows the race window; it is not an atomic provider-side lock against simultaneous external deployments.
