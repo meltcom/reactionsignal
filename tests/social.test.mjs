@@ -218,3 +218,19 @@ test('moderator daily reset also restores the social comment allowance',async()=
  assert.equal((await call('/comment',comment)).status,200);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM contributions WHERE user_id='fan'").get().n,21);
 });
+
+test('all displayed reactor sorts persist in preferences and saved views without crossing accounts',async()=>{
+ const {call,sql}=await setup();
+ try{
+  for(const sort of ['newest','ranked','personal','subscribers','name']){
+   assert.equal((await call('/preferences',{followingReactorSort:sort})).status,200);
+   assert.equal((await call('/dashboard')).data.preferences.followingReactorSort,sort);
+   assert.equal((await call('/view',{name:'Sort '+sort,settings:{followingReactorSort:sort}})).status,200);
+   assert.equal((await call('/dashboard')).data.views.find(v=>v.name==='Sort '+sort).settings.followingReactorSort,sort);
+  }
+  assert.deepEqual((await call('/dashboard',null,'other')).data.preferences,{});
+  assert.equal((await call('/dashboard',null,'other')).data.views.length,0);
+  assert.equal((await call('/preferences',{followingReactorSort:'invalid'})).status,400);
+  assert.equal((await call('/dashboard')).data.preferences.followingReactorSort,'name');
+ }finally{sql.close();}
+});
