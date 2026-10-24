@@ -161,7 +161,7 @@ test('trusted reaction submissions publish fetched metadata with immediate point
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM contributions WHERE video_id='unavailable'").get().n,0);
 });
 
-test('trusted comments earn capped points once and hiding reverses the award',async()=>{
+test('trusted comments earn uncapped points once and hiding reverses the award',async()=>{
  const {sql,call,video,points}=await setup();
  sql.prepare("UPDATE members SET trusted=1 WHERE id='fan'").run();
  for(let i=0;i<4;i++){
@@ -170,10 +170,10 @@ test('trusted comments earn capped points once and hiding reverses the award',as
   assert.equal((await call('/contribute',b)).data.published,true);
   assert.equal((await call('/contribute',b)).status,409);
  }
- assert.equal(points('fan'),9);
+ assert.equal(points('fan'),12);
  assert.equal(sql.prepare("SELECT SUM(amount) n FROM reputation_events WHERE user_id='fan'").get().n,null);
  assert.equal((await call('/moderate',{id:'comment:fan:00000000000',decision:'hide',note:'Remove this comment'},'owner')).status,200);
- assert.equal(points('fan'),6);
+ assert.equal(points('fan'),9);
 });
 
 test('trusted points migration backfills original UTC days once, respecting caps and decisions',async()=>{
@@ -198,4 +198,12 @@ test('trusted points migration backfills original UTC days once, respecting caps
  assert.equal(audit.awards,3);assert.equal(audit.points,26);
  sql.exec(migration);assert.equal(points('fan'),29);
  assert.equal(sql.prepare('SELECT COUNT(*) n FROM reputation_events').get().n,0);
+});
+
+test('trusted rating points exceed the ordinary daily cap without duplicate awards',async()=>{
+ const {sql,call,video,points}=await setup();
+ sql.prepare("UPDATE members SET trusted=1 WHERE id='fan'").run();
+ for(let i=0;i<12;i++){const id=String(i).padStart(11,'0');video(id);assert.equal((await call('/rating',{videoId:id,performerId:'missioned-souls',score:5})).status,200);}
+ assert.equal(points('fan'),12);
+ await call('/rating',{videoId:'00000000000',performerId:'missioned-souls',score:4});assert.equal(points('fan'),12);
 });
