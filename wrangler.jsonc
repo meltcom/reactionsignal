@@ -59,6 +59,6 @@
     ]
   },
   "build": {
-    "command": "node scripts/check-release-checkout.mjs && node scripts/build.mjs && node --test tests/*.test.mjs && node scripts/check-build.mjs"
+    "command": "node scripts/check-release-checkout.mjs && node scripts/build.mjs && node --test tests/*.test.mjs && node scripts/check-build.mjs && node scripts/check-production-before-upload.mjs"
   }
 }
