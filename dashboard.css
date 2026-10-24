@@ -147,3 +147,13 @@ body[data-density=spacious] #videoGrid .video-community{margin-top:12px;padding-
 #videoDialog .video-dialog-body{padding:20px 24px;overflow-y:auto;overscroll-behavior:contain;min-height:0;flex:1 1 auto;scrollbar-gutter:stable}
 #videoDialog .video-dialog-body:focus-visible{outline:2px solid var(--teal);outline-offset:-3px}
 @media(max-width:600px){#videoDialog{max-height:calc(100dvh - 24px)}#videoDialog .video-dialog-header{padding:16px;gap:10px}#videoDialog .video-dialog-header h2{font-size:17px}#videoDialog .video-dialog-body{padding:16px}#videoDialog #closeVideo{padding:8px 12px}#videoDialog .video-dialog-channel{font-size:12px}}
+
+/* Keep feed customization controls available during long settings sessions. */
+#preferencesDialog{padding:0;overflow:hidden;box-sizing:border-box}
+#preferencesDialog[open]{display:flex;flex-direction:column}
+#preferencesDialog .drawer-heading{flex:0 0 auto;padding:20px 24px;background:var(--paper);border-bottom:1px solid var(--line)}
+#preferencesDialog .drawer-heading h2{margin:0;min-width:0;overflow-wrap:anywhere}
+#preferencesDialog .drawer-heading button{flex:0 0 auto;min-height:44px}
+#preferencesBody{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:20px 24px}
+#preferencesDialog .drawer-actions{position:static}
+@media(max-width:600px){#preferencesDialog .drawer-heading,#preferencesBody{padding:16px}}
