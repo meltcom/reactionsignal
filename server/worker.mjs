@@ -1,4 +1,5 @@
 import {secureRedirect,secureResponse} from './security.mjs';
+import {recheckVideoFormats} from './format-recheck.mjs';
 import {discoveryCycle} from './rss.mjs';
 import { missionedSouls, scheduledMissionedSouls } from './missioned-souls.mjs';
 import { database, seedDatabase, catalog, status } from './db.mjs';
@@ -6,6 +7,7 @@ import {finishConnection,checkYoutubeConnections} from './youtube-connection.mjs
 import { youtubeSubscriptions } from './youtube-subscriptions.mjs';
 import { social } from './social.mjs';
 import { community, profilePicture } from './community.mjs';
+import {refreshVideoMetadata} from './video-metadata.mjs';
 import { refreshChannelStats } from './channel-stats.mjs';
 import { authenticate, authConfig } from './auth.mjs';
 import { youtubePush } from './push.mjs';
@@ -42,12 +44,14 @@ export default {
   },
   async scheduled(event,env,ctx){
     ctx.waitUntil(checkYoutubeConnections(env).catch(()=>console.error('YouTube permission checks failed')));
+    ctx.waitUntil(refreshVideoMetadata(env).catch(()=>recordOperationalEvent(env,'video-metadata-refresh-failed')));
     ctx.waitUntil(refreshChannelStats(env).catch(()=>recordOperationalEvent(env,'channel-refresh-failed')));
     ctx.waitUntil((async()=>{
       try{
         const db=database(env);await seedDatabase(db,seed);
         await db.prepare("INSERT INTO state(key,value) VALUES('last-scheduled-invocation',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(new Date().toISOString()).run();
         await discoveryCycle(env,seed);await recheckBatch(env);
+        try{await recheckVideoFormats(env);}catch{console.error('Video format recheck failed; retry next tick');}
         const ms=await scheduledMissionedSouls(env,seed.missionedSouls);if(ms?.status==='error')await recordOperationalEvent(env,'ms-refresh-failed');
       }catch{await recordOperationalEvent(env,'scheduler-failed');}
       try{await checkOperationalAlerts(env);}catch{console.error('Operations check failed');}
