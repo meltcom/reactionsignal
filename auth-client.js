@@ -18,7 +18,13 @@ function paint(){
   memberApp.inert=!account;
   document.body.classList.toggle('signed-out',!account);
   if(!account)document.body.removeAttribute('data-theme');
-  button.textContent=account?account.moderator?'Moderator · '+account.email:account.email:'Sign in';
+  button.replaceChildren();
+  const accountName=document.createElement('span');
+  accountName.className='account-button-name';
+  accountName.textContent=account?account.moderator?'Moderator · '+account.email:account.email:'Sign in';
+  button.append(accountName);
+  if(account){const logoutLabel=document.createElement('small');logoutLabel.className='account-button-logout';logoutLabel.textContent='Log out';button.append(logoutLabel);}
+  button.setAttribute('aria-label',account?`${accountName.textContent} · Log out`:'Sign in');
   signOutButton.hidden=!account;
   document.getElementById('accountStatus').textContent=account?`Signed in as ${account.email}${account.moderator?' · Moderator':''}.`:'';
   if(!account)document.querySelectorAll('dialog[open]').forEach(d=>d.close());
