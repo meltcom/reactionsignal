@@ -28,3 +28,6 @@ Validation without publishing: run npm test, npm run deploy:check, and npm run r
 
 ## Final upload check
 Wrangler's final build step re-reads production versions after rebuilding and running regression checks, immediately before it returns control for upload. The guarded command supplies the expected versions and an in-memory credential; neither is stored in source. Direct production Wrangler uploads without that context fail closed: use npm run deploy. This narrows the race window; it is not an atomic provider-side lock against simultaneous external deployments.
+
+## Isolated staging release
+Run npm run deploy -- --staging from a clean, committed review checkout. This durable configuration targets only reactionsignal-staging and the existing reaction-signal-preview database. It rebuilds, runs all tests and integrity checks, saves production/staging references, verifies the new staging version and live identity, and confirms production is unchanged. No migrations, secrets or production routes are copied. Discovery search and cron schedules are disabled; the existing test-email allowlist is retained. Browser sign-in still uses the existing Supabase service and requires its redirect policy to allow staging. Never relax authorization or paste access tokens to make a staging check pass.

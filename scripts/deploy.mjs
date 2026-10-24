@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {assertSameDeployment,assertRelease} from './release-provenance.mjs';
 
+if(process.argv.includes('--staging')){await import('./deploy-staging.mjs');process.exit(0);}
 const root=fileURLToPath(new URL('../',import.meta.url));
 process.chdir(root);
 function run(command,args){

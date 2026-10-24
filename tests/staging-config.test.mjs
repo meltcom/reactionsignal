@@ -1,0 +1,4 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+import {assertStagingConfig} from '../scripts/staging-config.mjs';
+const config=()=>JSON.parse(readFileSync(new URL('../wrangler.staging.jsonc',import.meta.url),'utf8'));
+test('staging uses isolated database, restricted accounts, no schedules or discovery',()=>{assert.doesNotThrow(()=>assertStagingConfig(config()));for(const edit of [c=>c.name='reactionsignal',c=>c.d1_databases[0].database_id='331e0607-6cf1-4e5c-864e-8b2179e750df',c=>c.vars.MEMBER_EMAIL_ALLOWLIST='',c=>c.vars.DISCOVERY_DAILY_SEARCH_LIMIT='20',c=>c.triggers.crons=['*/15 * * * *'],c=>c.routes=['reactionjourney.com/*'],c=>c.build.command='node scripts/build.mjs']){const c=config();edit(c);assert.throws(()=>assertStagingConfig(c));}});
