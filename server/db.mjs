@@ -10,6 +10,11 @@ export function discoveryTiming(observations){
 }
 export function database(env) { if (!env.DB) throw new Error('Catalog storage is unavailable'); return env.DB; }
 export async function batches(db, statements) { for(let i=0;i<statements.length;i+=50) await db.batch(statements.slice(i,i+50)); }
+// Seed/import runs add missing matches; existing decisions and exclusions are
+// authoritative regardless of which source originally recorded them.
+function importedMatch(db,performer,video,status,source){
+  return db.prepare('INSERT INTO matches(performer_id,video_id,status,source) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?) ON CONFLICT(performer_id,video_id) DO NOTHING').bind(performer,video,status,source,performer,video);
+}
 export async function seedDatabase(db, seed) {
   if(!await db.prepare("SELECT value FROM state WHERE key='seed-v2'").first()) {
   const sql=[];
@@ -21,7 +26,7 @@ export async function seedDatabase(db, seed) {
     if(v.channelId) sql.push(db.prepare('INSERT OR IGNORE INTO channels(id,name) VALUES(?,?)').bind(v.channelId,v.channelName || 'Unknown reactor'));
     sql.push(db.prepare('INSERT OR IGNORE INTO videos(id,channel_id,title,published_at,format) VALUES(?,?,?,?,?)').bind(v.id,v.channelId||'',v.title,v.publishedAt||null,v.format||'UNKNOWN'));
     const status = v.id === 'gXWQQNUpKcA' ? 'PENDING' : (v.confidence === 'CONFIRMED' ? 'CONFIRMED' : 'PENDING');
-    sql.push(db.prepare('INSERT OR IGNORE INTO matches(performer_id,video_id,status,source) VALUES(?,?,?,?)').bind(v.performerId,v.id,status,'Imported reconciliation workbook; not live-checked'));
+    sql.push(importedMatch(db,v.performerId,v.id,status,'Imported reconciliation workbook; not live-checked'));
   }
   await batches(db,sql);
   await db.prepare("INSERT OR IGNORE INTO state(key,value) VALUES('seed-v2','complete')").run();
@@ -41,7 +46,7 @@ export async function importDiscoveryRun(db,run) {
   for(const v of run.videos) {
     statements.push(db.prepare('INSERT INTO channels(id,name) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name').bind(v.channelId,v.channelName));
     statements.push(db.prepare(`INSERT INTO videos(id,channel_id,title,published_at,discovered_at,format) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET channel_id=excluded.channel_id,title=excluded.title,published_at=excluded.published_at,discovered_at=COALESCE(videos.discovered_at,excluded.discovered_at),format=CASE WHEN videos.format_locked=1 OR videos.format IN ('SHORT','FULL_LENGTH') THEN videos.format ELSE excluded.format END`).bind(v.id,v.channelId,v.title,v.publishedAt,run.startedAt,v.format));
-    statements.push(db.prepare('INSERT INTO matches(performer_id,video_id,status,source) VALUES(?,?,?,?) ON CONFLICT(performer_id,video_id) DO UPDATE SET status=excluded.status,source=excluded.source').bind('missioned-souls',v.id,v.confidence,`v3.3.1 import ${run.id}`));
+    statements.push(importedMatch(db,'missioned-souls',v.id,v.confidence,`v3.3.1 import ${run.id}`));
   }
   await batches(db,statements);
   // Keep uncertain identity matches and review decisions as audit data, never as merged identities.

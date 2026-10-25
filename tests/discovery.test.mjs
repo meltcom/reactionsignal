@@ -167,14 +167,15 @@ test('real pilot seed loads persistently without reintroducing excluded videos',
  assert.equal(result.videos.some(v=>v.id==='gXWQQNUpKcA'),false);
  assert.equal((await status(d,{})).automation,'not_connected');
 });
-test('reviewed discovery run imports once with probable labels and duplicate holds',async()=>{
+test('reviewed discovery run preserves prior decisions, records once, and retains duplicate holds',async()=>{
  const input=JSON.parse(readFileSync(new URL('../data.json',import.meta.url),'utf8'));
  input.importRun=JSON.parse(readFileSync(new URL('../import-run.json',import.meta.url),'utf8'));
- const d=db(true);const priorCandidates=new Map();for(const held of input.importRun.possibleDuplicates)priorCandidates.set(held.candidateId,await d.prepare('SELECT id FROM channels WHERE id=?').bind(held.candidateId).first());await seedDatabase(d,input);await seedDatabase(d,input);
+ const d=db(true),priorMatches=new Map();
+ for(const v of input.importRun.videos){const match=await d.prepare("SELECT status,source FROM matches WHERE performer_id='missioned-souls' AND video_id=?").bind(v.id).first();if(match)priorMatches.set(v.id,match);}
+ const priorCandidates=new Map();for(const held of input.importRun.possibleDuplicates)priorCandidates.set(held.candidateId,await d.prepare('SELECT id FROM channels WHERE id=?').bind(held.candidateId).first());await seedDatabase(d,input);await seedDatabase(d,input);
  const result=await catalog(d,input,{});
- const imported=result.videos.filter(v=>v.source===`v3.3.1 import ${input.importRun.id}`);
- assert.equal(imported.length,63);
- assert.equal(imported.filter(v=>v.confidence==='PROBABLE').length,8);
+ assert.ok(priorMatches.size>0,'historical fixture exercises existing decisions');
+ for(const [id,prior] of priorMatches)assert.deepEqual(await d.prepare("SELECT status,source FROM matches WHERE performer_id='missioned-souls' AND video_id=?").bind(id).first(),prior,'import must retain the existing decision and its provenance');
  for(const c of result.channels){const snapshot=await d.prepare('SELECT value FROM state WHERE key=?').bind('master-channel-snapshot:'+c.id).first();if(snapshot)assert.equal(c.currentDiscovery,false,'newest master snapshots replace older new-reactor flags');}
  assert.equal(input.importRun.channels.length,7);
  for(const held of input.importRun.possibleDuplicates)assert.deepEqual(await d.prepare('SELECT id FROM channels WHERE id=?').bind(held.candidateId).first(),priorCandidates.get(held.candidateId),'imports must not add or delete held candidate identities');
