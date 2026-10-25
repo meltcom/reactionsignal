@@ -1,7 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {previewFormatRecovery,validateRecoveryRows} from '../server/format-recovery-preview.mjs';
-import {previewArguments} from '../scripts/preview-format-recovery.mjs';
+import {previewArguments,writePreviewReport} from '../scripts/preview-format-recovery.mjs';
+import {mkdtemp,writeFile,readFile,link,readdir,unlink,rmdir} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 const channel='UC'+'x'.repeat(22);
 const row=i=>({id:'pilot'+String(i).padStart(6,'0'),title:'Fixture reaction',channel_id:channel,performer_id:'missioned-souls',performer_status:'active',match_status:'CONFIRMED',match_source:'Moderator decision',format:'UNKNOWN',available:1,format_locked:0,excluded:0});
 const item=(i,extra={})=>({id:row(i).id,snippet:{channelId:channel,title:'Fixture reaction',publishedAt:'2026-10-01T00:00:00Z'},contentDetails:{duration:'PT5M'},status:{privacyStatus:'public'},player:{embedWidth:480,embedHeight:270},...extra});
@@ -43,4 +46,41 @@ test('CLI has no apply mode and cannot overwrite input or write outside output',
  assert.throws(()=>previewArguments(['--input','output/pilot.json','--output','server/auth.mjs']),/inside project output/);
  assert.throws(()=>previewArguments(['--input','output/pilot.json','--output','output/pilot.json']),/separate JSON/);
  assert.ok(previewArguments(['--input','output/pilot.json']).output.endsWith('format-recovery-fresh-preview.json'));
+});
+
+test('Windows argument checks reject case-only aliases before requesting metadata',()=>{
+ assert.throws(()=>previewArguments(['--input','output/pilot.json','--output','output/PILOT.json'],'win32'),/separate JSON/);
+});
+
+async function withFiles(work){
+ const directory=await mkdtemp(join(tmpdir(),'rj-preview-path-'));
+ try{await work(directory);}finally{for(const name of await readdir(directory))await unlink(join(directory,name));await rmdir(directory);}
+}
+test('exclusive output creation preserves existing files and hard-link aliases',async()=>{
+ await withFiles(async directory=>{
+  const input=join(directory,'input.json'),alias=join(directory,'alias.json'),original='{"auditSnapshot":"keep"}';
+  await writeFile(input,original);await link(input,alias);
+  for(const output of [input,alias]){
+   await assert.rejects(writePreviewReport(output,{replacement:true}),/already exists/);
+   assert.equal(await readFile(input,'utf8'),original);assert.equal(await readFile(alias,'utf8'),original);
+  }
+ });
+});
+test('Windows case-only output aliases cannot replace input contents',{skip:process.platform!=='win32'},async()=>{
+ await withFiles(async directory=>{
+  const input=join(directory,'input.json'),alias=join(directory,'INPUT.json'),original='{"auditSnapshot":"keep"}';
+  await writeFile(input,original);
+  await assert.rejects(writePreviewReport(alias,{replacement:true}),/already exists/);
+  assert.equal(await readFile(input,'utf8'),original);
+ });
+});
+test('concurrent writers cannot replace the winning report',async()=>{
+ await withFiles(async directory=>{
+  const output=join(directory,'race.json'),reports=[{writer:1},{writer:2}];
+  const results=await Promise.allSettled(reports.map(report=>writePreviewReport(output,report)));
+  assert.equal(results.filter(result=>result.status==='fulfilled').length,1);
+  assert.equal(results.filter(result=>result.status==='rejected').length,1);
+  const winner=results.findIndex(result=>result.status==='fulfilled');
+  assert.deepEqual(JSON.parse(await readFile(output,'utf8')),reports[winner]);
+ });
 });

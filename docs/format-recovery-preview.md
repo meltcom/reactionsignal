@@ -42,8 +42,12 @@ Missing/private videos, channel conflicts, malformed responses, network errors
 and quota failures do not produce unsafe or partial proposals. Missing duration
 or format evidence remains unresolved for review.
 
-Output defaults to output/format-recovery-fresh-preview.json. A different output
-must remain a separate JSON file under output/. The report preserves the input
+Output defaults to output/format-recovery-fresh-preview.json. Each run needs a
+new output filename; existing files are never replaced. A different output
+must remain a separate JSON file under output/. Windows case aliases of the
+input are rejected before the request; exclusive file creation also protects
+existing files and hard links if the destination changes during the request.
+The report preserves the input
 snapshot guards for review, but the database must be re-read before any future
 apply implementation because moderation may have changed since export.
 
