@@ -135,3 +135,25 @@ body[data-density=spacious] #videoGrid .video-community{margin-top:12px;padding-
 .following-song-pagination{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:16px 0}
 .following-song-pagination label{display:flex;align-items:center;gap:8px;margin:0}
 .following-song-pagination select{width:auto;margin:0}
+
+/* Discussion header stays visible while the content scrolls independently. */
+#videoDialog{padding:0;overflow:hidden;max-height:90dvh}
+#videoDialog[open]{display:flex;flex-direction:column}
+#videoDialog .video-dialog-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex:0 0 auto;padding:20px 24px;background:var(--paper);border-bottom:1px solid var(--line)}
+#videoDialog .video-dialog-heading{min-width:0;flex:1}
+#videoDialog .video-dialog-header h2{font-size:20px;line-height:1.35;letter-spacing:-.02em;margin:0;padding:0;clear:none;overflow-wrap:anywhere}
+#videoDialog .video-dialog-channel{font-size:13px;line-height:1.4;margin:7px 0 0;color:var(--teal);font-weight:600;overflow-wrap:anywhere}
+#videoDialog #closeVideo{float:none;flex:0 0 auto;min-height:44px;margin:0}
+#videoDialog .video-dialog-body{padding:20px 24px;overflow-y:auto;overscroll-behavior:contain;min-height:0;flex:1 1 auto;scrollbar-gutter:stable}
+#videoDialog .video-dialog-body:focus-visible{outline:2px solid var(--teal);outline-offset:-3px}
+@media(max-width:600px){#videoDialog{max-height:calc(100dvh - 24px)}#videoDialog .video-dialog-header{padding:16px;gap:10px}#videoDialog .video-dialog-header h2{font-size:17px}#videoDialog .video-dialog-body{padding:16px}#videoDialog #closeVideo{padding:8px 12px}#videoDialog .video-dialog-channel{font-size:12px}}
+
+/* Keep feed customization controls available during long settings sessions. */
+#preferencesDialog{padding:0;overflow:hidden;box-sizing:border-box}
+#preferencesDialog[open]{display:flex;flex-direction:column}
+#preferencesDialog .drawer-heading{flex:0 0 auto;padding:20px 24px;background:var(--paper);border-bottom:1px solid var(--line)}
+#preferencesDialog .drawer-heading h2{margin:0;min-width:0;overflow-wrap:anywhere}
+#preferencesDialog .drawer-heading button{flex:0 0 auto;min-height:44px}
+#preferencesBody{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:20px 24px}
+#preferencesDialog .drawer-actions{position:static}
+@media(max-width:600px){#preferencesDialog .drawer-heading,#preferencesBody{padding:16px}}

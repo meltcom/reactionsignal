@@ -1,6 +1,9 @@
 import {createClient} from '@supabase/supabase-js';
 
 let client=null, account=null, lastAccountId=null;
+const feedTimingEnabled=/(?:^|[?&])feedTiming=1(?:&|$)/.test(location.search);
+const feedNow=()=>feedTimingEnabled?performance.now():0;
+function feedTiming(label,started,details={}){if(feedTimingEnabled)console.info('[feed-timing]',JSON.stringify({stage:label,elapsedMs:Math.round(performance.now()-started),...details}));}
 const dialog=document.getElementById('signInDialog');
 const status=document.getElementById('signInStatus');
 const button=document.getElementById('accountButton');
@@ -15,13 +18,20 @@ function paint(){
   memberApp.inert=!account;
   document.body.classList.toggle('signed-out',!account);
   if(!account)document.body.removeAttribute('data-theme');
-  button.textContent=account?account.moderator?'Moderator · '+account.email:account.email:'Sign in';
+  button.replaceChildren();
+  const accountName=document.createElement('span');
+  accountName.className='account-button-name';
+  accountName.textContent=account?account.moderator?'Moderator · '+account.email:account.email:'Sign in';
+  button.append(accountName);
+  if(account){const logoutLabel=document.createElement('small');logoutLabel.className='account-button-logout';logoutLabel.textContent='Log out';button.append(logoutLabel);}
+  button.setAttribute('aria-label',account?`${accountName.textContent} · Log out`:'Sign in');
   signOutButton.hidden=!account;
   document.getElementById('accountStatus').textContent=account?`Signed in as ${account.email}${account.moderator?' · Moderator':''}.`:'';
   if(!account)document.querySelectorAll('dialog[open]').forEach(d=>d.close());
 }
 function lock(message){account=null;paint();status.textContent=message;}
 async function verify(){
+  const started=feedNow();
   const oldId=account?.id||lastAccountId;
   const {data}=await client.auth.getSession();
   account=null;
@@ -33,6 +43,7 @@ async function verify(){
   }
   paint();
   if(oldId&&oldId!==account?.id){location.replace('/');return;}
+  feedTiming('auth-verify',started,{signedIn:Boolean(account)});
   lastAccountId=account?.id||lastAccountId;
   if(oldId!==account?.id)window.dispatchEvent(new Event('reaction-auth-change'));
   return account;
@@ -40,7 +51,9 @@ async function verify(){
 const ready=(async()=>{
   paint();
   try{
+    const configStarted=feedNow();
     const response=await fetch('/api/auth/config',{cache:'no-store'});
+    feedTiming('auth-config',configStarted,{status:response.status});
     if(!response.ok)throw new Error('Sign-in is temporarily unavailable. Please try again later.');
     const config=await response.json();
     if(!config.url||!config.key)throw new Error('Sign-in will be available soon. Please check back.');
@@ -49,7 +62,7 @@ const ready=(async()=>{
     emailForm.querySelectorAll('input,button').forEach(e=>e.disabled=false);
     googleButton.disabled=false;
     if(status.textContent==='Checking sign-in availability…')status.textContent='We’ll email you a one-time link. No password needed.';
-    client.auth.onAuthStateChange(()=>{setTimeout(()=>verify().catch(()=>lock('We couldn’t verify your sign-in. Please reload to retry.')),0);});
+    client.auth.onAuthStateChange((event)=>{if(event==='INITIAL_SESSION')return;setTimeout(()=>verify().catch(()=>lock('We couldn’t verify your sign-in. Please reload to retry.')),0);});
   }catch(error){lock(error.message);}
 })();
 async function getAccessToken(){await ready;if(!account)return null;return (await client.auth.getSession()).data.session?.access_token||null;}

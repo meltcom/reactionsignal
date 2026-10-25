@@ -27,8 +27,8 @@ export function youtubeId(input){
 export const tier=points=>points>=1000?'Community champion':points>=250?'Catalog curator':points>=100?'Reaction scout':points>=25?'Contributor':'Novice';
 export function award(db,id,user,kind,amount,cap,now,guard='1',args=[]){
   return db.prepare(`INSERT OR IGNORE INTO points(id,user_id,kind,amount,created_at)
-    SELECT ?,?,?,?,? WHERE (${guard}) AND (SELECT COUNT(*) FROM points WHERE user_id=? AND kind=? AND amount>0 AND created_at>=?)<?`)
-    .bind(id,user,kind,amount,now,...args,user,kind,now.slice(0,10),cap);
+    SELECT ?,?,?,?,? WHERE (${guard}) AND (EXISTS(SELECT 1 FROM members WHERE id=? AND trusted=1) OR (SELECT COUNT(*) FROM points WHERE user_id=? AND kind=? AND amount>0 AND created_at>=?)<?)`)
+    .bind(id,user,kind,amount,now,...args,user,user,kind,now.slice(0,10),cap);
 }
 const pending='EXISTS(SELECT 1 FROM contributions WHERE id=? AND status=\'pending\')';
 async function videoDecision(db,id){
@@ -269,6 +269,8 @@ export async function community(request,env,seed,user){
         if(b.action==='defer-trust'&&member.trusted===1)fail('Revoke trusted status to remove existing access.',409);
         ops.push(db.prepare('UPDATE members SET trusted=?,trust_reviewed_at=? WHERE id=?').bind(trusted,now,id));
         ops.push(db.prepare('INSERT INTO member_trust_history(id,user_id,moderator_id,trusted,reason,created_at) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),id,user.id,trusted,note,now));
+      }else if(b.action==='reset-daily-limit'){
+        ops.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind('member-daily-reset:'+id,now));
       }else if(b.action==='mute'){
         if(id===user.id)fail('Choose another member.');
         ops.push(db.prepare('INSERT INTO mutes(user_id,until,reason) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET until=excluded.until,reason=excluded.reason').bind(id,new Date(Date.now()+86400000).toISOString(),note));
@@ -276,7 +278,7 @@ export async function community(request,env,seed,user){
       else fail('Choose a valid member action.');
       ops.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('member-audit:'+crypto.randomUUID(),JSON.stringify({actor:user.id,member:id,action:b.action,amount:b.amount,name:b.name,note,at:now})));
       ops.push(auditStatement(db,user,b.action,'member',id,note,before,{name:b.name,amount:b.amount,action:b.action}));
-      await db.batch(ops);return json({ok:true,message:'Member updated. Trusted status controls direct posting; badges follow contribution points.'});
+      await db.batch(ops);return json({ok:true,message:b.action==='reset-daily-limit'?'Daily posting limit reset. Previous contributions and points are preserved.':'Member updated. Trusted status controls direct posting; badges follow contribution points.'});
     }
     if(path==='/profile'){
       const name=text(b.name,2,40,'Display name');
@@ -341,9 +343,9 @@ export async function community(request,env,seed,user){
       const id=b.kind==='submission'?`submission:${b.performerId}:${video}`:b.kind==='comment'?`comment:${user.id}:${video}`:`flag:${user.id}:${b.performerId}:${video}`;
       const direct=b.kind!=='flag'&&await canPublishDirectly(db,user.id);
       const metadata=direct&&b.kind==='submission'?await submissionMetadata(db,env,video):null;
-      const status=direct?'accepted':'pending',note=direct?'Published directly: Trusted Member; points awarded within daily limits.':null;
+      const status=direct?'accepted':'pending',note=direct?'Published directly: Trusted Member; points awarded without daily caps.':null;
       const insert=db.prepare(`INSERT OR IGNORE INTO contributions(id,user_id,kind,performer_id,video_id,body,reason,status,created_at,review_note)
-        SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=?)<20`).bind(id,user.id,b.kind,b.performerId,video,body,reason,status,now,note,user.id,now.slice(0,10));
+        SELECT ?,?,?,?,?,?,?,?,?,? WHERE (EXISTS(SELECT 1 FROM members WHERE id=? AND trusted=1) OR (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=? AND created_at>=COALESCE((SELECT value FROM state WHERE key=?),''))<20)`).bind(id,user.id,b.kind,b.performerId,video,body,reason,status,now,note,user.id,user.id,now.slice(0,10),'member-daily-reset:'+user.id);
       const statements=[insert];
       if(direct){
         const [amount,cap]=b.kind==='submission'?[20,5]:[3,3];
@@ -358,7 +360,7 @@ export async function community(request,env,seed,user){
       }
       const results=await db.batch(statements);
       if(!results[0].meta.changes)fail('Already submitted, or your daily limit of 20 contributions has been reached.',409);
-      return json({ok:true,status,published:direct,message:direct?(b.kind==='submission'?'Reaction published directly to the confirmed catalog. Points awarded within daily limits.':'Comment published directly. Points awarded within daily limits.') : b.kind==='flag'?'Removal request sent to moderators. The video remains listed while they review it.':'Saved for review. Points are awarded only after approval, within daily limits.'});
+      return json({ok:true,status,published:direct,message:direct?(b.kind==='submission'?'Reaction published directly to the confirmed catalog. Points awarded without daily caps.':'Comment published directly. Points awarded without daily caps.') : b.kind==='flag'?'Removal request sent to moderators. The video remains listed while they review it.':'Saved for review. Points are awarded only after approval, within daily limits.'});
     }
     if(path==='/moderate'){
       if(!user.moderator)fail('Moderator access required.',403);

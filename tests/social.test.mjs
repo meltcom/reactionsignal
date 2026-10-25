@@ -16,7 +16,7 @@ async function setup(){
 test('preferences, saved views, follows and watch lists are account isolated and persistent',async()=>{const {call}=await setup();assert.equal((await call('/dashboard',null,null)).status,401);assert.equal((await call('/preferences',{theme:'dark'},'fan','https://evil.test')).status,403);assert.equal((await call('/preferences',{theme:'dark',layout:'table',fields:['rating'],hideWatched:true})).status,200);assert.equal((await call('/dashboard')).data.preferences.theme,'dark');assert.deepEqual((await call('/dashboard',null,'other')).data.preferences,{});await call('/view',{name:'My favorites',settings:{landing:'favorites',layout:'compact'}});const id=(await call('/dashboard')).data.views[0].id;await call('/view',{id,remove:true},'other');assert.equal((await call('/dashboard')).data.views.length,1);await call('/follow',{kind:'performer',target:'missioned-souls'});await call('/watch',{videoId:'abcdefghijk',status:'watched',favorite:true});const d=(await call('/dashboard')).data;assert.equal(d.follows.length,1);assert.equal(d.watch[0].favorite,1);assert.equal(d.watch[0].status,'watched');assert.equal((await call('/dashboard',null,'other')).data.watch.length,0);assert.equal((await call('/preferences',{layout:'hacked'})).status,400);});
 test('threaded comments are reviewed, ownership enforced, likes deduplicated and rewards reversed',async()=>{const {call,sql}=await setup();const c={videoId:'abcdefghijk',performerId:'missioned-souls',body:'A thoughtful and detailed comment.'};assert.equal((await call('/comment',c)).status,200);const id=sql.prepare("SELECT id FROM contributions WHERE user_id='fan'").get().id;assert.equal((await call('/comments?video=abcdefghijk',null,'other')).data.items.length,0);assert.equal((await call('/comments?video=abcdefghijk')).data.items.length,1);assert.equal((await call('/moderate',{id,decision:'accept',note:'Helpful discussion'},'owner','https://pilot.test',community)).status,200);assert.equal((await call('/dashboard')).data.reputationTotal,0);assert.equal((await call('/comment',{...c,body:'A useful reply to that comment.',parentId:id},'other')).status,200);await call('/like',{id},'other');await call('/like',{id},'other');assert.equal((await call('/comments?video=abcdefghijk')).data.items[0].likes,1);assert.equal((await call('/comment',{...c,id},'other')).status,403);assert.equal((await call('/delete',{id,kind:'comment'},'other')).status,403);assert.equal((await call('/delete',{id,kind:'comment'})).status,200);assert.equal((await call('/dashboard')).data.reputationTotal,0);assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,0);});
 test('chat messages, unread counts, mentions, blocking, reports and moderator mutes work together',async()=>{const {call,sql}=await setup();assert.equal((await call('/chat',{room:'missioned-souls',body:'Hello @other, what a great performance!'})).status,200);assert.equal((await call('/chat',{room:'missioned-souls',body:'Too fast'})).status,429);assert.equal((await call('/rooms',null,'other')).data.rooms[0].unread,1);assert.equal((await call('/mentions',null,'other')).data.items.length,1);await call('/presence',{room:'missioned-souls'},'other');assert.equal((await call('/rooms',null,'other')).data.rooms[0].unread,0);await call('/block',{target:'fan'},'other');assert.equal((await call('/chat?room=missioned-souls',null,'other')).data.messages.length,0);await call('/block',{target:'fan',remove:true},'other');const id=(await call('/chat?room=missioned-souls',null,'other')).data.messages[0].id;assert.equal((await call('/delete',{kind:'chat',id},'other')).status,403);await call('/report',{kind:'chat',target:id,body:'Please review this message.'},'other');assert.equal((await call('/queue',null,'fan')).status,403);const report=(await call('/queue',null,'owner')).data.reports[0];assert.equal((await call('/moderate',{id:report.id,action:'mute'},'fan')).status,403);assert.equal((await call('/moderate',{id:report.id,action:'mute'},'owner')).status,200);assert.equal((await call('/chat?room=missioned-souls')).data.messages.length,0);assert.equal((await call('/comment',{videoId:'abcdefghijk',performerId:'missioned-souls',body:'A muted member tries posting.'})).status,403);await call('/unmute',{id:'fan'},'owner');assert.equal(sql.prepare('SELECT COUNT(*) n FROM mutes').get().n,0);});
-test('settings reject invalid fields and numbers',()=>{assert.throws(()=>settings({minRating:8}));assert.throws(()=>settings({fields:['admin']}));assert.throws(()=>settings({hideWatched:'yes'}));assert.equal(settings({startDate:'2026-09-01'}).startDate,'2026-09-01');});
+test('settings accept video metadata fields and reject invalid fields and numbers',()=>{assert.throws(()=>settings({minRating:8}));assert.throws(()=>settings({fields:['admin']}));assert.throws(()=>settings({hideWatched:'yes'}));assert.equal(settings({startDate:'2026-09-01'}).startDate,'2026-09-01');assert.deepEqual(settings({fields:['youtubeComments','duration']}).fields,['youtubeComments','duration']);});
 
 test('reactor discussions keep targets, pending visibility, moderation and ownership isolated',async()=>{
  const {call,sql}=await setup();
@@ -53,22 +53,22 @@ test('reactor discussions keep targets, pending visibility, moderation and owner
  assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,0);
 });
 
-test('trusted reactor comments share video point caps, support reports, and respect mutes',async()=>{
+test('trusted reactor comments retain uncapped video points, support reports, and respect mutes',async()=>{
  const {call,sql}=await setup();const channelId='UC1234567890123456789012';
  sql.prepare('INSERT INTO channels(id,name) VALUES(?,?)').run(channelId,'Test reactor');
  sql.prepare("UPDATE members SET trusted=1 WHERE id='fan'").run();
  for(let i=0;i<2;i++)assert.equal((await call('/comment',{videoId:'abcdefghijk',performerId:'missioned-souls',body:'Useful video discussion number '+i})).data.status,'accepted');
  for(let i=0;i<2;i++)assert.equal((await call('/comment',{channelId,body:'Useful reactor discussion number '+i})).data.status,'accepted');
- assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,9);
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,12);
  const id=sql.prepare('SELECT id FROM contributions WHERE channel_id=? ORDER BY created_at LIMIT 1').get(channelId).id;
  assert.equal((await call('/comment',{channelId,id,body:'A trusted edit keeps existing points.'})).data.status,'accepted');
- assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,9);
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,12);
  assert.equal((await call('/report',{kind:'comment',target:id,body:'Please review this reactor comment.'},'other')).status,200);
  const report=(await call('/queue',null,'owner')).data.reports[0];
  assert.equal((await call('/moderate',{id:report.id,action:'mute'},'owner')).status,200);
  assert.equal((await call('/comments?channel='+channelId)).data.items.some(c=>c.id===id),false);
  assert.equal((await call('/comment',{channelId,body:'Muted comments should not be published.'})).status,403);
- assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,6);
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='fan'").get().n,9);
 });
 
 test('dashboard reads overlap and keep the existing account-scoped response',async()=>{
@@ -131,7 +131,7 @@ test('direct comments depend on moderator-managed trust, not contribution points
  assert.equal((await call('/dashboard')).data.reputationTotal,100);
 });
 
-test('trusted comments and replies share daily awards across routes; edits retain points and removal reverses once',async()=>{
+test('trusted comments and replies earn uncapped awards across routes; edits retain points and removal reverses once',async()=>{
  const {sql,call}=await setup();
  sql.prepare("UPDATE members SET trusted=1 WHERE id='fan'").run();
  const b={videoId:'abcdefghijk',performerId:'missioned-souls',body:'A useful trusted comment about this reaction.'};
@@ -143,10 +143,10 @@ test('trusted comments and replies share daily awards across routes; edits retai
  assert.equal((await call('/comment',{...b,id,body:'An improved trusted comment about this reaction.'})).status,200);assert.equal(points(),3);
  assert.equal((await call('/comment',{...b,parentId:id,body:'A useful reply discussing the performance.'})).status,200);assert.equal(points(),6);
  assert.equal((await call('/contribute',{kind:'comment',...b,body:'A comment through the original contribution form.'},'fan','https://pilot.test',community)).status,200);assert.equal(points(),9);
- assert.equal((await call('/comment',{...b,body:'Another useful comment above the daily reward limit.'})).status,200);assert.equal(points(),9);
+ assert.equal((await call('/comment',{...b,body:'Another useful comment above the daily reward limit.'})).status,200);assert.equal(points(),12);
  assert.equal((await call('/dashboard')).data.reputationTotal,0);
- assert.equal((await call('/delete',{id,kind:'comment'})).status,200);assert.equal(points(),6);
- assert.equal((await call('/delete',{id,kind:'comment'})).status,200);assert.equal(points(),6);
+ assert.equal((await call('/delete',{id,kind:'comment'})).status,200);assert.equal(points(),9);
+ assert.equal((await call('/delete',{id,kind:'comment'})).status,200);assert.equal(points(),9);
 });
 
 test('social backfill restores unreviewed direct comments and replies on original days without duplicate awards',async()=>{
@@ -207,4 +207,44 @@ test('following groups persist, isolate accounts, switch atomically and preserve
  await call('/following-group',{action:'delete',id:a.data.id});
  assert.equal((await call('/dashboard')).data.follows.filter(f=>f.kind==='song').length,2);
  assert.equal((await call('/following-group',{action:'create',name:' '})).status,400);
+});
+
+test('moderator daily reset also restores the social comment allowance',async()=>{
+ const {sql,call}=await setup(),now=new Date().toISOString();
+ for(let i=0;i<20;i++)sql.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,status,created_at) VALUES(?,'fan','comment','missioned-souls','abcdefghijk','Previous comment','pending',?)").run('social-prior:'+i,now.slice(0,10)+'T00:00:00.000Z');
+ const comment={videoId:'abcdefghijk',performerId:'missioned-souls',body:'A separate useful comment after the reset.'};
+ assert.equal((await call('/comment',comment)).status,409);
+ assert.equal((await call('/users/update',{id:'fan',action:'reset-daily-limit',note:'Allow another batch'},'owner',undefined,community)).status,200);
+ assert.equal((await call('/comment',comment)).status,200);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM contributions WHERE user_id='fan'").get().n,21);
+});
+
+test('all displayed reactor sorts persist in preferences and saved views without crossing accounts',async()=>{
+ const {call,sql}=await setup();
+ try{
+  for(const sort of ['newest','ranked','personal','subscribers','name']){
+   assert.equal((await call('/preferences',{followingReactorSort:sort})).status,200);
+   assert.equal((await call('/dashboard')).data.preferences.followingReactorSort,sort);
+   assert.equal((await call('/view',{name:'Sort '+sort,settings:{followingReactorSort:sort}})).status,200);
+   assert.equal((await call('/dashboard')).data.views.find(v=>v.name==='Sort '+sort).settings.followingReactorSort,sort);
+  }
+  assert.deepEqual((await call('/dashboard',null,'other')).data.preferences,{});
+  assert.equal((await call('/dashboard',null,'other')).data.views.length,0);
+  assert.equal((await call('/preferences',{followingReactorSort:'invalid'})).status,400);
+  assert.equal((await call('/dashboard')).data.preferences.followingReactorSort,'name');
+ }finally{sql.close();}
+});
+
+test('trusted daily posting exemption spans both routes and revocation restores the cap',async()=>{
+ const {sql,call}=await setup(),day=new Date().toISOString().slice(0,10);
+ try{
+  for(let i=0;i<20;i++)sql.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,status,created_at) VALUES(?,'fan','comment','missioned-souls','abcdefghijk','Previous','pending',?)").run('exemption:'+i,day+'T00:00:00.000Z');
+  sql.prepare("UPDATE members SET trusted=1 WHERE id='fan'").run();
+  const b={videoId:'abcdefghijk',performerId:'missioned-souls',body:'Trusted comment after twenty earlier posts.'};
+  assert.equal((await call('/comment',b)).data.status,'accepted');
+  assert.equal((await call('/contribute',{...b,kind:'comment',body:'Trusted original-route post beyond twenty.'},'fan',undefined,community)).data.published,true);
+  sql.prepare("UPDATE members SET trusted=0 WHERE id='fan'").run();
+  assert.equal((await call('/comment',{...b,body:'After trust revocation this should be capped.'})).status,409);
+  assert.equal((await call('/contribute',{...b,kind:'comment',body:'Original route is capped after revocation.'},'fan',undefined,community)).status,409);
+ }finally{sql.close();}
 });

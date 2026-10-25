@@ -1,6 +1,10 @@
 import { fileURLToPath } from 'node:url';
 import { mkdir, readFile, writeFile, copyFile, cp, rm } from 'node:fs/promises';
+import {sourceFingerprint,artifactFingerprint} from './release-provenance.mjs';
 const root=new URL('../',import.meta.url);
+const sourceHash=await sourceFingerprint(fileURLToPath(root));
+if(process.env.REACTION_EXPECTED_SOURCE_HASH&&process.env.REACTION_EXPECTED_SOURCE_HASH!==sourceHash)throw Error('Source changed after release checks; deployment stopped.');
+const release={schema:1,sourceHash,builtAt:new Date().toISOString()};
 // Only replace this project's reproducible build output.
 await rm(new URL('dist/',root),{recursive:true,force:true});
 await mkdir(new URL('dist/server/',root),{recursive:true});
@@ -30,21 +34,15 @@ await copyFile(new URL('youtube-subscriptions-core.js',root),new URL('dist/youtu
 const seed=JSON.parse(await readFile(new URL('data.json',root),'utf8'));
 seed.missionedSouls=JSON.parse(await readFile(new URL('missioned-souls-seed.json',root),'utf8'));
 seed.importRun=JSON.parse(await readFile(new URL('import-run.json',root),'utf8'));
+assets['/release.json']={type:'application/json; charset=utf-8',body:JSON.stringify(release)};
+await writeFile(new URL('dist/release.json',root),JSON.stringify(release));
 await writeFile(new URL('dist/server/assets.mjs',root),`export const assets=${JSON.stringify(assets)};\nexport const seed=${JSON.stringify(seed)};\n`);
-for(const f of ['official-feed.mjs','cache.mjs','operations.mjs','rss.mjs','youtube-subscriptions.mjs','youtube-connection.mjs','db.mjs','discovery.mjs','approval-rules.mjs','channel-stats.mjs','community.mjs','reputation.mjs','social.mjs','auth.mjs','performers.mjs','push.mjs','recheck.mjs','workbook-import.mjs','reconciliation.mjs'])await copyFile(new URL(`server/${f}`,root),new URL(`dist/server/${f}`,root));
+for(const f of ['official-feed.mjs','cache.mjs','operations.mjs','rss.mjs','youtube-subscriptions.mjs','youtube-connection.mjs','db.mjs','discovery.mjs','video-format.mjs','format-recheck.mjs','video-metadata.mjs','approval-rules.mjs','channel-stats.mjs','community.mjs','reputation.mjs','social.mjs','auth.mjs','performers.mjs','push.mjs','recheck.mjs','workbook-import.mjs','reconciliation.mjs'])await copyFile(new URL(`server/${f}`,root),new URL(`dist/server/${f}`,root));
 await build({entryPoints:[fileURLToPath(new URL('server/missioned-souls.mjs',root))],outfile:fileURLToPath(new URL('dist/server/missioned-souls.mjs',root)),bundle:true,format:'esm',platform:'neutral',target:'es2022'});
 await copyFile(new URL('server/security.mjs',root),new URL('dist/server/security.mjs',root));
 await copyFile(new URL('server/worker.mjs',root),new URL('dist/server/index.js',root));
-console.log('Built Reaction Journey for direct Cloudflare Workers hosting.');
-
-// Cloudflare runs the build command before its automatic branch Preview command.
-// Only non-main Cloudflare builds prepare the isolated Preview database.
-if (process.env.WORKERS_CI_BRANCH && process.env.WORKERS_CI_BRANCH !== 'main') {
-  const { spawnSync } = await import('node:child_process');
-  const result = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx',
-    ['wrangler@4', 'd1', 'migrations', 'apply', 'DB', '--remote', '--config', 'wrangler.preview-migrations.jsonc'],
-    { cwd: root.pathname, stdio: 'inherit', shell: false });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error('Preview database migrations failed; stopping Preview build.');
-}
+await writeFile(new URL('dist/build-integrity.json',root),JSON.stringify({sha256:await artifactFingerprint(fileURLToPath(new URL('dist/',root)))}));
+if(await sourceFingerprint(fileURLToPath(root))!==sourceHash)throw Error('Source changed during build; rebuild before deployment.');
+console.log('Built Reaction Journey. Release '+sourceHash);
+// Database migrations are intentionally separate from builds and presentation releases.
 

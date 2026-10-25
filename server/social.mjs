@@ -8,13 +8,13 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 const txt=(v,min,max)=>{if(typeof v!=='string'||v.trim().length<min||v.trim().length>max)fail(`Use ${min}–${max} characters.`);return v.trim();};
 export function settings(input,performerIds=[]){
  const b=input||{},out={};
- const choices={followingReactorSort:['name','ranked','personal'],followingSongSort:['name','ranked'],followingGroupSort:['name','ranked'],theme:['light','dark','system'],accent:['teal','blue','violet'],layout:['cards','compact','large','table'],density:['compact','standard','spacious'],thumbnail:['small','medium','large'],sort:['latest','rated','views','comments','subscribers','discovered','new-reactor','reactor-ranked'],group:['none','performer','reactor','song','genre','date','source'],landing:['all','today','favorites','following','community'],performer:['all',...performerIds]};
+ const choices={followingReactorSort:['newest','ranked','personal','subscribers','name'],followingSongSort:['name','ranked'],followingGroupSort:['name','ranked'],theme:['light','dark','system'],accent:['teal','blue','violet'],layout:['cards','compact','large','table'],density:['compact','standard','spacious'],thumbnail:['small','medium','large'],sort:['latest','rated','views','comments','subscribers','discovered','new-reactor','reactor-ranked'],group:['none','performer','reactor','song','genre','date','source'],landing:['all','today','favorites','following','community'],performer:['all',...performerIds]};
  for(const [k,allowed] of Object.entries(choices))if(b[k]!==undefined){if(!allowed.includes(b[k]))fail(`Invalid ${k}.`);out[k]=b[k];}
  for(const k of ['hideShorts','hideWatched','verifiedOnly','favoritesOnly','autoplay'])if(b[k]!==undefined){if(typeof b[k]!=='boolean')fail(`Invalid ${k}.`);out[k]=b[k];}
  for(const k of ['minSubscribers','minRating','days','columns'])if(b[k]!==undefined){if(typeof b[k]!=='number'||!Number.isFinite(b[k])||b[k]<0||b[k]>(k==='minRating'?5:k==='columns'?5:k==='days'?36500:1e10))fail(`Invalid ${k}.`);out[k]=b[k];}
  for(const k of ['startDate','endDate'])if(b[k]!==undefined){if(b[k]!==''&&(!/^\d{4}-\d{2}-\d{2}$/.test(b[k])||Number.isNaN(Date.parse(b[k]))))fail('Invalid date.');out[k]=b[k];}
  for(const k of ['query','song','genre','reactor','defaultView'])if(b[k]!==undefined)out[k]=typeof b[k]==='string'?b[k].slice(0,200):'';
- if(b.fields!==undefined){if(!Array.isArray(b.fields)||b.fields.some(x=>!['subscribers','views','likes','date','rating','comments','performer','song','genre','discovered'].includes(x)))fail('Invalid display fields.');out.fields=b.fields;}
+ if(b.fields!==undefined){if(!Array.isArray(b.fields)||b.fields.some(x=>!['subscribers','views','likes','date','rating','comments','youtubeComments','duration','performer','song','genre','discovered'].includes(x)))fail('Invalid display fields.');out.fields=b.fields;}
  return out;
 }
 export async function social(request,env,seed,user){try{
@@ -172,7 +172,7 @@ export async function social(request,env,seed,user){try{
  if(await first('SELECT 1 FROM mutes WHERE user_id=? AND until>?',user.id,now))fail('Posting is temporarily muted. You can still browse.',403);
  if(path==='/chat'){if(!rooms.some(r=>r.id===b.room))fail('Unknown room.');const body=txt(b.body,1,2000);const result=await run("INSERT INTO chat_messages SELECT ?,?,?,?,'visible',? WHERE (SELECT COUNT(*) FROM chat_messages WHERE user_id=? AND created_at>?)<1 AND (SELECT COUNT(*) FROM chat_messages WHERE user_id=? AND created_at>=?)<200",crypto.randomUUID(),b.room,user.id,body,now,user.id,new Date(Date.now()-3000).toISOString(),user.id,now.slice(0,10));if(!result.meta.changes)fail('Please wait 3 seconds between messages. Daily limit: 200.',429);return json({ok:true});}
  if(path==='/comment'){const channel=b.channelId||null;if(channel){if(b.videoId||!/^UC[\w-]{22}$/.test(channel)||!await first('SELECT 1 FROM channels WHERE id=?',channel))fail('Choose a valid reactor.');b.videoId='';b.performerId='missioned-souls';}const direct=await canPublishDirectly(db,user.id),status=direct?'accepted':'pending';const body=txt(b.body,10,2000);if(!channel&&(!performerIds.includes(b.performerId)||!await first("SELECT 1 FROM matches WHERE video_id=? AND performer_id=? AND status='CONFIRMED'",b.videoId,b.performerId)))fail('Choose a confirmed video.');let parent=b.parentId||null;if(parent&&!await first("SELECT 1 FROM contributions WHERE id=? AND video_id=? AND channel_id IS ? AND kind='comment' AND status='accepted'",parent,b.videoId,channel))fail('Reply target unavailable.');
-  const note=direct?'Published directly: Trusted Member; points awarded within daily limits.':null;
+  const note=direct?'Published directly: Trusted Member; points awarded without daily caps.':null;
   if(b.id){
    const c=await first("SELECT * FROM contributions WHERE id=? AND user_id=? AND kind='comment' AND status IN ('pending','accepted')",b.id,user.id);
    if(!c)fail('Comment cannot be edited.',403);if(c.video_id!==b.videoId||(c.channel_id||null)!==channel)fail('Discussion mismatch.');
@@ -182,14 +182,14 @@ export async function social(request,env,seed,user){try{
    ops.push(db.prepare("UPDATE contributions SET body=?,status=?,review_note=?,reviewed_at=NULL,reviewed_by=NULL WHERE id=?").bind(body,status,note,b.id));
    if(direct)ops.push(award(db,b.id,user.id,'comment',3,3,now,
      "EXISTS(SELECT 1 FROM contributions WHERE id=? AND status='accepted') AND NOT EXISTS(SELECT 1 FROM points WHERE id=?)",[b.id,`revoke:${b.id}`]));
-   await db.batch(ops);return json({ok:true,status,message:direct?'Comment published directly. Each comment can earn points only once, within daily limits.':'Comment saved for review. Only you can see it until approved.'});
+   await db.batch(ops);return json({ok:true,status,message:direct?'Comment published directly. Each comment can earn points only once. Trusted members have no daily point cap.':'Comment saved for review. Only you can see it until approved.'});
   }
   const id=crypto.randomUUID();
-  const insert=db.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,parent_id,status,created_at,review_note,channel_id) SELECT ?,?,'comment',?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=?)<20 AND NOT EXISTS(SELECT 1 FROM contributions WHERE user_id=? AND video_id=? AND channel_id IS ? AND body=? AND status IN ('pending','accepted'))").bind(id,user.id,b.performerId,b.videoId,body,parent,status,now,note,channel,user.id,now.slice(0,10),user.id,b.videoId,channel,body);
+  const insert=db.prepare("INSERT INTO contributions(id,user_id,kind,performer_id,video_id,body,parent_id,status,created_at,review_note,channel_id) SELECT ?,?,'comment',?,?,?,?,?,?,?,? WHERE (EXISTS(SELECT 1 FROM members WHERE id=? AND trusted=1) OR (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=? AND created_at>=COALESCE((SELECT value FROM state WHERE key=?),''))<20) AND NOT EXISTS(SELECT 1 FROM contributions WHERE user_id=? AND video_id=? AND channel_id IS ? AND body=? AND status IN ('pending','accepted'))").bind(id,user.id,b.performerId,b.videoId,body,parent,status,now,note,channel,user.id,user.id,now.slice(0,10),'member-daily-reset:'+user.id,user.id,b.videoId,channel,body);
   const ops=[insert];
   if(direct)ops.push(award(db,id,user.id,'comment',3,3,now,"EXISTS(SELECT 1 FROM contributions WHERE id=? AND status='accepted' AND created_at=?)",[id,now]));
   const result=await db.batch(ops);if(!result[0].meta.changes)fail('Duplicate comment or daily limit reached.',409);
-  return json({ok:true,status,message:direct?'Comment published directly. Points awarded within daily limits.':'Comment saved for review. Only you can see it until approved.'});}
+  return json({ok:true,status,message:direct?'Comment published directly. Points awarded without daily caps.':'Comment saved for review. Only you can see it until approved.'});}
 
  fail('Not found.',404);
  }catch(e){if(!e.status)console.error('Social service failure',e.message);return json({error:e.status?e.message:'Could not save or load this information. Please retry.'},e.status||503);}}

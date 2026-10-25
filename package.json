@@ -9,10 +9,11 @@
     "release:check": "node scripts/release-check.mjs",
     "release:staging": "node scripts/staging-load.mjs",
     "db:generate": "drizzle-kit generate",
-    "deploy": "npx wrangler@4 d1 migrations apply DB --remote && npx wrangler@4 deploy",
+    "deploy": "node scripts/deploy.mjs",
     "dev": "npm run build && npx wrangler@4 dev",
     "db:migrate": "npx wrangler@4 d1 migrations apply DB --remote",
-    "deploy:preview": "npm run build && npx wrangler@4 preview"
+    "deploy:preview": "npm run build && npx wrangler@4 preview",
+    "deploy:check": "node scripts/check-build.mjs"
   },
   "devDependencies": {
     "drizzle-kit": "0.31.4",
