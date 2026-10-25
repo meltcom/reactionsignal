@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .wrangler/
+.dev.vars
+.dev.vars.*
 *.pyc
 __pycache__/
 
