@@ -29,7 +29,7 @@ test('release packages the approved member UI and keeps PR44 search rotation',()
 });
 
 test('packaged guide routes require membership and do not expose PDF assets publicly',async()=>{
- const env={SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_PUBLISHABLE_KEY:'fixture'};
+ const env={SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_PUBLISHABLE_KEY:'sb_publishable_fixture'};
  for(const name of ['overview','app-guide']){
   const response=await worker.fetch(new Request('https://local.test/api/member-guides/'+name),env);
   assert.equal(response.status,401,'Guide route must exist and require authentication');

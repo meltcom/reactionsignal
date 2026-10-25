@@ -21,16 +21,17 @@ export async function recheckVideoFormats(env,fetcher=fetch){
   if(!rows.length)return {status:'complete',processed:0,updated:0};
   const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db);
   const data=await api.get('videos',{part:'snippet,contentDetails,status,player',maxWidth:480,id:rows.map(v=>v.id).join(',')});
-  const items=new Map((data.items||[]).map(v=>[v.id,v])),writes=[];
+  const items=new Map((data.items||[]).map(v=>[v.id,v])),writes=[],resolved=new Set();
   for(const row of rows){
    const item=items.get(row.id),valid=item?.status?.privacyStatus==='public'&&item.snippet?.channelId===row.channel_id;
    const format=valid?videoFormat(item,seconds(item.contentDetails?.duration)):'UNKNOWN';
+   if(format!=='UNKNOWN')resolved.add(row.id);
    const evidence={at:now,format,duration:valid?seconds(item.contentDetails?.duration):null,width:item?.player?.embedWidth??null,height:item?.player?.embedHeight??null,source:'YouTube metadata format recheck'};
    writes.push(db.prepare("UPDATE videos SET format=? WHERE id=? AND channel_id=? AND format='UNKNOWN' AND format_locked=0 AND available=1").bind(format,row.id,row.channel_id));
    writes.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind('format-check-v1:'+row.id,JSON.stringify(evidence)));
   }
   const results=await db.batch(writes);let updated=0;
-  for(let i=0;i<rows.length;i++)if(items.has(rows[i].id)&&results[i*2]?.meta?.changes)updated++;
+  for(let i=0;i<rows.length;i++)if(resolved.has(rows[i].id)&&results[i*2]?.meta?.changes)updated++;
   const result={status:'checked',at:now,processed:rows.length,updated};
   await db.prepare("INSERT INTO state(key,value) VALUES('format-recheck-last',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(JSON.stringify(result)).run();
   return result;
