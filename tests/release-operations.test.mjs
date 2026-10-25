@@ -22,7 +22,7 @@ test('the Worker enforces restrictions even with a cached identity',async()=>{
  const {default:worker}=await import('../dist/server/index.js');const {sql,env}=releaseFixture(),original=globalThis.fetch;
  const id='cdc6ec62-30d1-4dba-b6f8-99db7563f221',memberId='supabase:'+id;
  sql.prepare('INSERT INTO members(id,name,email,created_at) VALUES(?,?,?,?)').run(memberId,'Test','test@example.com',new Date().toISOString());
- const token='head.'+btoa(JSON.stringify({exp:Math.floor(Date.now()/1000)+600}))+'.sig',authEnv={...env,SUPABASE_URL:'https://worker-test.supabase.co',SUPABASE_PUBLISHABLE_KEY:'test'};
+ const token='head.'+btoa(JSON.stringify({exp:Math.floor(Date.now()/1000)+600}))+'.sig',authEnv={...env,SUPABASE_URL:'https://worker-test.supabase.co',SUPABASE_PUBLISHABLE_KEY:'sb_publishable_test'};
  const req=path=>new Request('https://pilot.test'+path,{headers:{Authorization:'Bearer '+token}});
  try{
   globalThis.fetch=async()=>Response.json({id,email:'test@example.com',email_confirmed_at:'2026-01-01'});
@@ -81,7 +81,7 @@ test('shared projections coalesce bursts, stay database scoped, recover from fai
 test('ordinary reads coalesce verification; staff and writes reverify; upstream failures remain retryable',async()=>{
  const original=globalThis.fetch;let calls=0;const id='f16fb451-f220-4bf2-93ae-580c84c36a00';
  const token='header.'+btoa(JSON.stringify({exp:Math.floor(Date.now()/1000)+600}))+'.signature';
- const env={SUPABASE_URL:'https://test.supabase.co',SUPABASE_PUBLISHABLE_KEY:'test',COMMUNITY_MODERATOR_EMAILS:'lead@example.com'};
+ const env={SUPABASE_URL:'https://test.supabase.co',SUPABASE_PUBLISHABLE_KEY:'sb_publishable_test',COMMUNITY_MODERATOR_EMAILS:'lead@example.com'};
  const req=(method='GET',path='/data.json')=>new Request('https://pilot.test'+path,{method,headers:{Authorization:'Bearer '+token}});
  try{
   globalThis.fetch=async()=>{calls++;return Response.json({id,email:'fan@example.com',email_confirmed_at:'2026-01-01'});};

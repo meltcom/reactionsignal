@@ -2,10 +2,21 @@ const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:
 const verifiedReads=new Map(),pendingReads=new Map();
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 
+function publicApiKey(key){
+  if(/\s/.test(key))return false;
+  if(/^sb_publishable_[A-Za-z0-9_-]+$/.test(key))return true;
+  const parts=key.split('.');
+  if(parts.length!==3||parts.some(part=>!/^[A-Za-z0-9_-]+$/.test(part)))return false;
+  // This is a configuration guard, not user authentication. Supabase still
+  // verifies every uncached identity; only legacy anon keys may be published.
+  try{return JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')))?.role==='anon';}
+  catch{return false;}
+}
+
 export function authConfig(env){
   const url=String(env.SUPABASE_URL||'').replace(/\/$/,'');
   const key=String(env.SUPABASE_PUBLISHABLE_KEY||'');
-  try{const u=new URL(url);if(u.protocol!=='https:'||u.username||u.password||u.search||u.hash||u.pathname!=='/'||!key)return null;}
+  try{const u=new URL(url);if(u.protocol!=='https:'||u.username||u.password||u.search||u.hash||u.pathname!=='/'||!publicApiKey(key))return null;}
   catch{return null;}
   return {url,key};
 }
