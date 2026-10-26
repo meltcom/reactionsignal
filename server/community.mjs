@@ -29,15 +29,16 @@ const trustedDailyPointLimit=500;
 export function award(db,id,user,kind,amount,cap,now,guard='1',args=[],dailyKind=kind){
   const start=now.slice(0,10)+'T00:00:00.000Z';
   const end=new Date(Date.parse(start)+86400000).toISOString();
+  const dailyKinds=dailyKind==='rating'?['rating','reactor-rating']:[dailyKind];
   return db.prepare(`INSERT OR IGNORE INTO points(id,user_id,kind,amount,created_at)
     SELECT ?,?,?,CASE
       WHEN EXISTS(SELECT 1 FROM members WHERE id=? AND trusted=1)
         THEN MIN(?,MAX(0,?-COALESCE((SELECT SUM(amount) FROM points WHERE user_id=? AND amount>0 AND created_at>=? AND created_at<?),0)))
-      WHEN (SELECT COUNT(*) FROM points WHERE user_id=? AND kind=? AND amount>0 AND created_at>=? AND created_at<?)<?
+      WHEN (SELECT COUNT(*) FROM points WHERE user_id=? AND kind IN (${dailyKinds.map(()=>'?').join(',')}) AND amount>0 AND created_at>=? AND created_at<?)<?
         THEN ?
       ELSE 0
     END,? WHERE (${guard})`)
-    .bind(id,user,kind,user,amount,trustedDailyPointLimit,user,start,end,user,dailyKind,start,end,cap,amount,now,...args);
+    .bind(id,user,kind,user,amount,trustedDailyPointLimit,user,start,end,user,...dailyKinds,start,end,cap,amount,now,...args);
 }
 const pending='EXISTS(SELECT 1 FROM contributions WHERE id=? AND status=\'pending\')';
 async function videoDecision(db,id){
