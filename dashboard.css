@@ -158,7 +158,7 @@ body[data-density=spacious] #videoGrid .video-community{margin-top:12px;padding-
 #preferencesDialog .drawer-actions{position:static}
 @media(max-width:600px){#preferencesDialog .drawer-heading,#preferencesBody{padding:16px}}
 
-/* Shared coastal header treatment and a compact community recognition badge. */
+/* Shared coastal header treatment; champion badges appear only on Points & Trust. */
 #memberApp main > .page-panel > .page-heading,
 #memberApp main > .page-panel > h1:first-child{
   position:relative;
@@ -177,15 +177,26 @@ body[data-density=spacious] #videoGrid .video-community{margin-top:12px;padding-
 #memberApp main > .page-panel > .page-heading > div{min-width:0;position:relative;z-index:1;}
 #memberApp main > .page-panel > .page-heading > button{position:relative;z-index:1;}
 #memberApp main > .page-panel > h1:first-child{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 28px;}
-.community-champion-header-badge{
-  display:block;
-  width:88px;
-  height:88px;
-  flex:0 0 88px;
-  object-fit:contain;
+#reputation > .page-heading{
+  min-height:178px;
+  align-items:center;
+}
+#reputation .community-champion-header-badges{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:12px;
+  flex:0 0 auto;
   margin-left:auto;
   position:relative;
   z-index:1;
+}
+#reputation .community-champion-header-badge{
+  display:block;
+  width:clamp(112px,10vw,138px);
+  height:clamp(112px,10vw,138px);
+  flex:0 0 clamp(112px,10vw,138px);
+  object-fit:contain;
   filter:drop-shadow(0 3px 6px rgba(16,45,50,.22));
 }
 body[data-theme=dark] #memberApp main > .page-panel > .page-heading,
@@ -198,6 +209,11 @@ body[data-theme=dark] #memberApp main > .page-panel > h1:first-child{
     background-image:linear-gradient(90deg,rgba(16,29,35,.84) 0%,rgba(16,29,35,.72) 58%,rgba(16,29,35,.6) 100%),url('/images/reaction-journey-coastal-header.webp');
   }
 }
+@media(max-width:860px) and (min-width:761px){
+  #reputation > .page-heading{flex-direction:column;align-items:stretch;gap:12px;min-height:0;}
+  #reputation .community-champion-header-badges{align-self:flex-end;gap:8px;}
+  #reputation .community-champion-header-badge{width:100px;height:100px;flex-basis:100px;}
+}
 @media(max-width:760px){
   #memberApp main > .page-panel > .page-heading{
     display:grid;
@@ -209,5 +225,7 @@ body[data-theme=dark] #memberApp main > .page-panel > h1:first-child{
   #memberApp main > .page-panel > .page-heading > div{grid-column:1;grid-row:1;}
   #memberApp main > .page-panel > .page-heading > button{grid-column:1/-1;justify-self:start;}
   #memberApp main > .page-panel > h1:first-child{min-height:96px;padding:14px 16px;gap:10px;}
-  .community-champion-header-badge{width:62px;height:62px;flex-basis:62px;}
+  #reputation > .page-heading{min-height:144px;grid-template-columns:minmax(0,1fr);}
+  #reputation .community-champion-header-badges{grid-column:1;grid-row:2;gap:4px;margin:0 auto;}
+  #reputation .community-champion-header-badge{width:68px;height:68px;flex-basis:68px;}
 }
