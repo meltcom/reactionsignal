@@ -18,6 +18,19 @@ function fixture(){
  vm.runInContext(source.slice(source.indexOf('function clearFeedFilters()'),source.indexOf('function navigate(')),c);
  return {c,dashboard,select,help,ids:()=>Array.from(c.performerVideos(),v=>v.id)};
 }
+test('Community Finds includes trusted direct submissions and retains feed filters',()=>{
+ const {c,dashboard,ids}=fixture();c.feedMode='community';
+ c.videos[0].source='Direct submission by trusted member';
+ c.videos[1].source='Community submission verified by moderator';
+ c.videos[2].source='Automatic discovery';
+ assert.deepEqual(ids(),['reaction','unfollowed']);
+ dashboard.hiddenReactors.push({channel_id:'a'});assert.deepEqual(ids(),['unfollowed']);
+ dashboard.hiddenReactors=[];c.videos[0].format='SHORT';c.prefs.hideShorts=true;
+ assert.deepEqual(ids(),['unfollowed']);
+ c.prefs.hideShorts=false;c.videos[0].source=undefined;
+ assert.deepEqual(ids(),['unfollowed']);
+});
+
 test('Following defaults to reactors and songs without falling back after the final unfollow',()=>{
  const {c,dashboard,ids}=fixture();dashboard.follows.push({kind:'performer',target:'ms'});
  assert.deepEqual(ids(),[]);
