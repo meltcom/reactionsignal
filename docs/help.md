@@ -1,6 +1,6 @@
 # Reaction Journey Help
 
-Choose a topic to expand its guide. Guides for members, moderators, and administrators. Updated October 11, 2026, for the current Missioned Souls service.
+Choose a topic to expand its guide. Guides for members, moderators, and administrators. Updated October 26, 2026, for the current Missioned Souls service.
 
 - Sign in and get started
 
@@ -321,19 +321,19 @@ Contribution Points recognize helpful activity and determine your badge. Trusted
 
 | Activity | Points | Maximum awards per UTC day |
 | --- | ---: | ---: |
-| First video rating | +1 | 10 |
-| Useful comment or reply | +3 | 3 combined |
+| First video rating or first reactor rating | +1 | 10 combined |
+| Useful video or reactor comment or reply | +3 | 3 combined |
 | Valid missing reaction submission | +20 | 5 |
 | Verified catalog correction/removal report | +10 | 5 |
 
-- Trusted members publish reactions, comments and replies directly and earn points immediately. Other members earn points after moderator approval. Correction/removal reports always require moderator verification, including trusted members’ reports.
+- Trusted members publish reactions, comments and replies directly and earn points immediately, up to 500 total points per UTC day across all positive award types. A partial award may apply near the limit. Other members earn points after moderator approval. Correction/removal reports always require moderator verification, including trusted members’ reports.
 - The +10 correction rate applies to new awards. Earlier awards retain their original amounts.
-- Daily limits reset at midnight UTC. Direct posts count on posting date; reviewed contributions count on approval date. Each contribution earns at most one award. Duplicate discoveries, unconfirmed reports, rating changes, chat and moderator self-approvals earn no additional points.
+- Daily limits reset at midnight UTC. For other members, direct posts count on posting date; reviewed contributions count on approval date. Each contribution earns at most one award. Duplicate discoveries, unconfirmed reports, rating changes, chat and moderator self-approvals earn no additional points.
 - Trusted edits retain earned points and cannot earn a second award. Removed comments reverse their awards. Editing a comment while approval is required returns it to review and reverses its existing award.
 - After three separate currently accepted contributions verified by another moderator, a member is flagged for trust review. Ratings, direct unreviewed posts, hidden/rejected items and self-approvals do not count. Three approvals do not grant trust automatically: a moderator checks quality and accuracy.
 - Existing trusted members keep their access. Moderators can revoke trust with a reason; previously published posts and badges remain. A posting mute prevents posting even for trusted members.
 - No separate reputation score or Verify for Reputation step is required. Previous reputation history is available in Historical reputation archive and no longer controls access or earns new awards.
-- Badge levels remain Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000+). Badges confer recognition; they do not grant trust or moderator powers. Points have no cash value and do not weight video ratings.
+- Badge levels remain Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000–9,999), SoulMate SuperStar (10,000+, gold star icon). Badges confer recognition; they do not grant trust or moderator powers. Points have no cash value and do not weight video ratings.
 - Open Points & Trust for your posting status, moderator-approved contribution count, point weights, badge legend and leaderboard. My Profile & Activity shows recent point awards.
 
 ### Discovery status & catalog coverage
@@ -544,7 +544,7 @@ Contribution Points recognize helpful activity and determine your badge. Trusted
 
 - Use Member Review under Moderator to search names or email, correct display names, adjust points with a reason, or mute and unmute posting.
 
-- New members are Novice until 25 points, then Contributor. Badges appear before member display names: Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000+). Hover over a badge to see its level and current points. The Points & Trust page shows the badge legend. Badges use Contribution Points, separate from Trusted Member status, and reflect point adjustments or reversals on refresh.
+- New members are Novice until 25 points, then Contributor. Badges appear before member display names: Novice (0–24), Contributor (25–99), Reaction scout (100–249), Catalog curator (250–999), and Community champion (1,000–9,999), SoulMate SuperStar (10,000+, gold star icon). Hover over a badge to see its level and current points. The Points & Trust page shows the badge legend. Badges use Contribution Points, separate from Trusted Member status, and reflect point adjustments or reversals on refresh.
 
 ## Moderator & administrator help
 

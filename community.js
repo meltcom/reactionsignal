@@ -3,7 +3,8 @@ const memberPointLevels=[
   {min:25,label:'Contributor',key:'contributor',icon:'◆'},
   {min:100,label:'Reaction scout',key:'scout',icon:'★'},
   {min:250,label:'Catalog curator',key:'curator',icon:'✦'},
-  {min:1000,label:'Community champion',key:'champion',icon:'♛'}
+  {min:1000,label:'Community champion',key:'champion',icon:'♛'},
+  {min:10000,label:'SoulMate SuperStar',key:'soulmate-superstar',icon:'★'}
 ];
 function memberPointLevel(points){const n=Number(points);return [...memberPointLevels].reverse().find(l=>Number.isFinite(n)&&n>=l.min)||memberPointLevels[0];}
 function memberPointBadge(points){
@@ -50,7 +51,8 @@ async function loadCommunity({deferSecondary=false}={}){
     $('suggestPerformer').innerHTML=catalog.performers.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
     $('leaderboard').innerHTML=communityState.leaders.length?communityState.leaders.map(p=>`<li>${memberDisplayName(p.name,p.points,p)} <strong>${p.points} points</strong></li>`).join(''):'<li>No points awarded yet. Help start the community.</li>';
     $('myContributions').innerHTML=communityState.mine.length?communityState.mine.map(c=>`<article class="contribution"><strong>${escapeHtml(c.kind)} · ${escapeHtml(c.status)}</strong> <a target="_blank" rel="noopener" href="https://www.youtube.com/${c.channel_id?'channel/'+escapeHtml(c.channel_id):'watch?v='+escapeHtml(c.video_id)}">${c.channel_id?'Open reactor':'Open video'} ↗</a><p>${escapeHtml(c.body)}</p>${c.review_note?`<p>Review: ${escapeHtml(c.review_note)}</p>`:''}</article>`).join(''):'<p>No contributions submitted yet.</p>';
-    $('pointsHistory').innerHTML=communityState.ledger.length?communityState.ledger.map(p=>`<p>${prettyDate(p.created_at)} · ${escapeHtml(p.kind)} · ${p.amount>0?'+':''}${p.amount} points</p>`).join(''):'<p>Your points history will appear here.</p>';
+    const pointLabels={rating:'First video rating','reactor-rating':'First reactor rating',comment:'Useful comment/reply',submission:'Valid missing reaction',flag:'Verified catalog correction/removal report'};
+    $('pointsHistory').innerHTML=communityState.ledger.length?communityState.ledger.map(p=>`<p>${prettyDate(p.created_at)} · ${escapeHtml(pointLabels[p.kind]||p.kind)} · ${p.amount>0?'+':''}${p.amount} points</p>`).join(''):'<p>Your points history will appear here.</p>';
     $('moderation').hidden=!communityState.moderator;
     if(!deferSecondary){
       await loadCoverage();
