@@ -24,11 +24,21 @@ export function youtubeId(input){
     return /^[\w-]{11}$/.test(id||'')?id:null;
   }catch{return null;}
 }
-export const tier=points=>points>=1000?'Community champion':points>=250?'Catalog curator':points>=100?'Reaction scout':points>=25?'Contributor':'Novice';
-export function award(db,id,user,kind,amount,cap,now,guard='1',args=[]){
+export const tier=points=>points>=10000?'SoulMate SuperStar':points>=1000?'Community champion':points>=250?'Catalog curator':points>=100?'Reaction scout':points>=25?'Contributor':'Novice';
+const trustedDailyPointLimit=500;
+export function award(db,id,user,kind,amount,cap,now,guard='1',args=[],dailyKind=kind){
+  const start=now.slice(0,10)+'T00:00:00.000Z';
+  const end=new Date(Date.parse(start)+86400000).toISOString();
+  const dailyKinds=dailyKind==='rating'?['rating','reactor-rating']:[dailyKind];
   return db.prepare(`INSERT OR IGNORE INTO points(id,user_id,kind,amount,created_at)
-    SELECT ?,?,?,?,? WHERE (${guard}) AND (EXISTS(SELECT 1 FROM members WHERE id=? AND trusted=1) OR (SELECT COUNT(*) FROM points WHERE user_id=? AND kind=? AND amount>0 AND created_at>=?)<?)`)
-    .bind(id,user,kind,amount,now,...args,user,user,kind,now.slice(0,10),cap);
+    SELECT ?,?,?,CASE
+      WHEN EXISTS(SELECT 1 FROM members WHERE id=? AND trusted=1)
+        THEN MIN(?,MAX(0,?-COALESCE((SELECT SUM(amount) FROM points WHERE user_id=? AND amount>0 AND created_at>=? AND created_at<?),0)))
+      WHEN (SELECT COUNT(*) FROM points WHERE user_id=? AND kind IN (${dailyKinds.map(()=>'?').join(',')}) AND amount>0 AND created_at>=? AND created_at<?)<?
+        THEN ?
+      ELSE 0
+    END,? WHERE (${guard})`)
+    .bind(id,user,kind,user,amount,trustedDailyPointLimit,user,start,end,user,...dailyKinds,start,end,cap,amount,now,...args);
 }
 const pending='EXISTS(SELECT 1 FROM contributions WHERE id=? AND status=\'pending\')';
 async function videoDecision(db,id){
@@ -120,7 +130,7 @@ export async function community(request,env,seed,user){
         const scores=await sharedCache(db,'video-scores:'+aggregateRevision,30000,()=>db.prepare('SELECT video_id,COUNT(*) count,AVG(score) average,(SUM(score)+15.0)/(COUNT(*)+5) ranking FROM ratings GROUP BY video_id').all());
         const leaders=await sharedCache(db,'point-leaders:'+aggregateRevision,30000,()=>db.prepare('SELECT m.name,m.profile_icon,m.profile_color,m.profile_picture,SUM(p.amount) points FROM points p JOIN members m ON m.id=p.user_id GROUP BY p.user_id HAVING SUM(p.amount)>0 ORDER BY points DESC,m.created_at ASC LIMIT 10').all());
         const mine=await db.prepare('SELECT id,kind,video_id,channel_id,performer_id,body,status,review_note,created_at FROM contributions WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(user.id).all();
-        const ledger=await db.prepare('SELECT kind,amount,created_at FROM points WHERE user_id=? ORDER BY created_at DESC LIMIT 30').bind(user.id).all();
+        const ledger=await db.prepare('SELECT kind,amount,created_at FROM points WHERE user_id=? AND amount<>0 ORDER BY created_at DESC LIMIT 30').bind(user.id).all();
         const approvals=await db.prepare(`SELECT ${approvedContributionCount} count FROM members m WHERE m.id=?`).bind(user.id).first();
         return json({trusted:me?.trusted===1,approvedCount:approvals?.count||0,name:me?.name||'',profile_icon:me?.profile_icon||'initials',profile_color:me?.profile_color||'teal',profile_picture:me?.profile_picture||null,moderator:user.moderator,points:totals.total,tier:tier(totals.total),scores:scores.results,leaders:leaders.results,mine:mine.results,ledger:ledger.results});
       }
@@ -343,7 +353,7 @@ export async function community(request,env,seed,user){
       const id=b.kind==='submission'?`submission:${b.performerId}:${video}`:b.kind==='comment'?`comment:${user.id}:${video}`:`flag:${user.id}:${b.performerId}:${video}`;
       const direct=b.kind!=='flag'&&await canPublishDirectly(db,user.id);
       const metadata=direct&&b.kind==='submission'?await submissionMetadata(db,env,video):null;
-      const status=direct?'accepted':'pending',note=direct?'Published directly: Trusted Member; points awarded without daily caps.':null;
+      const status=direct?'accepted':'pending',note=direct?'Published directly: Trusted Member; activity points are subject to a 500 point daily maximum.':null;
       const insert=db.prepare(`INSERT OR IGNORE INTO contributions(id,user_id,kind,performer_id,video_id,body,reason,status,created_at,review_note)
         SELECT ?,?,?,?,?,?,?,?,?,? WHERE (EXISTS(SELECT 1 FROM members WHERE id=? AND trusted=1) OR (SELECT COUNT(*) FROM contributions WHERE user_id=? AND created_at>=? AND created_at>=COALESCE((SELECT value FROM state WHERE key=?),''))<20)`).bind(id,user.id,b.kind,b.performerId,video,body,reason,status,now,note,user.id,user.id,now.slice(0,10),'member-daily-reset:'+user.id);
       const statements=[insert];
@@ -360,7 +370,7 @@ export async function community(request,env,seed,user){
       }
       const results=await db.batch(statements);
       if(!results[0].meta.changes)fail('Already submitted, or your daily limit of 20 contributions has been reached.',409);
-      return json({ok:true,status,published:direct,message:direct?(b.kind==='submission'?'Reaction published directly to the confirmed catalog. Points awarded without daily caps.':'Comment published directly. Points awarded without daily caps.') : b.kind==='flag'?'Removal request sent to moderators. The video remains listed while they review it.':'Saved for review. Points are awarded only after approval, within daily limits.'});
+      return json({ok:true,status,published:direct,message:direct?(b.kind==='submission'?'Reaction published directly to the confirmed catalog. Points are subject to a 500 point daily maximum.':'Comment published directly. Points are subject to a 500 point daily maximum.') : b.kind==='flag'?'Removal request sent to moderators. The video remains listed while they review it.':'Saved for review. Points are awarded only after approval, within daily limits.'});
     }
     if(path==='/moderate'){
       if(!user.moderator)fail('Moderator access required.',403);
