@@ -1,7 +1,7 @@
 import {secureRedirect,secureResponse} from './security.mjs';
 import {recheckVideoFormats} from './format-recheck.mjs';
 import {discoveryCycle} from './rss.mjs';
-import { missionedSouls, scheduledMissionedSouls } from './missioned-souls.mjs';
+import { missionedSouls, missionedSoulsThumbnail, scheduledMissionedSouls } from './missioned-souls.mjs';
 import { database, seedDatabase, catalog, status } from './db.mjs';
 import {finishConnection,checkYoutubeConnections} from './youtube-connection.mjs';
 import { youtubeSubscriptions } from './youtube-subscriptions.mjs';
@@ -36,7 +36,7 @@ export default {
     const started=Date.now(),requestId=crypto.randomUUID();
     const original=await handleRequest(request,env,ctx);
     const response=secureResponse(request,original);
-    const route=new URL(request.url).pathname.replace(/\/api\/profile-pictures\/.*/, '/api/profile-pictures/:id');
+    const route=new URL(request.url).pathname.replace(/\/api\/profile-pictures\/.*/, '/api/profile-pictures/:id').replace(/\/api\/missioned-souls\/thumbnails\/.*/, '/api/missioned-souls/thumbnails/:id');
     console.log(JSON.stringify({event:'request',requestId,route,method:request.method,status:response.status,durationMs:Date.now()-started}));
     response.headers.set('X-Request-ID',requestId);
     if(response.status>=500){const task=recordOperationalEvent(env,response.status===503?'request-unavailable':'request-error');if(ctx?.waitUntil)ctx.waitUntil(task);else await task;}
@@ -71,6 +71,7 @@ async function handleRequest(request,env,ctx){
         return new Response(request.method==='HEAD'?null:Uint8Array.from(atob(file.base64),c=>c.charCodeAt(0)),{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="'+name+'"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Vary':'Authorization'}});
       }
       if(path.startsWith('/api/profile-pictures/'))return await profilePicture(request,env);
+      if(path.startsWith('/api/missioned-souls/thumbnails/'))return await missionedSoulsThumbnail(request,env);
       if(path==='/api/youtube/push')return await youtubePush(request,env,seed,ctx);
       if(path==='/api/youtube/subscriptions/callback'&&request.method==='GET')return await finishConnection(request,env);
       if(path.startsWith('/api/youtube/subscriptions/')){
