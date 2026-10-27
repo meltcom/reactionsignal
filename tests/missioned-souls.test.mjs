@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeVideo,selectVideos,viewGain,suggestCategories} from '../missioned-souls-core.mjs';
-import {missionedSouls,refreshMissionedSouls,readMissionedSouls,scheduledMissionedSouls} from '../server/missioned-souls.mjs';
+import {missionedSouls,missionedSoulsThumbnail,refreshMissionedSouls,readMissionedSouls,scheduledMissionedSouls} from '../server/missioned-souls.mjs';
 import {DatabaseSync} from 'node:sqlite';
 function database(){const sql=new DatabaseSync(':memory:');sql.exec('CREATE TABLE state(key TEXT PRIMARY KEY,value TEXT NOT NULL)');return {prepare(query){let values=[];return {bind(...v){values=v;return this;},async first(){return sql.prepare(query).get(...values)||null;},async all(){return {results:sql.prepare(query).all(...values)};},async run(){return {meta:{changes:Number(sql.prepare(query).run(...values).changes)}};}};},async batch(ops){const result=[];for(const op of ops)result.push(await op.run());return result;}};}
 const video=(id='C1yfkA_0_Sg',extra={})=>normalizeVideo({title:'Studio cover',url:'https://www.youtube.com/watch?v='+id,...extra});
@@ -44,6 +44,13 @@ test('Facebook-only excludes cross-posts; URLs and statistics are validated',()=
  assert.throws(()=>normalizeVideo({title:'x',url:'javascript:alert(1)'}));
  assert.throws(()=>video(undefined,{views:-1}));assert.throws(()=>video(undefined,{tags:['Fake']}));
 });
+test('video enrichment validates permanent thumbnails, duration and statistics provenance',()=>{
+ const v=normalizeVideo({title:'Facebook reel',url:'https://www.facebook.com/reel/123/',thumbnailUrl:'https://images.example/reel.jpg#fragment',durationSeconds:43.4,statsPrecision:'rounded',statsSource:'Facebook public reel'});
+ assert.equal(v.thumbnailUrl,'https://images.example/reel.jpg');assert.equal(v.durationSeconds,43);assert.equal(v.statsPrecision,'rounded');assert.equal(v.statsSource,'Facebook public reel');
+ assert.equal(normalizeVideo({...v,thumbnailUrl:'/api/missioned-souls/thumbnails/123e4567-e89b-12d3-a456-426614174000'}).thumbnailUrl,'/api/missioned-souls/thumbnails/123e4567-e89b-12d3-a456-426614174000');
+ for(const thumbnailUrl of ['http://images.example/reel.jpg','javascript:alert(1)','/untrusted/image.jpg'])assert.throws(()=>normalizeVideo({...v,thumbnailUrl}));
+ assert.throws(()=>normalizeVideo({...v,durationSeconds:-1}));assert.throws(()=>normalizeVideo({...v,statsPrecision:'estimated'}));
+});
 test('mutations are moderator-only and unconfigured refresh preserves catalog',async()=>{
  const response=await missionedSouls(new Request('https://local/api/missioned-souls',{method:'POST',body:'{"action":"save"}'}),{}, {},{id:'member',moderator:false});assert.equal(response.status,403);
  const r=await refreshMissionedSouls({DB:{}},{});assert.equal(r.status,'blocked');
@@ -68,6 +75,22 @@ test('imports retain view history, reviewed tags survive refresh, and duplicate 
  const env={DB:db,YOUTUBE_API_KEY:'test-secret'};await refreshMissionedSouls(env,seed,fetcher);await refreshMissionedSouls(env,seed,fetcher);
  const data=await readMissionedSouls(db,seed);assert.equal(data.videos.length,1);assert.deepEqual(data.videos[0].tags.filter(t=>!t.startsWith('playlist:')&&!t.startsWith('year:')),['OPM']);assert.equal(data.videos[0].reviewed,true);assert.equal(data.videos[0].views,500);assert.equal(data.videos[0].comments,null);assert.equal(data.videos[0].history.length,3);assert.ok(data.refresh.lastCompleteAt);assert.equal(calls,5);
  const bad=await missionedSouls(req({action:'import',videos:[{...v,history:[{at:'invalid',views:3}]}]}),{DB:db},seed,{id:'member',moderator:true});assert.equal(bad.status,400);assert.equal((await readMissionedSouls(db,seed)).videos[0].views,500);
+});
+test('bulk statistics imports enrich existing videos and keep dated likes and comments history atomically',async()=>{
+ const db=database(),base=normalizeVideo({title:'Facebook reel',url:'https://www.facebook.com/reel/123/'}),seed={videos:[base],coverage:'starter'},env={DB:db},mod={id:'moderator',moderator:true};
+ const req=body=>new Request('https://local/api/missioned-souls',{method:'POST',body:JSON.stringify(body)});
+ const record={url:base.url,statsAt:'2026-10-27T12:00:00Z',views:1200,likes:88,comments:14,statsPrecision:'rounded',statsSource:'Facebook public reel',durationSeconds:43,thumbnailUrl:'https://images.example/reel.jpg'};
+ const imported=await missionedSouls(req({action:'stats-import',records:[record]}),env,seed,mod);assert.equal(imported.status,200,JSON.stringify(await imported.json()));
+ let saved=(await readMissionedSouls(db,seed)).videos[0];assert.equal(saved.views,1200);assert.equal(saved.likes,88);assert.equal(saved.comments,14);assert.equal(saved.durationSeconds,43);assert.equal(saved.thumbnailUrl,record.thumbnailUrl);assert.deepEqual(saved.history.map(({views,likes,comments,statsPrecision,statsSource})=>({views,likes,comments,statsPrecision,statsSource})),[{views:1200,likes:88,comments:14,statsPrecision:'rounded',statsSource:'Facebook public reel'}]);
+ const rejected=await missionedSouls(req({action:'stats-import',records:[{...record,views:1300},{url:'https://www.facebook.com/reel/missing/',statsAt:record.statsAt,views:1}]}),env,seed,mod);assert.equal(rejected.status,400);saved=(await readMissionedSouls(db,seed)).videos[0];assert.equal(saved.views,1200);
+ assert.equal((await missionedSouls(req({action:'stats-import',records:[{url:base.url,views:1}]}),env,seed,mod)).status,400);
+});
+test('moderators can store a resized thumbnail and the immutable image endpoint serves it',async()=>{
+ const db=database(),env={DB:db},bytes=Uint8Array.from([255,216,255,192,0,17,8,0,1,0,1,3,1,17,0,2,17,0,3,17,0,255,217]);
+ const data='data:image/jpeg;base64,'+Buffer.from(bytes).toString('base64'),body={action:'thumbnail',videoUrl:'https://www.facebook.com/reel/123/',data};
+ const uploaded=await missionedSouls(new Request('https://local/api/missioned-souls',{method:'POST',body:JSON.stringify(body)}),env,{videos:[]},{id:'moderator',moderator:true});assert.equal(uploaded.status,200);const result=await uploaded.json();assert.match(result.thumbnailUrl,/^\/api\/missioned-souls\/thumbnails\/[a-f0-9-]{36}$/);
+ const image=await missionedSoulsThumbnail(new Request('https://local'+result.thumbnailUrl),env);assert.equal(image.status,200);assert.equal(image.headers.get('Content-Type'),'image/jpeg');assert.deepEqual(new Uint8Array(await image.arrayBuffer()),bytes);
+ assert.equal((await missionedSouls(new Request('https://local/api/missioned-souls',{method:'POST',body:JSON.stringify(body)}),env,{videos:[]},{id:'member',moderator:false})).status,403);
 });
 test('category lifecycle preserves assignments and rejects stale updates and member writes',async()=>{
  const db=database(),seed={videos:[video(undefined,{tags:['OPM']})]},env={DB:db};

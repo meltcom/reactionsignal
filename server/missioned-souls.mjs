@@ -6,6 +6,30 @@ import {normalizeVideo,suggestCategories,classifyShort} from '../missioned-souls
 const json=(v,status=200)=>new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store'}});
 const upsert=(db,key,value)=>db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,JSON.stringify(value));
 async function state(db,key){const r=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();return r?JSON.parse(r.value):null;}
+const youtubeSeconds=value=>{const m=String(value||'').match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);return m?(Number(m[1]||0)*3600+Number(m[2]||0)*60+Number(m[3]||0)):null;};
+function historySnapshot(value,id){
+ if(!value||!Number.isFinite(Date.parse(value.at)))throw new Error('History needs a valid observation date.');
+ const number=key=>value[key]==null?null:Number.isSafeInteger(Number(value[key]))&&Number(value[key])>=0?Number(value[key]):(()=>{throw new Error('History statistics must be nonnegative whole numbers.');})();
+ const snapshot={id,at:new Date(value.at).toISOString(),views:number('views'),likes:number('likes'),comments:number('comments'),statsPrecision:value.statsPrecision||'unknown',statsSource:String(value.statsSource||'').slice(0,200)};
+ if(!['exact','rounded','unknown'].includes(snapshot.statsPrecision))throw new Error('History precision must be exact, rounded, or unknown.');
+ if(snapshot.views==null&&snapshot.likes==null&&snapshot.comments==null)throw new Error('Each history snapshot needs views, likes, or comments.');
+ return snapshot;
+}
+function validateThumbnail(value){
+ if(typeof value!=='string'||value.length>180000||!/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(value))throw new Error('Upload a JPEG thumbnail no larger than 128 KB.');
+ let bytes;try{bytes=Uint8Array.from(atob(value.split(',')[1]),c=>c.charCodeAt(0));}catch{throw new Error('Invalid thumbnail encoding.');}
+ if(bytes.length>131072||bytes[0]!==255||bytes[1]!==216||bytes.at(-2)!==255||bytes.at(-1)!==217)throw new Error('Upload a valid JPEG thumbnail no larger than 128 KB.');
+ let pos=2,dimensions=false;
+ while(pos+4<bytes.length){if(bytes[pos++]!==255)throw new Error('Invalid JPEG thumbnail.');while(bytes[pos]===255)pos++;const marker=bytes[pos++];if(marker===218)break;const length=(bytes[pos]<<8)|bytes[pos+1];if(length<2||pos+length>bytes.length)throw new Error('Invalid JPEG thumbnail.');if([192,193,194].includes(marker)){const h=(bytes[pos+3]<<8)|bytes[pos+4],w=(bytes[pos+5]<<8)|bytes[pos+6];if(length<8||!w||!h||w>1280||h>720)throw new Error('Thumbnail dimensions must be at most 1280 × 720 pixels.');dimensions=true;}pos+=length;}
+ if(!dimensions)throw new Error('Invalid JPEG thumbnail dimensions.');return value.slice('data:image/jpeg;base64,'.length);
+}
+export async function missionedSoulsThumbnail(request,env){
+ const id=new URL(request.url).pathname.split('/').pop();
+ if(!['GET','HEAD'].includes(request.method)||!/^[a-f0-9-]{36}$/.test(id||''))return new Response('Not found',{status:404});
+ const saved=await state(env.DB,'ms-thumbnail:'+id);if(!saved?.data)return new Response('Not found',{status:404});
+ const bytes=Uint8Array.from(atob(saved.data),c=>c.charCodeAt(0));
+ return new Response(request.method==='HEAD'?null:bytes,{headers:{'Content-Type':'image/jpeg','Cache-Control':'public, max-age=31536000, immutable','X-Content-Type-Options':'nosniff','Content-Length':String(bytes.length)}});
+}
 export async function readMissionedSouls(db,seed){
  const registry=await categoryRegistry(db);
  const rows=(await db.prepare("SELECT key,value FROM state WHERE key LIKE 'ms-video:%' OR key LIKE 'ms-history:%' OR key LIKE 'ms-visibility:%'").all()).results;
@@ -13,7 +37,7 @@ export async function readMissionedSouls(db,seed){
  for(const r of rows){const v=JSON.parse(r.value);if(r.key.startsWith('ms-video:'))videos.set(v.id,v);else if(r.key.startsWith('ms-visibility:'))visibility.set(v.id,v.visibility);else{const h=history.get(v.id)||[];h.push(v);history.set(v.id,h);}}
  const refresh=await state(db,'ms-refresh');
  const playlists=await state(db,'ms-playlists')||snapshot;
- const catalog=playlistCatalog([...videos.values()].map(v=>({...v,visibility:visibility.get(v.id)||'visible',history:history.get(v.id)||[]})),registry.items,playlists.playlists);
+ const catalog=playlistCatalog([...videos.values()].map(v=>({...v,visibility:visibility.get(v.id)||'visible',history:(history.get(v.id)||[]).sort((a,b)=>Date.parse(a.at)-Date.parse(b.at))})),registry.items,playlists.playlists);
  const dated=yearCatalog(catalog.videos,catalog.categoryDefinitions);
  return {...dated,categoryRevision:registry.revision,playlistRefresh:await state(db,'ms-playlist-refresh'),playlistUpdatedAt:playlists.updatedAt||playlists.fetchedAt||null,coverage:refresh?.lastCompleteAt?'Official-channel upload scan completed '+refresh.lastCompleteAt+'. Category review and Facebook / other-source coverage may still be incomplete.':(await state(db,'ms-coverage'))?.message||seed.coverage,refresh,updatedAt:(await state(db,'ms-updated'))?.at||null};
 }
@@ -21,17 +45,40 @@ async function saveVideos(db,items,{manual=false}={}){
  const registry=await categoryRegistry(db);
  const normalized=items.map(v=>normalizeVideo(v,registry.items.map(c=>c.id))),ops=[];
  // Validate complete imports before the first write, including historical snapshots.
- const histories=items.map((item,index)=>{if(item.history==null)return [];if(!Array.isArray(item.history)||item.history.length>400)throw new Error('Use at most 400 daily snapshots per video.');return item.history.map(s=>{if(!s||!Number.isFinite(Date.parse(s.at))||!Number.isSafeInteger(s.views)||s.views<0)throw new Error('History needs dated, nonnegative whole view counts.');return {id:normalized[index].id,at:new Date(s.at).toISOString(),views:s.views};});});
+ const histories=items.map((item,index)=>{if(item.history==null)return [];if(!Array.isArray(item.history)||item.history.length>400)throw new Error('Use at most 400 daily snapshots per video.');return item.history.map(s=>historySnapshot(s,normalized[index].id));});
  for(const [index,item] of normalized.entries()){const old=await state(db,'ms-video:'+item.id);const v={...item};
   if(!manual&&old&&!old.reviewed)v.tags=[...new Set([...v.tags,...old.tags.filter(t=>t.startsWith('custom:'))])];
   if(!manual&&old?.reviewed){v.tags=old.tags;v.reviewed=true;v.youtubeEquivalent=old.youtubeEquivalent;}
   if(!manual&&typeof old?.shortsOverride==='boolean')Object.assign(v,classifyShort(v,old.shortsOverride));
+  if(!manual&&old?.thumbnailUrl&&!v.thumbnailUrl)v.thumbnailUrl=old.thumbnailUrl;
+  if(!manual&&old?.durationSeconds!=null&&v.durationSeconds==null)v.durationSeconds=old.durationSeconds;
   ops.push(upsert(db,'ms-video:'+v.id,v));
   for(const s of histories[index])ops.push(upsert(db,'ms-history:'+v.id+':'+s.at.slice(0,10),s));
-  if(v.statsAt&&v.views!=null)ops.push(upsert(db,'ms-history:'+v.id+':'+v.statsAt.slice(0,10),{id:v.id,at:v.statsAt,views:v.views}));
+  if(v.statsAt&&[v.views,v.likes,v.comments].some(x=>x!=null))ops.push(upsert(db,'ms-history:'+v.id+':'+v.statsAt.slice(0,10),historySnapshot({at:v.statsAt,views:v.views,likes:v.likes,comments:v.comments,statsPrecision:v.statsPrecision,statsSource:v.statsSource},v.id)));
  }
  for(let i=0;i<ops.length;i+=50)await db.batch(ops.slice(i,i+50));
  await upsert(db,'ms-updated',{at:new Date().toISOString()}).run();return normalized.length;
+}
+async function importStatistics(db,seed,records){
+ if(!Array.isArray(records)||!records.length||records.length>1000)throw new Error('Import 1–1000 statistics rows per file.');
+ const registry=await categoryRegistry(db),allowed=new Set(registry.items.map(c=>c.id));
+ const catalog=await readMissionedSouls(db,seed),byId=new Map(catalog.videos.map(v=>[v.id,v])),updates=[],seen=new Set();
+ for(const row of records){
+  if(!row||typeof row!=='object')throw new Error('Each statistics row must be an object.');
+  let id=typeof row.id==='string'?row.id:null;
+  if(!id&&row.url)id=normalizeVideo({title:'Statistics import',url:row.url},[...allowed]).id;
+  const current=byId.get(id);if(!current)throw new Error('Statistics row does not match an existing MS Journey video: '+String(row.url||row.id||'missing URL or ID'));
+  if(seen.has(id))throw new Error('Use one statistics row per video in each import.');seen.add(id);
+  const metricKeys=['views','likes','comments'],hasMetric=metricKeys.some(key=>Object.hasOwn(row,key));
+  const hasEnrichment=hasMetric||Object.hasOwn(row,'thumbnailUrl')||Object.hasOwn(row,'durationSeconds');
+  if(!hasEnrichment)throw new Error('A statistics row needs a count, thumbnail URL, or duration.');
+  if(hasMetric&&!row.statsAt)throw new Error('Statistics rows with counts need statsAt.');
+  const next={...current,tags:(current.tags||[]).filter(tag=>allowed.has(tag))};delete next.history;
+  for(const key of [...metricKeys,'thumbnailUrl','durationSeconds','statsPrecision','statsSource'])if(Object.hasOwn(row,key))next[key]=row[key];
+  if(Object.hasOwn(row,'statsAt'))next.statsAt=row.statsAt;
+  updates.push(next);
+ }
+ return saveVideos(db,updates,{manual:true});
 }
 export async function refreshMissionedSouls(env,seed,fetcher=fetch,{latestOnly=false}={}){
  const db=env.DB;if(!db)return {status:'blocked',message:'Catalog storage is unavailable.'};
@@ -50,7 +97,7 @@ export async function refreshMissionedSouls(env,seed,fetcher=fetch,{latestOnly=f
    const p=await api('playlistItems',{part:'contentDetails',playlistId:progress.uploads,maxResults:'50',...(pageToken?{pageToken}:{})});
    const ids=p.items.map(x=>x.contentDetails.videoId);
    if(ids.length){const data=await api('videos',{part:'snippet,statistics,contentDetails',id:ids.join(',')});
-    const items=data.items.filter(v=>v.snippet.channelId===progress.channelId).map(v=>({title:v.snippet.title,url:'https://www.youtube.com/watch?v='+v.id,publishedAt:v.snippet.publishedAt,statsAt:now,views:v.statistics?.viewCount??null,likes:v.statistics?.likeCount??null,comments:v.statistics?.commentCount??null,tags:suggestCategories(v.snippet.title),sourceNote:'Official channel YouTube API import; suggested categories need review.'}));
+    const items=data.items.filter(v=>v.snippet.channelId===progress.channelId).map(v=>({title:v.snippet.title,url:'https://www.youtube.com/watch?v='+v.id,publishedAt:v.snippet.publishedAt,thumbnailUrl:v.snippet.thumbnails?.high?.url||v.snippet.thumbnails?.medium?.url||null,durationSeconds:youtubeSeconds(v.contentDetails?.duration),statsAt:now,views:v.statistics?.viewCount??null,likes:v.statistics?.likeCount??null,comments:v.statistics?.commentCount??null,statsPrecision:'exact',statsSource:'Official YouTube Data API',tags:suggestCategories(v.snippet.title),sourceNote:'Official channel YouTube API import; suggested categories need review.'}));
     added+=await saveVideos(db,items);
     const found=new Set(data.items.map(v=>v.id));for(const id of ids)if(!found.has(id)){const old=await state(db,'ms-video:yt:'+id);if(old)await upsert(db,'ms-video:yt:'+id,{...old,available:false}).run();}
    }
@@ -73,6 +120,13 @@ export async function missionedSouls(request,env,seed,user){
   if(b.action==='categories')return manageCategories(env.DB,b);
   if(b.action==='playlists')return json(await refreshPlaylists(env,saveVideos));
   if(b.action==='refresh')return json(await refreshMissionedSouls(env,seed));
+  if(b.action==='thumbnail'){
+   normalizeVideo({title:'Thumbnail upload',url:b.videoUrl});
+   const data=validateThumbnail(b.data),id=crypto.randomUUID(),thumbnailUrl='/api/missioned-souls/thumbnails/'+id;
+   await upsert(env.DB,'ms-thumbnail:'+id,{id,data,videoUrl:b.videoUrl,createdAt:new Date().toISOString(),createdBy:user.id}).run();
+   return json({ok:true,thumbnailUrl,message:'Thumbnail uploaded.'});
+  }
+  if(b.action==='stats-import')return json({ok:true,count:await importStatistics(env.DB,seed,b.records),message:b.records.length+' video statistics records saved.'});
   if(b.action==='visibility'){
    if(typeof b.id!=='string'||!['visible','hidden','removed'].includes(b.visibility))return json({error:'Choose a video and a valid visibility.'},400);
    const video=(await readMissionedSouls(env.DB,seed)).videos.find(v=>v.id===b.id);
