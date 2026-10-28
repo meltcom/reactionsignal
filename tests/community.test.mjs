@@ -207,3 +207,37 @@ test('trusted rating points exceed the ordinary daily cap without duplicate awar
  assert.equal(points('fan'),12);
  await call('/rating',{videoId:'00000000000',performerId:'missioned-souls',score:4});assert.equal(points('fan'),12);
 });
+
+test('Facebook archive ratings share daily caps, preserve reaction isolation, and reject hidden or forged videos',async()=>{
+ const {call,sql,video,points}=await setup();
+ const id='facebook:https://www.facebook.com/reel/123/';
+ const item={id,url:id.slice(9),platform:'Facebook',title:'Family performance',available:true};
+ sql.prepare('INSERT INTO state VALUES(?,?)').run('ms-video:'+id,JSON.stringify(item));
+ const rating={videoId:id,performerId:'missioned-souls',score:5};
+ assert.equal((await call('/rating',rating)).status,200);assert.equal(points('fan'),1);
+ assert.equal((await call('/rating',{...rating,score:2})).status,200);assert.equal(points('fan'),1);
+ assert.equal((await call('/video?id='+encodeURIComponent(id))).data.rating,2);
+ assert.equal((await call('/summary')).data.scores.find(s=>s.video_id===id).average,2);
+ assert.equal(sql.prepare('SELECT count(*) n FROM videos WHERE id=?').get(id).n,0);
+ for(let i=0;i<11;i++){const v=String(i).padStart(11,'0');video(v);assert.equal((await call('/rating',{videoId:v,performerId:'missioned-souls',score:5})).status,200);}
+ assert.equal(points('fan'),10);
+ assert.equal((await call('/rating',{...rating,videoId:id+'forged'})).status,404);
+ sql.prepare('INSERT INTO state VALUES(?,?)').run('ms-visibility:'+id,JSON.stringify({visibility:'hidden'}));
+ assert.equal((await call('/rating',rating)).status,404);assert.equal((await call('/video?id='+encodeURIComponent(id))).status,404);
+});
+
+test('Facebook comments use normal approval, points, visibility and reversal rules',async()=>{
+ const {call,sql,points}=await setup();const id='facebook:https://www.facebook.com/reel/123/';
+ sql.prepare('INSERT INTO state VALUES(?,?)').run('ms-video:'+id,JSON.stringify({id,platform:'Facebook',title:'Family performance',url:id.slice(9),available:true}));
+ const comment={kind:'comment',performerId:'missioned-souls',videoId:id,body:'An enjoyable family performance.'};
+ assert.equal((await call('/contribute',comment)).status,200);assert.equal(points('fan'),0);
+ assert.equal((await call('/contribute',comment)).status,409);
+ const cid=(await call('/summary')).data.mine[0].id;
+ assert.equal((await call('/video?id='+encodeURIComponent(id))).data.comments.length,0);
+ assert.equal((await call('/moderate',{id:cid,decision:'accept',note:'Thoughtful Facebook video comment'},'owner')).status,200);
+ assert.equal(points('fan'),3);assert.equal((await call('/video?id='+encodeURIComponent(id))).data.comments.length,1);
+ assert.equal((await call('/summary')).data.archiveComments[0].count,1);
+ assert.equal((await call('/moderate',{id:cid,decision:'hide',note:'Comment removed after review'},'owner')).status,200);
+ assert.equal(points('fan'),0);
+ assert.equal((await call('/contribute',{...comment,kind:'flag',reason:'not-reaction'})).status,404);
+});
