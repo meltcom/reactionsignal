@@ -61,6 +61,12 @@ function decodeHtml(value){
  });
 }
 
+function durationSeconds(value){
+ const text=String(value||'').trim(),iso=text.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/i);
+ const seconds=iso?Number(iso[1]||0)*3600+Number(iso[2]||0)*60+Number(iso[3]||0):/^\d+$/.test(text)?Number(text):NaN;
+ return Number.isSafeInteger(seconds)&&seconds>=0&&seconds<=86400?seconds:null;
+}
+
 function pageMetadata(html){
  const meta=new Map();
  for(const [,attributes] of html.matchAll(/<meta\b([^>]{0,4096})>/gi)){
@@ -69,11 +75,12 @@ function pageMetadata(html){
   if(key&&content)meta.set(key,content);
  }
  const title=meta.get('og:title')||meta.get('twitter:title')||null;
- const thumbnail=meta.get('og:image:secure_url')||meta.get('og:image')||meta.get('twitter:image')||null;
- const seconds=Number(meta.get('og:video:duration')||meta.get('video:duration')||meta.get('duration'));
- const published=meta.get('article:published_time')||meta.get('video:release_date')||meta.get('uploadDate')||null;
+ const thumbnail=meta.get('og:image:secure_url')||meta.get('og:image')||meta.get('og:image:url')||meta.get('twitter:image')||meta.get('twitter:image:src')||null;
+ const duration=durationSeconds(meta.get('og:video:duration')||meta.get('video:duration')||meta.get('duration')||meta.get('durationSeconds'));
+ const published=meta.get('article:published_time')||meta.get('video:release_date')||meta.get('uploadDate')||meta.get('datePublished')||null;
  const metric=keys=>{for(const key of keys){const raw=meta.get(key);if(raw!=null&&/^\d+$/.test(raw))return Number(raw);}return null;};
- return {title:title&&title.toLowerCase()!=='facebook'?title:null,thumbnailUrl:thumbnail,durationSeconds:Number.isSafeInteger(seconds)&&seconds>=0&&seconds<=86400?seconds:null,publishedAt:Number.isFinite(Date.parse(published||''))?new Date(published).toISOString():null,views:metric(['video:view_count','og:video:views','video:views']),likes:metric(['video:likes','og:video:likes']),comments:metric(['video:comments','og:video:comments'])};
+ const videoPage=(meta.get('og:type')||'').toLowerCase().startsWith('video:')||meta.has('og:video')||meta.has('og:video:url')||meta.has('og:video:secure_url')||duration!==null;
+ return {title:title&&title.toLowerCase()!=='facebook'?title:null,thumbnailUrl:thumbnail,durationSeconds:duration,publishedAt:Number.isFinite(Date.parse(published||''))?new Date(published).toISOString():null,views:metric(['video:view_count','og:video:views','video:views']),likes:metric(['video:likes','og:video:likes']),comments:metric(['video:comments','og:video:comments']),videoPage};
 }
 
 function base64(bytes){let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));return btoa(binary);}
@@ -85,7 +92,7 @@ export async function fetchFacebookMetadata(value,fetcher=fetch){
  const type=(response.headers.get('content-type')||'').toLowerCase();
  if(!type.includes('text/html')&&!type.includes('application/xhtml+xml'))fail('Facebook did not return a public video page.',422);
  const metadata=pageMetadata(await limitedText(response,1_000_000));
- if(!metadata.title)fail('Facebook did not expose a public video title. Confirm the link is public, then enter details manually.');
+ if(!metadata.title&&!metadata.videoPage)fail('Facebook did not expose public video details. Confirm the link is public, then continue with manual details.');
  let thumbnailData=null;
  if(metadata.thumbnailUrl){
   try{
@@ -101,5 +108,6 @@ export async function fetchFacebookMetadata(value,fetcher=fetch){
   }catch{}
  }
  const hasMetrics=[metadata.views,metadata.likes,metadata.comments].some(value=>value!=null);
- return {...metadata,thumbnailData,statsAt:hasMetrics?new Date().toISOString():null,statsPrecision:hasMetrics?'unknown':null,statsSource:hasMetrics?'Facebook public page metadata':null};
+ const {videoPage,...details}=metadata;
+ return {...details,thumbnailData,statsAt:hasMetrics?new Date().toISOString():null,statsPrecision:hasMetrics?'unknown':null,statsSource:hasMetrics?'Facebook public page metadata':null};
 }
