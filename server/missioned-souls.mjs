@@ -3,6 +3,7 @@ import {playlistCatalog,yearCatalog} from '../ms-journey-catalog.mjs';
 import {refreshPlaylists} from './ms-playlists.mjs';
 import {categoryRegistry,manageCategories} from "./ms-categories.mjs";
 import {normalizeVideo,suggestCategories,classifyShort} from '../missioned-souls-core.mjs';
+import {canPublishDirectly} from './reputation.mjs';
 const json=(v,status=200)=>new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store'}});
 const upsert=(db,key,value)=>db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,JSON.stringify(value));
 async function state(db,key){const r=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();return r?JSON.parse(r.value):null;}
@@ -112,11 +113,42 @@ export async function refreshMissionedSouls(env,seed,fetcher=fetch,{latestOnly=f
 export async function missionedSouls(request,env,seed,user){
  try{
   if(!user?.id)return json({error:'Sign in to view MS Journey.'},401);
-  if(request.method==='GET'){const data=await readMissionedSouls(env.DB,seed);if(!user.moderator)data.videos=data.videos.filter(v=>v.visibility==='visible').map(({sourceNote,...v})=>v);return json({...data,moderator:!!user.moderator,apiConfigured:!!env.YOUTUBE_API_KEY});}
+  if(request.method==='GET'){const data=await readMissionedSouls(env.DB,seed);if(!user.moderator)data.videos=data.videos.filter(v=>v.visibility==='visible').map(({sourceNote,...v})=>v);return json({...data,moderator:!!user.moderator,canAddVideos:await canPublishDirectly(env.DB,user.id),apiConfigured:!!env.YOUTUBE_API_KEY});}
   if(request.method!=='POST')return json({error:'Method not allowed'},405);
-  if(!user.moderator)return json({error:'Moderator access required.'},403);
   if(Number(request.headers.get('Content-Length'))>2000000)return json({error:'Import is too large.'},413);
   const raw=await request.text();if(raw.length>2000000)return json({error:'Import is too large.'},413);const b=JSON.parse(raw);
+  if(b.action==='community-add'){
+   if(!await canPublishDirectly(env.DB,user.id))return json({error:'Trusted Member access required to add a Facebook video.'},403);
+   if(b.publicConfirmed!==true)return json({error:'Confirm the Facebook video is publicly viewable before submitting.'},400);
+   if(!b.video||typeof b.video!=='object')return json({error:'Add a Facebook video to submit.'},400);
+   const allowed=(await categoryRegistry(env.DB)).items.map(c=>c.id),input=normalizeVideo(b.video,allowed);
+   if(input.platform!=='Facebook'||input.youtubeEquivalent)return json({error:'Submit a Facebook-only public video link.'},400);
+   const url=new URL(input.url),path=url.pathname;
+   const validVideoPath=(['fb.watch','www.fb.watch'].includes(url.hostname)&&/^\/[\w-]+\/?$/.test(path))
+    ||(/^\/(?:watch|reel|videos|share\/(?:r|v))\/?$/.test(path)&&url.searchParams.has('v'))
+    ||/^\/(?:[\w.-]+\/videos\/|(?:reel|videos|share\/(?:r|v))\/[\w.-]+)\/?$/.test(path);
+   if(!validVideoPath)return json({error:'Use a Facebook Watch, Reel, or video link.'},400);
+   if(path==='/watch'||path==='/watch/')url.search='?v='+encodeURIComponent(url.searchParams.get('v'));else url.search='';
+   const video=normalizeVideo({...b.video,url:url.href},allowed);
+   if(video.available===false)return json({error:'The submitted Facebook video must be available.'},400);
+   if([video.views,video.likes,video.comments].some(x=>x!=null)&&!video.statsAt)return json({error:'Choose when these statistics were recorded.'},400);
+   const id=video.id,existing=await state(env.DB,'ms-video:'+id);
+   if(existing||seed.videos.some(v=>v.id===id))return json({error:'This Facebook video is already in the archive.'},409);
+   const submitted={...video,tags:[...new Set([...video.tags,'Community finds'])],reviewed:false,youtubeEquivalent:false,visibility:'visible',available:true,sourceNote:'Community find submitted by trusted member '+user.id};
+   const saved=normalizeVideo(submitted,allowed),now=new Date().toISOString(),ops=[];
+   let thumbnailUrl=saved.thumbnailUrl;
+   if(b.thumbnailData){const data=validateThumbnail(b.thumbnailData),thumbnailId=crypto.randomUUID();thumbnailUrl='/api/missioned-souls/thumbnails/'+thumbnailId;ops.push(upsert(env.DB,'ms-thumbnail:'+thumbnailId,{id:thumbnailId,data,videoUrl:saved.url,createdAt:now,createdBy:user.id}));}
+   const record={...saved,thumbnailUrl};
+   ops.push(upsert(env.DB,'ms-video:'+id,record));
+   if(record.statsAt&&[record.views,record.likes,record.comments].some(x=>x!=null))ops.push(upsert(env.DB,'ms-history:'+id+':'+record.statsAt.slice(0,10),historySnapshot({at:record.statsAt,views:record.views,likes:record.likes,comments:record.comments,statsPrecision:record.statsPrecision,statsSource:record.statsSource},id)));
+   const start=now.slice(0,10)+'T00:00:00.000Z',end=new Date(Date.parse(start)+86400000).toISOString();
+   ops.push(env.DB.prepare("INSERT OR IGNORE INTO points(id,user_id,kind,amount,created_at) SELECT ?,?,'facebook-submission',MIN(25,MAX(0,500-COALESCE((SELECT SUM(amount) FROM points WHERE user_id=? AND amount>0 AND created_at>=? AND created_at<?),0))),? WHERE EXISTS(SELECT 1 FROM state WHERE key=?)").bind('facebook-submission:'+id,user.id,user.id,start,end,now,'ms-video:'+id));
+   ops.push(upsert(env.DB,'ms-updated',{at:now}));
+   await env.DB.batch(ops);
+   const awarded=await env.DB.prepare('SELECT amount FROM points WHERE id=?').bind('facebook-submission:'+id).first();
+   return json({ok:true,points:awarded?.amount||0,message:'Facebook video added to Community finds.'+(awarded?.amount?' You earned '+awarded.amount+' contribution points.':' Your daily contribution point limit has been reached.')});
+  }
+  if(!user.moderator)return json({error:'Moderator access required.'},403);
   if(b.action==='categories')return manageCategories(env.DB,b);
   if(b.action==='playlists')return json(await refreshPlaylists(env,saveVideos));
   if(b.action==='refresh')return json(await refreshMissionedSouls(env,seed));

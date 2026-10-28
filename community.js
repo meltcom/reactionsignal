@@ -52,7 +52,7 @@ async function loadCommunity({deferSecondary=false}={}){
     $('suggestPerformer').innerHTML=catalog.performers.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
     $('leaderboard').innerHTML=communityState.leaders.length?communityState.leaders.map(p=>`<li>${memberDisplayName(p.name,p.points,p)} <strong>${p.points} points</strong></li>`).join(''):'<li>No points awarded yet. Help start the community.</li>';
     $('myContributions').innerHTML=communityState.mine.length?communityState.mine.map(c=>`<article class="contribution"><strong>${escapeHtml(c.kind)} · ${escapeHtml(c.status)}</strong> <a target="_blank" rel="noopener" href="${escapeHtml(discussionLink(c))}">${c.channel_id?'Open reactor':'Open video'} ↗</a><p>${escapeHtml(c.body)}</p>${c.review_note?`<p>Review: ${escapeHtml(c.review_note)}</p>`:''}</article>`).join(''):'<p>No contributions submitted yet.</p>';
-    const pointLabels={rating:'First video rating','reactor-rating':'First reactor rating',comment:'Useful comment/reply',submission:'Valid missing reaction',flag:'Verified catalog correction/removal report'};
+    const pointLabels={rating:'First video rating','reactor-rating':'First reactor rating',comment:'Useful comment/reply',submission:'Valid missing reaction','facebook-submission':'Facebook video added',flag:'Verified catalog correction/removal report'};
     $('pointsHistory').innerHTML=communityState.ledger.length?communityState.ledger.map(p=>`<p>${prettyDate(p.created_at)} · ${escapeHtml(pointLabels[p.kind]||p.kind)} · ${p.amount>0?'+':''}${p.amount} points</p>`).join(''):'<p>Your points history will appear here.</p>';
     $('moderation').hidden=!communityState.moderator;
     if(!deferSecondary){

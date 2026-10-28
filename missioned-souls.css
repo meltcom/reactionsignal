@@ -32,3 +32,5 @@
 
 /* Match My Feed: Shorts, clear, then search; keep controls visible when collapsed. */
 .ms-feed-actions{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:16px;margin:14px 0}.ms-feed-actions #ms-clear{min-height:44px}.ms-feed-actions .ms-search-toggle{width:44px;height:44px;min-width:44px;padding:0;border-radius:50%;background:var(--white);color:var(--teal);border:1px solid var(--line)}.ms-feed-actions .ms-search-toggle[aria-expanded="true"]{background:var(--teal);color:var(--white)}
+
+.ms-community-add{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:18px 0;padding:16px 18px;background:#edf5e8;border:1px solid #c7dac7;border-left:4px solid #427552;border-radius:10px}.ms-community-add strong{color:#184c3d}.ms-community-add p{margin:5px 0 0;font-size:13px;line-height:1.5;color:#52665c}.ms-community-add .primary-button{flex-shrink:0}@media(max-width:600px){.ms-community-add{align-items:stretch;flex-direction:column}.ms-community-add .primary-button{width:100%}}
