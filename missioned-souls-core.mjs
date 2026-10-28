@@ -1,4 +1,4 @@
-export const categories=['Live Concerts','Home Studio','All Vlogs','Location Vlogs','Equipment Vlogs','Birthday Vlogs','Solo performances','Shorts','Songs','Handuraw gigs','Jcobs gigs','Living Room performances','Porch performances','Christmas videos','Christian videos','OPM'];
+export const categories=['Community finds','Live Concerts','Home Studio','All Vlogs','Location Vlogs','Equipment Vlogs','Birthday Vlogs','Solo performances','Shorts','Songs','Handuraw gigs','Jcobs gigs','Living Room performances','Porch performances','Christmas videos','Christian videos','OPM'];
 export function suggestCategories(title){
  const t=title.toLowerCase(),tags=[];
  const rules={'Live Concerts':/concert|live in|live at|tour performance/,'Home Studio':/studio/,'All Vlogs':/vlog|unboxing|birthday|celebrating|in dumaguete/,'Location Vlogs':/vlog.*(?:in |trip|travel)|in dumaguete/,'Equipment Vlogs':/unboxing|equipment|gear|pedal|rig|play button/,'Birthday Vlogs':/birthday|celebrating.*today/,'Solo performances':/solo/,'Shorts':/#shorts|\bshorts\b/,'Songs':/cover| by |official music|official video/,'Handuraw gigs':/handuraw/,'Jcobs gigs':/jcobs|j.?cob.?s/,'Living Room performances':/living room/,'Porch performances':/porch/,'Christmas videos':/christmas|silent night|jingle bells/,'Christian videos':/christian|worship|praise|gospel/,'OPM':/\bopm\b|original pilipino/};
@@ -35,15 +35,16 @@ export function viewGain(v,days,now=Date.now()){
  const candidates=(v.history||[]).filter(s=>s.views!=null&&Math.abs(Date.parse(s.at)-target)<=6*3600000).sort((a,b)=>Math.abs(Date.parse(a.at)-target)-Math.abs(Date.parse(b.at)-target));
  if(!candidates.length||v.views<candidates[0].views)return null;return v.views-candidates[0].views;
 }
+const inCategory=(video,category)=>category==='All videos'||(category==='Facebook only'?video.platform==='Facebook'&&!video.youtubeEquivalent:category==='YouTube only'?video.platform==='YouTube':(video.tags||[]).includes(category));
 export function selectVideos(videos,{category='All videos',source='all',query='',includeShorts=true,ranking='latest',year='all',visibility='visible'}={},now=Date.now()){
  videos=videos.filter(v=>visibility==='managed'?['hidden','removed'].includes(v.visibility):!['hidden','removed'].includes(v.visibility));
  videos=videos.filter(v=>year==='all'||(year==='unknown'?!Number.isFinite(Date.parse(v.publishedAt||'')):Number.isFinite(Date.parse(v.publishedAt||''))&&String(new Date(v.publishedAt).getUTCFullYear())===year));
- let list=videos.filter(v=>visibility==='managed'||v.available!==false).filter(v=>category==='All videos'||category==='Facebook only'?category!=='Facebook only'||v.platform==='Facebook'&&!v.youtubeEquivalent:(v.tags||[]).includes(category)).filter(v=>source==='all'||v.platform===source).filter(v=>includeShorts||!(v.tags||[]).includes('Shorts')).filter(v=>v.title.toLowerCase().includes(query.toLowerCase()));
+ let list=videos.filter(v=>visibility==='managed'||v.available!==false).filter(v=>inCategory(v,category)).filter(v=>source==='all'||v.platform===source).filter(v=>includeShorts||!(v.tags||[]).includes('Shorts')).filter(v=>v.title.toLowerCase().includes(query.toLowerCase()));
  const windows={day:1,week:7,month:30};
  const metric=v=>windows[ranking]?viewGain(v,windows[ranking],now):ranking==='latest'||ranking==='recent'?Date.parse(v.publishedAt):v[ranking];
  list=list.filter(v=>metric(v)!=null&&Number.isFinite(metric(v))).sort((a,b)=>metric(b)-metric(a)||a.id.localeCompare(b.id));
  if(ranking==='latest'){
-  const unknown=videos.filter(v=>(visibility==='managed'||v.available!==false)&&!v.publishedAt).filter(v=>category==='All videos'||(category==='Facebook only'?v.platform==='Facebook'&&!v.youtubeEquivalent:(v.tags||[]).includes(category))).filter(v=>source==='all'||v.platform===source).filter(v=>includeShorts||!(v.tags||[]).includes('Shorts')).filter(v=>v.title.toLowerCase().includes(query.toLowerCase()));list.push(...unknown);
+  const unknown=videos.filter(v=>(visibility==='managed'||v.available!==false)&&!v.publishedAt).filter(v=>inCategory(v,category)).filter(v=>source==='all'||v.platform===source).filter(v=>includeShorts||!(v.tags||[]).includes('Shorts')).filter(v=>v.title.toLowerCase().includes(query.toLowerCase()));list.push(...unknown);
  }
  return ['recent','views','likes','comments','day','week','month'].includes(ranking)?list.slice(0,10):list;
 }

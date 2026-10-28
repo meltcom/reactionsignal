@@ -3,6 +3,7 @@ import { database, seedDatabase } from './db.mjs';
 import {YouTube,seconds} from './discovery.mjs';
 import {auditStatement,restrictAccount} from './operations.mjs';
 import {sharedCache} from './cache.mjs';
+import {isFacebookDiscussion,facebookDiscussion} from './ms-discussion.mjs';
 export async function submissionMetadata(db,env,videoId,fetcher=fetch){
  const key='submission-metadata:'+videoId,cached=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();
  if(cached){try{const c=JSON.parse(cached.value);if(Date.now()-c.fetchedAt<600000)return c;}catch{}}
@@ -127,16 +128,17 @@ export async function community(request,env,seed,user){
       if(path==='/summary'){
         const aggregateRevision=(await db.prepare("SELECT value FROM state WHERE key='aggregate-revision'").first())?.value||'0';
         const totals=await db.prepare('SELECT COALESCE(SUM(amount),0) total FROM points WHERE user_id=?').bind(user.id).first();
-        const scores=await sharedCache(db,'video-scores:'+aggregateRevision,30000,()=>db.prepare('SELECT video_id,COUNT(*) count,AVG(score) average,(SUM(score)+15.0)/(COUNT(*)+5) ranking FROM ratings GROUP BY video_id').all());
+        const scores=await sharedCache(db,'video-scores:'+aggregateRevision,30000,()=>db.prepare('SELECT video_id,COUNT(*) count,AVG(score) average,(SUM(score)+15.0)/(COUNT(*)+5) ranking FROM (SELECT video_id,score FROM ratings UNION ALL SELECT video_id,score FROM ms_archive_ratings) GROUP BY video_id').all());
         const leaders=await sharedCache(db,'point-leaders:'+aggregateRevision,30000,()=>db.prepare('SELECT m.name,m.profile_icon,m.profile_color,m.profile_picture,SUM(p.amount) points FROM points p JOIN members m ON m.id=p.user_id GROUP BY p.user_id HAVING SUM(p.amount)>0 ORDER BY points DESC,m.created_at ASC LIMIT 10').all());
         const mine=await db.prepare('SELECT id,kind,video_id,channel_id,performer_id,body,status,review_note,created_at FROM contributions WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(user.id).all();
+        const archiveComments=await db.prepare("SELECT video_id,COUNT(*) count FROM contributions WHERE kind='comment' AND channel_id IS NULL AND status='accepted' AND video_id LIKE 'facebook:https://%' GROUP BY video_id").all();
         const ledger=await db.prepare('SELECT kind,amount,created_at FROM points WHERE user_id=? AND amount<>0 ORDER BY created_at DESC LIMIT 30').bind(user.id).all();
         const approvals=await db.prepare(`SELECT ${approvedContributionCount} count FROM members m WHERE m.id=?`).bind(user.id).first();
-        return json({trusted:me?.trusted===1,approvedCount:approvals?.count||0,name:me?.name||'',profile_icon:me?.profile_icon||'initials',profile_color:me?.profile_color||'teal',profile_picture:me?.profile_picture||null,moderator:user.moderator,points:totals.total,tier:tier(totals.total),scores:scores.results,leaders:leaders.results,mine:mine.results,ledger:ledger.results});
+        return json({trusted:me?.trusted===1,approvedCount:approvals?.count||0,name:me?.name||'',profile_icon:me?.profile_icon||'initials',profile_color:me?.profile_color||'teal',profile_picture:me?.profile_picture||null,moderator:user.moderator,points:totals.total,tier:tier(totals.total),scores:scores.results,archiveComments:archiveComments.results,leaders:leaders.results,mine:mine.results,ledger:ledger.results});
       }
       if(path==='/video'){
-        const video=u.searchParams.get('id');if(!/^[\w-]{11}$/.test(video||''))fail('Invalid video ID.');
-        const rating=await db.prepare('SELECT score FROM ratings WHERE user_id=? AND video_id=?').bind(user.id,video).first();
+        const video=u.searchParams.get('id'),archive=isFacebookDiscussion(video);if(archive){if(!await facebookDiscussion(db,seed,video))fail('This Facebook video is unavailable.',404);}else if(!/^[\w-]{11}$/.test(video||''))fail('Invalid video ID.');
+        const rating=await db.prepare('SELECT score FROM '+(archive?'ms_archive_ratings':'ratings')+' WHERE user_id=? AND video_id=?').bind(user.id,video).first();
         const comments=await db.prepare("SELECT c.id,c.body,c.created_at,m.name,m.profile_icon,m.profile_color,m.profile_picture,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=m.id),0) points FROM contributions c JOIN members m ON m.id=c.user_id WHERE c.kind='comment' AND c.video_id=? AND c.status='accepted' ORDER BY c.created_at DESC LIMIT 100").bind(video).all();
         return json({rating:rating?.score||0,comments:comments.results});
       }
@@ -331,11 +333,11 @@ export async function community(request,env,seed,user){
       return json({ok:true,message:'Coverage review saved. Shortlisting does not activate discovery for this performer.'});
     }
     if(path==='/rating'){
-      const video=b.videoId,performer=b.performerId;if(!/^[\w-]{11}$/.test(video||'')||!await db.prepare("SELECT 1 FROM performers WHERE id=? AND status='active'").bind(performer).first())fail('Choose a catalog video and performer.');if(!Number.isInteger(b.score)||b.score<1||b.score>5)fail('Choose a rating from 1 to 5.');
-      await known(db,performer,video);
+      const video=b.videoId,performer=b.performerId,archive=isFacebookDiscussion(video),ratings=archive?'ms_archive_ratings':'ratings';if(!(archive||/^[\w-]{11}$/.test(video||''))||!await db.prepare("SELECT 1 FROM performers WHERE id=? AND status='active'").bind(performer).first())fail('Choose a catalog video and performer.');if(!Number.isInteger(b.score)||b.score<1||b.score>5)fail('Choose a rating from 1 to 5.');
+      if(archive){if(performer!=='missioned-souls'||!await facebookDiscussion(db,seed,video))fail('This Facebook video is unavailable.',404);}else await known(db,performer,video);
       await db.batch([
-        award(db,`rating:${user.id}:${video}`,user.id,'rating',1,10,now,'NOT EXISTS(SELECT 1 FROM ratings WHERE user_id=? AND video_id=?)',[user.id,video]),
-        db.prepare('INSERT INTO ratings(user_id,video_id,score,created_at) VALUES(?,?,?,?) ON CONFLICT(user_id,video_id) DO UPDATE SET score=excluded.score').bind(user.id,video,b.score,now)
+        award(db,`rating:${user.id}:${video}`,user.id,'rating',1,10,now,'NOT EXISTS(SELECT 1 FROM '+ratings+' WHERE user_id=? AND video_id=?)',[user.id,video]),
+        db.prepare('INSERT INTO '+ratings+'(user_id,video_id,score,created_at) VALUES(?,?,?,?) ON CONFLICT(user_id,video_id) DO UPDATE SET score=excluded.score').bind(user.id,video,b.score,now)
       ]);return json({ok:true,message:'Rating saved. Editing a rating does not earn more points.'});
     }
     if(path==='/contribute'){
@@ -343,13 +345,13 @@ export async function community(request,env,seed,user){
       if(!['comment','submission','flag'].includes(b.kind))fail('Invalid contribution type.');
       if(!await db.prepare("SELECT 1 FROM performers WHERE id=? AND status='active'").bind(b.performerId).first())fail('Choose a catalog performer.');
       const video=b.kind==='submission'?youtubeId(b.url):b.videoId;
-      if(!/^[\w-]{11}$/.test(video||''))fail('Enter a valid HTTPS YouTube video link.');
+      const archive=isFacebookDiscussion(video);if(archive){if(b.kind!=='comment'||b.performerId!=='missioned-souls'||!await facebookDiscussion(db,seed,video))fail('Choose an available Facebook video.',404);}else if(!/^[\w-]{11}$/.test(video||''))fail('Enter a valid HTTPS YouTube video link.');
       const body=text(b.body,10,b.kind==='comment'?2000:1000,b.kind==='comment'?'Comment':'Explanation');
       const reason=b.kind==='flag'?b.reason:null;
       if(b.kind==='flag'&&!['wrong-performer','not-reaction','short-excerpt','unavailable','duplicate','other'].includes(reason))fail('Choose a reason.');
       if(b.kind==='submission'){
         if(await db.prepare('SELECT 1 FROM matches WHERE performer_id=? AND video_id=? UNION ALL SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?').bind(b.performerId,video,b.performerId,video).first())fail('This video is already cataloged, pending review, or excluded for this performer.',409);
-      }else await known(db,b.performerId,video);
+      }else if(!archive)await known(db,b.performerId,video);
       const id=b.kind==='submission'?`submission:${b.performerId}:${video}`:b.kind==='comment'?`comment:${user.id}:${video}`:`flag:${user.id}:${b.performerId}:${video}`;
       const direct=b.kind!=='flag'&&await canPublishDirectly(db,user.id);
       const metadata=direct&&b.kind==='submission'?await submissionMetadata(db,env,video):null;
@@ -386,6 +388,7 @@ export async function community(request,env,seed,user){
       if(!['accept','reject'].includes(b.decision))fail('Invalid review decision.');
       const statements=[];
       if(b.decision==='accept'){
+        if(isFacebookDiscussion(c.video_id)&&!await facebookDiscussion(db,seed,c.video_id))fail('This Facebook video is unavailable.',404);
         // Moderator self-reviews can change the catalog but never earn approval points.
         if(c.kind==='submission'){
           if(await db.prepare('SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?').bind(c.performer_id,c.video_id).first())fail('This video is excluded. Resolve the existing catalog decision first.',409);

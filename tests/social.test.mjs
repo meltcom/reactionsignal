@@ -248,3 +248,25 @@ test('trusted daily posting exemption spans both routes and revocation restores 
   assert.equal((await call('/contribute',{...b,kind:'comment',body:'Original route is capped after revocation.'},'fan',undefined,community)).status,409);
  }finally{sql.close();}
 });
+
+test('Facebook threaded discussion shares trust, reply isolation, edits and point reversals',async()=>{
+ const {call,sql}=await setup();const id='facebook:https://www.facebook.com/reel/123/';
+ sql.prepare('INSERT INTO state VALUES(?,?)').run('ms-video:'+id,JSON.stringify({id,platform:'Facebook',title:'Performance',available:true}));
+ const c={videoId:id,performerId:'missioned-souls',body:'I enjoyed this family performance.'};
+ assert.equal((await call('/comment',c,null)).status,401);assert.equal((await call('/comment',c,'fan','https://evil.test')).status,403);
+ assert.equal((await call('/comment',c)).status,200);assert.equal((await call('/comments?video='+encodeURIComponent(id),null,'other')).data.items.length,0);
+ const cid=sql.prepare('SELECT id FROM contributions WHERE video_id=?').get(id).id;
+ assert.equal((await call('/moderate',{id:cid,decision:'accept',note:'Useful performance discussion'},'owner','https://pilot.test',community)).status,200);
+ sql.prepare("UPDATE members SET trusted=1 WHERE id='other'").run();
+ const reply={...c,parentId:cid,body:'A thoughtful reply about the performance.'};
+ assert.equal((await call('/comment',reply,'other')).status,200);
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='other'").get().n,3);
+ const rid=sql.prepare("SELECT id FROM contributions WHERE user_id='other'").get().id;
+ assert.equal((await call('/comment',{...reply,id:rid,body:'An edited thoughtful performance reply.'},'other')).status,200);
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='other'").get().n,3);
+ assert.equal((await call('/comment',{...reply,videoId:'abcdefghijk'},'other')).status,400);
+ assert.equal((await call('/delete',{id:rid,kind:'comment'},'other')).status,200);
+ assert.equal(sql.prepare("SELECT SUM(amount) n FROM points WHERE user_id='other'").get().n,0);
+ sql.prepare('INSERT INTO state VALUES(?,?)').run('ms-visibility:'+id,JSON.stringify({visibility:'removed'}));
+ assert.equal((await call('/comment',c)).status,400);assert.equal((await call('/comments?video='+encodeURIComponent(id))).status,404);
+});

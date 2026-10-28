@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {normalizeVideo,selectVideos,viewGain,suggestCategories} from '../missioned-souls-core.mjs';
 import {missionedSouls,missionedSoulsThumbnail,refreshMissionedSouls,readMissionedSouls,scheduledMissionedSouls} from '../server/missioned-souls.mjs';
 import {DatabaseSync} from 'node:sqlite';
-function database(){const sql=new DatabaseSync(':memory:');sql.exec('CREATE TABLE state(key TEXT PRIMARY KEY,value TEXT NOT NULL)');return {prepare(query){let values=[];return {bind(...v){values=v;return this;},async first(){return sql.prepare(query).get(...values)||null;},async all(){return {results:sql.prepare(query).all(...values)};},async run(){return {meta:{changes:Number(sql.prepare(query).run(...values).changes)}};}};},async batch(ops){const result=[];for(const op of ops)result.push(await op.run());return result;}};}
+function database(){const sql=new DatabaseSync(':memory:');sql.exec('CREATE TABLE state(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE members(id TEXT PRIMARY KEY,trusted INTEGER NOT NULL DEFAULT 0); CREATE TABLE points(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,kind TEXT NOT NULL,amount INTEGER NOT NULL,created_at TEXT NOT NULL)');return {sql,prepare(query){let values=[];return {bind(...v){values=v;return this;},async first(){return sql.prepare(query).get(...values)||null;},async all(){return {results:sql.prepare(query).all(...values)};},async run(){return {meta:{changes:Number(sql.prepare(query).run(...values).changes)}};}};},async batch(ops){const result=[];for(const op of ops)result.push(await op.run());return result;}};}
 const video=(id='C1yfkA_0_Sg',extra={})=>normalizeVideo({title:'Studio cover',url:'https://www.youtube.com/watch?v='+id,...extra});
 test('manual Shorts classification preserves metadata and survives later refreshes in either direction',async()=>{
  const db=database(),seed={videos:[video(undefined,{tags:['OPM'],views:123})],coverage:'starter'},env={DB:db,YOUTUBE_API_KEY:'fixture'};
@@ -92,12 +92,43 @@ test('moderators can store a resized thumbnail and the immutable image endpoint 
  const image=await missionedSoulsThumbnail(new Request('https://local'+result.thumbnailUrl),env);assert.equal(image.status,200);assert.equal(image.headers.get('Content-Type'),'image/jpeg');assert.deepEqual(new Uint8Array(await image.arrayBuffer()),bytes);
  assert.equal((await missionedSouls(new Request('https://local/api/missioned-souls',{method:'POST',body:JSON.stringify(body)}),env,{videos:[]},{id:'member',moderator:false})).status,403);
 });
+test('trusted members add public Facebook videos to Community finds with metadata, permanent thumbnails and 25 points',async()=>{
+ const db=database(),seed={videos:[]},env={DB:db},trusted={id:'trusted-member'},ordinary={id:'ordinary-member'};
+ db.sql.exec("INSERT INTO members(id,trusted) VALUES('trusted-member',1),('ordinary-member',0)");
+ const req=body=>new Request('https://reactionjourney.com/api/missioned-souls',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const catalog=await (await missionedSouls(new Request('https://reactionjourney.com/api/missioned-souls'),env,seed,trusted)).json();assert.equal(catalog.canAddVideos,true);
+ const ordinaryCatalog=await (await missionedSouls(new Request('https://reactionjourney.com/api/missioned-souls'),env,seed,ordinary)).json();assert.equal(ordinaryCatalog.canAddVideos,false);
+ const bytes=Uint8Array.from([255,216,255,192,0,17,8,0,1,0,1,3,1,17,0,2,17,0,3,17,0,255,217]);
+ const video={title:'Community concert find',url:'https://www.facebook.com/reel/community-reel-123/',publishedAt:'2026-10-20T00:00:00.000Z',durationSeconds:94,views:1200,likes:80,comments:12,statsAt:'2026-10-27T12:00:00.000Z',statsPrecision:'rounded',statsSource:'Public Facebook reel',tags:['Live Concerts']};
+ const body={action:'community-add',video,publicConfirmed:true,thumbnailData:'data:image/jpeg;base64,'+Buffer.from(bytes).toString('base64')};
+ const response=await missionedSouls(req(body),env,seed,trusted);assert.equal(response.status,200,JSON.stringify(await response.clone().json()));assert.equal((await response.json()).points,25);
+ const saved=(await readMissionedSouls(db,seed)).videos[0];assert.equal(saved.platform,'Facebook');assert.equal(saved.durationSeconds,94);assert.equal(saved.thumbnailUrl.startsWith('/api/missioned-souls/thumbnails/'),true);assert.ok(saved.tags.includes('Community finds'));assert.ok(saved.tags.includes('Live Concerts'));assert.deepEqual(saved.history.map(({views,likes,comments,statsPrecision,statsSource})=>({views,likes,comments,statsPrecision,statsSource})),[{views:1200,likes:80,comments:12,statsPrecision:'rounded',statsSource:'Public Facebook reel'}]);
+ const image=await missionedSoulsThumbnail(new Request('https://reactionjourney.com'+saved.thumbnailUrl),env);assert.equal(image.status,200);assert.deepEqual(new Uint8Array(await image.arrayBuffer()),bytes);
+ assert.equal(db.sql.prepare('SELECT SUM(amount) amount FROM points WHERE user_id=?').get(trusted.id).amount,25);
+ assert.equal((await missionedSouls(req(body),env,seed,trusted)).status,409);
+ assert.equal(db.sql.prepare('SELECT COUNT(*) count FROM points WHERE user_id=?').get(trusted.id).count,1);
+ assert.equal((await missionedSouls(req({...body,video:{...video,url:'https://www.facebook.com/reel/community-reel-456/'},publicConfirmed:false}),env,seed,trusted)).status,400);
+ assert.equal((await missionedSouls(req(body),env,seed,ordinary)).status,403);
+ assert.equal((await missionedSouls(req({...body,video:{...video,url:'https://www.facebook.com/ordinary/profile/'} }),env,seed,trusted)).status,400);
+});
+test('trusted members can fetch public Facebook details and thumbnail without writing catalog data',async()=>{
+ const db=database(),env={DB:db},seed={videos:[]},trusted={id:'trusted-member'},ordinary={id:'ordinary-member'};
+ db.sql.exec("INSERT INTO members(id,trusted) VALUES('trusted-member',1),('ordinary-member',0)");
+ const html='<html><head><meta property="og:title" content="Missioned Souls live &amp; loud"><meta property="og:image" content="https://scontent.xx.fbcdn.net/video-thumb.jpg"><meta property="og:video:duration" content="94"><meta property="article:published_time" content="2026-10-20T00:00:00Z"><meta property="video:view_count" content="1234"><meta property="video:likes" content="81"><meta property="video:comments" content="12"></head></html>';
+ const fetcher=async(url,options)=>{assert.equal(options.redirect,'manual');return String(url).includes('fbcdn.net')?new Response(Uint8Array.from([255,216,255,217]),{headers:{'Content-Type':'image/jpeg'}}):new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8'}});};
+ const req=body=>new Request('https://reactionjourney.com/api/missioned-souls',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const response=await missionedSouls(req({action:'fetch-facebook-metadata',url:'https://www.facebook.com/reel/public-reel-123/'}),env,seed,trusted,fetcher);
+ assert.equal(response.status,200);const details=await response.json();assert.equal(details.title,'Missioned Souls live & loud');assert.equal(details.durationSeconds,94);assert.equal(details.publishedAt,'2026-10-20T00:00:00.000Z');assert.equal(details.views,1234);assert.equal(details.likes,81);assert.equal(details.comments,12);assert.match(details.thumbnailData,/^data:image\/jpeg;base64,/);assert.equal(details.statsSource,'Facebook public page metadata');
+ assert.equal((await missionedSouls(req({action:'fetch-facebook-metadata',url:'https://www.facebook.com/reel/public-reel-123/'}),env,seed,ordinary,fetcher)).status,403);
+ assert.equal((await missionedSouls(req({action:'fetch-facebook-metadata',url:'https://example.com/reel/public-reel-123/'}),env,seed,trusted,fetcher)).status,400);
+ assert.equal((await db.prepare("SELECT COUNT(*) count FROM state").first()).count,0);
+});
 test('category lifecycle preserves assignments and rejects stale updates and member writes',async()=>{
  const db=database(),seed={videos:[video(undefined,{tags:['OPM']})]},env={DB:db};
  const request=body=>new Request('https://local/api/missioned-souls',{method:'POST',body:JSON.stringify(body)});
  const mod={id:'moderator',moderator:true};
  let catalog=await readMissionedSouls(db,seed);
- const act=async body=>{const r=await missionedSouls(request({action:'categories',revision:catalog.categoryRevision,...body}),env,seed,mod);assert.equal(r.status,200);catalog=await readMissionedSouls(db,seed);};
+ const act=async body=>{const r=await missionedSouls(request({action:'categories',revision:catalog.categoryRevision,...body}),env,seed,mod);assert.equal(r.status,200,await r.clone().text());catalog=await readMissionedSouls(db,seed);};
  await act({operation:'add',name:'Favorites'});
  const custom=catalog.categoryDefinitions.find(c=>c.name==='Favorites').id;
  const saved=await missionedSouls(request({action:'save',video:{...catalog.videos[0],tags:['OPM',custom]}}),env,seed,mod);assert.equal(saved.status,200,JSON.stringify(await saved.json()));
@@ -112,7 +143,6 @@ test('category lifecycle preserves assignments and rejects stale updates and mem
  assert.equal((await missionedSouls(request({action:'categories',revision:catalog.categoryRevision,operation:'archive',id:custom,archived:true}),env,seed,{id:'member',moderator:false})).status,403);
  assert.equal((await missionedSouls(new Request('https://local/api/missioned-souls'),env,seed,null)).status,401);
 });
-
 test('moderator hide/remove survives refresh and import, filters member API, and restores seed records',async()=>{
  const db=database(),seed={videos:[video(undefined,{views:123,tags:['OPM'],reviewed:true})]},env={DB:db,YOUTUBE_API_KEY:'fixture'},mod={id:'moderator',moderator:true};
  const req=body=>new Request('https://local/api/missioned-souls',{method:'POST',body:JSON.stringify(body)});
