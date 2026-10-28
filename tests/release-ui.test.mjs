@@ -42,10 +42,12 @@ test('packaged guide routes require membership and do not expose PDF assets publ
 
 test('release packages MS Journey visibility controls with matching help and existing browsing',()=>{
  const html=assets['/index.html'].body,ms=assets['/missioned-souls.js'].body;
- for(const id of ['ms-visibility-control','ms-visibility','ms-year','ms-playlists-refresh','ms-search-toggle','ms-stats-import','ms-stats-template','ms-thumbnail-preview','ms-facebook-fetch','ms-fetch-facebook','ms-fetch-facebook-status'])assert.ok(html.includes('id="'+id+'"'),id);
+ for(const id of ['ms-visibility-control','ms-visibility','ms-year','ms-playlists-refresh','ms-search-toggle','ms-stats-import','ms-stats-template','ms-thumbnail-preview','ms-facebook-fetch','ms-fetch-facebook','ms-manual-facebook','ms-fetch-facebook-status','ms-facebook-help'])assert.ok(html.includes('id="'+id+'"'),id);
  for(const action of ['Hide from members','Remove from MS Journey','Restore to MS Journey'])assert.ok(ms.includes(action),action);
  for(const feature of ['thumbnailData','statisticsRows','Recent measurements','statsPrecision','durationSeconds','fetch-facebook-metadata'])assert.ok(ms.includes(feature),feature);
  assert.ok(html.includes('Get Facebook details &amp; thumbnail'));
+ assert.ok(ms.includes('Continue with manual details')&&ms.includes('permanent storage'));
+ for(const instruction of ['Copy link','published date','00:26','Win + Shift + S','Thumbnail URL','opens publicly while signed out'])assert.ok(html.includes(instruction),instruction);
  assert.ok(html.includes('Visibility decisions survive official-channel refreshes and repeated imports.'));
 });
 

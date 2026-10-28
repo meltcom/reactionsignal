@@ -123,6 +123,22 @@ test('trusted members can fetch public Facebook details and thumbnail without wr
  assert.equal((await missionedSouls(req({action:'fetch-facebook-metadata',url:'https://example.com/reel/public-reel-123/'}),env,seed,trusted,fetcher)).status,400);
  assert.equal((await db.prepare("SELECT COUNT(*) count FROM state").first()).count,0);
 });
+test('Facebook metadata fetch returns useful partial video metadata when the public page has no title',async()=>{
+ const db=database(),env={DB:db},seed={videos:[]},trusted={id:'trusted-member'};
+ db.sql.exec("INSERT INTO members(id,trusted) VALUES('trusted-member',1)");
+ const html='<html><head><meta property="og:type" content="video.other"><meta property="og:image" content="https://scontent.xx.fbcdn.net/partial-thumb.jpg"><meta property="og:video:duration" content="PT26S"><meta property="article:published_time" content="2026-10-20T00:00:00Z"></head></html>';
+ const bytes=Uint8Array.from([255,216,255,217]);
+ const fetcher=async url=>String(url).includes('fbcdn.net')?new Response(bytes,{headers:{'Content-Type':'image/jpeg'}}):new Response(html,{headers:{'Content-Type':'text/html'}});
+ const request=new Request('https://reactionjourney.com/api/missioned-souls',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fetch-facebook-metadata',url:'https://www.facebook.com/reel/public-reel-456/'})});
+ const response=await missionedSouls(request,env,seed,trusted,fetcher);assert.equal(response.status,200);
+ const details=await response.json();assert.equal(details.title,null);assert.equal(details.durationSeconds,26);assert.equal(details.publishedAt,'2026-10-20T00:00:00.000Z');assert.equal(details.thumbnailUrl,'https://scontent.xx.fbcdn.net/partial-thumb.jpg');assert.match(details.thumbnailData,/^data:image\/jpeg;base64,/);
+});
+test('Facebook metadata fetch rejects a generic error page without video evidence',async()=>{
+ const db=database(),env={DB:db},seed={videos:[]},trusted={id:'trusted-member'};db.sql.exec("INSERT INTO members(id,trusted) VALUES('trusted-member',1)");
+ const request=new Request('https://reactionjourney.com/api/missioned-souls',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fetch-facebook-metadata',url:'https://www.facebook.com/reel/private-or-blocked-123/'})});
+ const response=await missionedSouls(request,env,seed,trusted,async()=>new Response('<html><head><title>Facebook</title></head><body>Something went wrong</body></html>',{headers:{'Content-Type':'text/html'}}));
+ assert.equal(response.status,400,await response.clone().text());assert.match((await response.json()).error,/continue with manual details/i);
+});
 test('category lifecycle preserves assignments and rejects stale updates and member writes',async()=>{
  const db=database(),seed={videos:[video(undefined,{tags:['OPM']})]},env={DB:db};
  const request=body=>new Request('https://local/api/missioned-souls',{method:'POST',body:JSON.stringify(body)});

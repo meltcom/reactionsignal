@@ -5,5 +5,8 @@
 .ranking-note{font-size:14px;color:var(--muted);line-height:1.5;margin:0 0 20px}
 .new-reactors{margin:1rem 0 1.5rem;padding:1rem 1.25rem;border:1px solid var(--border,#555);border-radius:12px;background:rgba(255,255,255,.04);line-height:1.6}.new-reactors a{color:inherit;text-decoration:underline;text-underline-offset:3px}
 
+@media(max-width:1050px){footer{display:grid;grid-template-columns:max-content max-content;justify-content:space-between;gap:18px 24px}footer p{grid-column:1/-1;min-width:0}footer nav{white-space:nowrap}}
+@media(max-width:800px){footer{display:block}footer p{margin:18px 0}footer nav{white-space:normal}}
+
 /* Point badges use different shapes as well as colors. */
 .member-display-name{display:inline-flex;align-items:center;gap:.4em;max-width:100%;vertical-align:middle}.member-display-name>span:last-child{overflow-wrap:anywhere}.member-point-badge{display:inline-flex!important;align-items:center;justify-content:center;flex:none;width:1.55em;height:1.55em;border:1px solid currentColor;border-radius:50%;font-size:14px!important;line-height:1;font-weight:700;vertical-align:middle}.member-point-badge.badge-novice{color:#475569;background:#f1f5f9}.member-point-badge.badge-contributor{color:#166534;background:#dcfce7}.member-point-badge.badge-scout{color:#1e40af;background:#dbeafe}.member-point-badge.badge-curator{color:#6b21a8;background:#f3e8ff}.member-point-badge.badge-champion{color:#854d0e;background:#fef3c7}.member-point-badge.badge-soulmate-superstar{color:#a16207;background:#fef08a;box-shadow:0 0 0 1px #eab308 inset}.member-badge-legend{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0 24px}.member-badge-legend>span{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.member-badge-legend small{display:block;font-size:12px}

@@ -35,4 +35,5 @@
 
 .ms-community-add{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:18px 0;padding:16px 18px;background:#edf5e8;border:1px solid #c7dac7;border-left:4px solid #427552;border-radius:10px}.ms-community-add strong{color:#184c3d}.ms-community-add p{margin:5px 0 0;font-size:13px;line-height:1.5;color:#52665c}.ms-community-add .primary-button{flex-shrink:0}@media(max-width:600px){.ms-community-add{align-items:stretch;flex-direction:column}.ms-community-add .primary-button{width:100%}}
 .ms-facebook-fetch{margin:.75rem 0 1rem;padding:12px 14px;background:#f2f6ef;border:1px solid #cedbcf;border-radius:9px}.ms-facebook-fetch p{margin:6px 0 0}
+.ms-facebook-help{margin-top:12px;border-top:1px solid #d5e0d5;padding-top:10px;font-size:13px;line-height:1.6}.ms-facebook-help summary{cursor:pointer;color:#174f44;font-weight:700}.ms-facebook-help-content{padding:8px 2px 0}.ms-facebook-help-content p{margin:0 0 8px}.ms-facebook-help-content ol{margin:0;padding-left:22px}.ms-facebook-help-content li{margin:0 0 9px}.ms-facebook-help-content li:last-child{margin-bottom:0}
 #ms-form [data-ms-moderator-only][hidden]{display:none!important}
