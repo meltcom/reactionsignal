@@ -111,6 +111,18 @@ test('trusted members add public Facebook videos to Community finds with metadat
  assert.equal((await missionedSouls(req(body),env,seed,ordinary)).status,403);
  assert.equal((await missionedSouls(req({...body,video:{...video,url:'https://www.facebook.com/ordinary/profile/'} }),env,seed,trusted)).status,400);
 });
+test('trusted members can fetch public Facebook details and thumbnail without writing catalog data',async()=>{
+ const db=database(),env={DB:db},seed={videos:[]},trusted={id:'trusted-member'},ordinary={id:'ordinary-member'};
+ db.sql.exec("INSERT INTO members(id,trusted) VALUES('trusted-member',1),('ordinary-member',0)");
+ const html='<html><head><meta property="og:title" content="Missioned Souls live &amp; loud"><meta property="og:image" content="https://scontent.xx.fbcdn.net/video-thumb.jpg"><meta property="og:video:duration" content="94"><meta property="article:published_time" content="2026-10-20T00:00:00Z"><meta property="video:view_count" content="1234"><meta property="video:likes" content="81"><meta property="video:comments" content="12"></head></html>';
+ const fetcher=async(url,options)=>{assert.equal(options.redirect,'manual');return String(url).includes('fbcdn.net')?new Response(Uint8Array.from([255,216,255,217]),{headers:{'Content-Type':'image/jpeg'}}):new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8'}});};
+ const req=body=>new Request('https://reactionjourney.com/api/missioned-souls',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const response=await missionedSouls(req({action:'fetch-facebook-metadata',url:'https://www.facebook.com/reel/public-reel-123/'}),env,seed,trusted,fetcher);
+ assert.equal(response.status,200);const details=await response.json();assert.equal(details.title,'Missioned Souls live & loud');assert.equal(details.durationSeconds,94);assert.equal(details.publishedAt,'2026-10-20T00:00:00.000Z');assert.equal(details.views,1234);assert.equal(details.likes,81);assert.equal(details.comments,12);assert.match(details.thumbnailData,/^data:image\/jpeg;base64,/);assert.equal(details.statsSource,'Facebook public page metadata');
+ assert.equal((await missionedSouls(req({action:'fetch-facebook-metadata',url:'https://www.facebook.com/reel/public-reel-123/'}),env,seed,ordinary,fetcher)).status,403);
+ assert.equal((await missionedSouls(req({action:'fetch-facebook-metadata',url:'https://example.com/reel/public-reel-123/'}),env,seed,trusted,fetcher)).status,400);
+ assert.equal((await db.prepare("SELECT COUNT(*) count FROM state").first()).count,0);
+});
 test('category lifecycle preserves assignments and rejects stale updates and member writes',async()=>{
  const db=database(),seed={videos:[video(undefined,{tags:['OPM']})]},env={DB:db};
  const request=body=>new Request('https://local/api/missioned-souls',{method:'POST',body:JSON.stringify(body)});

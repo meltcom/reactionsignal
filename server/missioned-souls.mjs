@@ -4,6 +4,7 @@ import {refreshPlaylists} from './ms-playlists.mjs';
 import {categoryRegistry,manageCategories} from "./ms-categories.mjs";
 import {normalizeVideo,suggestCategories,classifyShort} from '../missioned-souls-core.mjs';
 import {canPublishDirectly} from './reputation.mjs';
+import {fetchFacebookMetadata} from './facebook-metadata.mjs';
 const json=(v,status=200)=>new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json','Cache-Control':'private, no-store'}});
 const upsert=(db,key,value)=>db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,JSON.stringify(value));
 async function state(db,key){const r=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();return r?JSON.parse(r.value):null;}
@@ -110,13 +111,17 @@ export async function refreshMissionedSouls(env,seed,fetcher=fetch,{latestOnly=f
  }catch(error){if(latestOnly){await upsert(db,'ms-refresh',{...progress,latestStatus:'error',latestError:error.message,lastLatestAttemptAt:now}).run();return {status:'error',message:error.message};}progress={...progress,status:'error',message:error.message,lastAttemptAt:now};await upsert(db,'ms-refresh',progress).run();return progress;}
  finally{await db.prepare("DELETE FROM state WHERE key='ms-lock'").run();}
 }
-export async function missionedSouls(request,env,seed,user){
+export async function missionedSouls(request,env,seed,user,fetcher=fetch){
  try{
   if(!user?.id)return json({error:'Sign in to view MS Journey.'},401);
   if(request.method==='GET'){const data=await readMissionedSouls(env.DB,seed);if(!user.moderator)data.videos=data.videos.filter(v=>v.visibility==='visible').map(({sourceNote,...v})=>v);return json({...data,moderator:!!user.moderator,canAddVideos:await canPublishDirectly(env.DB,user.id),apiConfigured:!!env.YOUTUBE_API_KEY});}
   if(request.method!=='POST')return json({error:'Method not allowed'},405);
   if(Number(request.headers.get('Content-Length'))>2000000)return json({error:'Import is too large.'},413);
   const raw=await request.text();if(raw.length>2000000)return json({error:'Import is too large.'},413);const b=JSON.parse(raw);
+  if(b.action==='fetch-facebook-metadata'){
+   if(!await canPublishDirectly(env.DB,user.id))return json({error:'Trusted Member access required to fetch Facebook details.'},403);
+   return json(await fetchFacebookMetadata(b.url,fetcher));
+  }
   if(b.action==='community-add'){
    if(!await canPublishDirectly(env.DB,user.id))return json({error:'Trusted Member access required to add a Facebook video.'},403);
    if(b.publicConfirmed!==true)return json({error:'Confirm the Facebook video is publicly viewable before submitting.'},400);
