@@ -119,7 +119,7 @@ export async function missionedSouls(request,env,seed,user,fetcher=fetch){
   if(Number(request.headers.get('Content-Length'))>2000000)return json({error:'Import is too large.'},413);
   const raw=await request.text();if(raw.length>2000000)return json({error:'Import is too large.'},413);const b=JSON.parse(raw);
   if(b.action==='fetch-facebook-metadata'){
-   if(!await canPublishDirectly(env.DB,user.id))return json({error:'Trusted Member access required to fetch Facebook details.'},403);
+   if(!user.moderator&&!await canPublishDirectly(env.DB,user.id))return json({error:'Trusted Member access required to fetch Facebook details.'},403);
    return json(await fetchFacebookMetadata(b.url,fetcher));
   }
   if(b.action==='community-add'){
