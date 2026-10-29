@@ -1,3 +1,4 @@
+import {discoveryPerformance} from './discovery-measurement.mjs';
 import {secureRedirect,secureResponse} from './security.mjs';
 import {recheckVideoFormats} from './format-recheck.mjs';
 import {discoveryCycle} from './rss.mjs';
@@ -107,10 +108,11 @@ async function handleRequest(request,env,ctx){
         return json(await discoveryCycle(env,seed));
       }
       if(request.method!=='GET'&&request.method!=='HEAD')return json({error:'Method not allowed'},405);
-      if(path==='/data.json'||path==='/api/status'){
+      if(path==='/data.json'||path==='/api/status'||path==='/api/discovery/performance'){
         const result=await member(request,env);
         if(result.error)return result.error;
         const db=database(env);await seedDatabase(db,seed);
+        if(path==='/api/discovery/performance')return result.user.moderator?json(await discoveryPerformance(db)):json({error:'Moderator access required.'},403);
         if(path==='/api/status')return result.user.moderator?json(await status(db,env)):json({error:'Moderator access required.'},403);
         const revision=await db.prepare("SELECT value FROM state WHERE key='catalog-revision'").first();
         const officialRevision=await db.prepare("SELECT value FROM state WHERE key='ms-updated'").first();

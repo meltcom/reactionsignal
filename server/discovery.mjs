@@ -1,6 +1,7 @@
 import { database, seedDatabase } from './db.mjs';
 import {reactionEvidence} from './approval-rules.mjs';
 import {videoFormat} from './video-format.mjs';
+import {SEARCH_STRATEGY,pacificDay,startSearchPage,reserveSearchAttempt,finishSearchAttempt,finishSearchPage,recordSearchResults,sampleDiscoveryHealth} from './discovery-measurement.mjs';
 
 const normalize = s => String(s||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 export function classify(title,aliases,duration,{description=''}={}) {
@@ -16,14 +17,16 @@ export function videoMetadata(item,at){
 }
 export class YouTube {
   constructor(key,fetcher=fetch,usageDb=null){this.usageDb=usageDb;this.key=key;this.fetcher=fetcher.bind(globalThis);this.calls=0;this.requestMs=0;this.deadline=Date.now()+20000;}
-  async get(endpoint,params){
+  async get(endpoint,params,searchContext=null){
     if(endpoint==='videos'&&String(params.part||'').split(',').includes('contentDetails'))params={...params,part:[...new Set([...params.part.split(','),'player','statistics'])].join(','),maxWidth:480};
     for(let attempt=0;attempt<3;attempt++){
       if(this.calls>=28||Date.now()>this.deadline) throw new Error('Batch budget reached; continuation retained');
+      const attemptId=endpoint==='search'&&searchContext?await reserveSearchAttempt(this.usageDb,searchContext.pageId,searchContext.limit):null;
       this.calls++;
       if(this.usageDb)await this.usageDb.prepare("INSERT INTO state(key,value) VALUES(?, '1') ON CONFLICT(key) DO UPDATE SET value=CAST(state.value AS INTEGER)+1").bind('youtube-requests:'+new Date().toISOString().slice(0,10)+':'+endpoint).run();
       const url=new URL(`https://www.googleapis.com/youtube/v3/${endpoint}`); for(const [k,v] of Object.entries(params)) if(v!==null&&v!==undefined)url.searchParams.set(k,String(v));
-      let response,body;const requestStart=Date.now();try { response=await this.fetcher(url,{headers:{'X-Goog-Api-Key':this.key},signal:AbortSignal.timeout(6000)});body=await response.json().catch(()=>({})); } catch { if(attempt===2) throw new Error('YouTube request timed out'); continue; } finally {this.requestMs+=Date.now()-requestStart;}
+      let response,body;const requestStart=Date.now();try { response=await this.fetcher(url,{headers:{'X-Goog-Api-Key':this.key},signal:AbortSignal.timeout(6000)});body=await response.json().catch(()=>({})); } catch { if(attemptId)await finishSearchAttempt(this.usageDb,attemptId,'network_error',null,Date.now()-requestStart);if(attempt===2) throw new Error('YouTube request timed out'); continue; } finally {this.requestMs+=Date.now()-requestStart;}
+      if(attemptId)await finishSearchAttempt(this.usageDb,attemptId,response.ok?'succeeded':'http_error',response.status,Date.now()-requestStart);
       if(response.ok)return body;
       if(response.status===429||response.status>=500){if(attempt<2){await new Promise(r=>setTimeout(r,200*(2**attempt)));continue;}}
       const allowed=['quotaExceeded','dailyLimitExceeded','playlistNotFound','keyInvalid','accessNotConfigured','forbidden'];
@@ -33,7 +36,7 @@ export class YouTube {
   }
 }
 // Bulk lookups and bounded D1 batches replace per-video round trips.
-export async function saveVideos(db,items,performers,runTime,source){
+export async function saveVideos(db,items,performers,runTime,source,context={}){
   items=items.filter(item=>item.snippet?.channelId!=='UCeTfwcnUVurw7Qrk_KF5Idw');
   const unique=[...new Map(items.filter(item=>/^[\w-]{11}$/.test(item.id)&&item.snippet&&item.status?.privacyStatus==='public').map(item=>[item.id,item])).values()];
   let inserted=0;
@@ -62,7 +65,7 @@ export async function saveVideos(db,items,performers,runTime,source){
         statements.push(db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind('youtube-video-metadata:'+item.id,JSON.stringify(videoMetadata(item,runTime))));
         statements.push(db.prepare(`INSERT INTO videos(id,channel_id,title,published_at,discovered_at,checked_at,format,available) VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=excluded.published_at,checked_at=excluded.checked_at,format=CASE WHEN videos.format_locked=1 OR videos.format IN ('SHORT','FULL_LENGTH') THEN videos.format ELSE excluded.format END,available=1`).bind(item.id,snippet.channelId,snippet.title,snippet.publishedAt||null,runTime,runTime,detectedFormat));
       }
-      if(!prior){inserted++;const lag=Date.parse(runTime)-Date.parse(snippet.publishedAt);statements.push(db.prepare('INSERT OR IGNORE INTO discovery_observations(video_id,source,discovered_at,published_at,delay_seconds) VALUES(?,?,?,?,?)').bind(item.id,source,runTime,snippet.publishedAt||null,Number.isFinite(lag)&&lag>=0?Math.floor(lag/1000):null));}
+      if(!prior){inserted++;const lag=Date.parse(runTime)-Date.parse(snippet.publishedAt);statements.push(db.prepare('INSERT OR IGNORE INTO discovery_observations(video_id,source,discovered_at,published_at,delay_seconds,strategy_version,search_page_id) VALUES(?,?,?,?,?,?,?)').bind(item.id,source,runTime,snippet.publishedAt||null,Number.isFinite(lag)&&lag>=0?Math.floor(lag/1000):null,SEARCH_STRATEGY,context.pageId||null));}
       for(const {p,classification:found} of missing){
         const classification=p.review_mode==='review'?'PENDING':found;
         statements.push(db.prepare("INSERT OR IGNORE INTO discovery_notifications(performer_id,video_id,created_at,source) SELECT ?,?,?,? WHERE ?='CONFIRMED' AND ?='active' AND NOT EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?) AND NOT EXISTS(SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?)").bind(p.id,item.id,runTime,source,classification,p.status,p.id,item.id,p.id,item.id));
@@ -88,7 +91,7 @@ export function searchDailyLimit(env){
   if(value===undefined||value===null||value==='')return 20;
   const limit=Number(value);return Number.isFinite(limit)?Math.max(0,Math.min(80,Math.floor(limit))):20;
 }
-export function searchInterval(env){return Math.max(75,Math.ceil(1440/Math.max(1,searchDailyLimit(env))/15)*15)*60000;}
+export function searchInterval(env){return Math.max(15,1440/Math.max(1,searchDailyLimit(env)))*60000;}
 export function performerQueries(p,songs=[],rotation=0){
   const quote=s=>'"'+String(s).replace(/["\\]/g,' ').trim()+'"';
   const names=[...new Set([p.name,...JSON.parse(p.aliases)])].filter(Boolean);
@@ -109,14 +112,16 @@ export function performerQueries(p,songs=[],rotation=0){
 export function recentSongTitles(videos){
   const extract=v=>{
     if(typeof v.song==='string'&&v.song.trim())return v.song.trim();
-    const parts=String(v.title||'').split(/\s*\|\s*/).map(s=>s.trim()).filter(Boolean);
+    const title=String(v.title||'');
+    if(/mark your calendars|sneak\s*peek|live\s*stream|livestream|vlog|announcement|happy birthday|concert tickets|save the date|premiere countdown/i.test(title))return '';
+    const parts=title.replace(/#[\p{L}\p{N}_-]+/gu,' ').split(/\s*\|\s*/).map(s=>s.trim()).filter(Boolean);
     // Prefer a title segment with an explicit “by Artist” marker (for example,
     // “DECODE by Paramore”) over location/series text elsewhere in the title.
     const by=parts.map(s=>/^(.+?)\s+by\s+.+$/i.exec(s)?.[1]).find(Boolean);
     let candidate=by||parts[0]||'';
     candidate=candidate.replace(/^Missioned\s+Souls\s*[-:–—]\s*/i,'').trim();
     if(!by)candidate=candidate.split(/\s[-–—]\s/)[0].trim();
-    return candidate;
+    return candidate.replace(/\s*\((?:studio |family band )?cover\)\s*/ig,' ').replace(/\s+/g,' ').trim();
   };
   return [...new Set(videos.filter(v=>Number.isFinite(Date.parse(v.publishedAt))).sort((a,b)=>Date.parse(b.publishedAt)-Date.parse(a.publishedAt)).map(extract).filter(s=>typeof s==='string'&&s.trim().length>=3&&s.length<=100).map(s=>s.trim()))].slice(0,3);
 }
@@ -233,7 +238,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
       const recordSearch=async report=>db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(`search-diagnostics:${p.id}`,JSON.stringify({at:now,dailyLimit:searchDailyLimit(env),...report})).run();
       if(searched>=4||api.calls>22||Date.now()>api.deadline-4000){await recordSearch({status:'deferred',reason:'Discovery run budget reached'});break;}
       const key=`search:${p.id}`,progressKey=`search-progress:${p.id}`;
-      const quotaKey=`search-budget:${now.slice(0,10)}`,rotationKey=`search-rotation:${p.id}`,touchKey=`search-touch:${p.id}`;
+      const quotaKey=`search-attempt-budget:${pacificDay(now)}`,rotationKey=`search-rotation:${p.id}`,touchKey=`search-touch:${p.id}`;
       const stateKeys=[key,progressKey,quotaKey,rotationKey,touchKey];
       const searchState=new Map((await db.prepare('SELECT key,value FROM state WHERE key IN ('+stateKeys.map(()=>'?').join(',')+')').bind(...stateKeys).all()).results.map(r=>[r.key,r]));
       const prev=searchState.get(key),pending=searchState.get(progressKey);
@@ -254,29 +259,33 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
         cursor={term:0,page:null,query:queries[rotation%queries.length],rotation,startedAt:now,after:prev?new Date(Date.parse(prev.value)-7*86400000).toISOString():p.lookback_days===0?null:new Date(Date.now()-p.lookback_days*86400000).toISOString()};
       }
       const query=cursor.query||`"${terms[cursor.term]||p.name}" reaction`;
-      const slot=await db.prepare("INSERT INTO state(key,value) VALUES(?,'1') ON CONFLICT(key) DO UPDATE SET value=CAST(state.value AS INTEGER)+1 WHERE CAST(state.value AS INTEGER)<?").bind(quotaKey,dailyLimit).run();
-      if(!slot.meta.changes){await recordSearch({status:'capped',reason:'Daily search budget reached'});final='partial';detail+='Daily search budget reached; queued searches resume tomorrow. ';break;}
+      const pageId=await startSearchPage(db,{runId:id,performerId:p.id,query,cursor,env,at:now});
       searched++;
       await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(`search-touch:${p.id}`,now).run();
       try{
         if(!pending)await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(progressKey,JSON.stringify(cursor)).run();
         await recordSearch({status:'requesting',term:terms[cursor.term]||p.name,windowEnd:cursor.startedAt});
-        const result=await api.get('search',{part:'snippet',type:'video',order:'date',maxResults:50,q:query,publishedAfter:cursor.after,publishedBefore:cursor.startedAt,pageToken:cursor.page});
+        const result=await api.get('search',{part:'snippet',type:'video',order:'date',maxResults:50,q:query,publishedAfter:cursor.after,publishedBefore:cursor.startedAt,pageToken:cursor.page},{pageId,limit:dailyLimit});
         const ids=(result.items||[]).map(x=>x.id?.videoId).filter(Boolean);
         let uniqueAdded=0,newReactors=0,delaySamples=0,delayTotal=0,maxDelay=0;
+        const beforeMatches=new Set((await db.prepare('SELECT video_id FROM matches WHERE performer_id=? AND video_id IN (SELECT value FROM json_each(?))').bind(p.id,JSON.stringify(ids)).all()).results.map(r=>r.video_id));
+        const eligibleBeforePage=new Set((await db.prepare("SELECT id FROM channels WHERE discovery_scope='eligible'").all()).results.map(c=>c.id));
         if(ids.length){const data=await api.get('videos',{part:'snippet,contentDetails,statistics,status',id:ids.join(',')});
           const before=(await db.prepare('SELECT video_id FROM discovery_observations WHERE video_id IN ('+ids.map(()=>'?').join(',')+')').bind(...ids).all()).results;
           const known=new Set(before.map(v=>v.video_id));
           const eligibleBefore=new Set((await db.prepare("SELECT id FROM channels WHERE discovery_scope='eligible'").all()).results.map(c=>c.id));
-          uniqueAdded=await saveVideos(db,data.items||[],[p],now,'Performer discovery search');added+=uniqueAdded;metrics.examined+=ids.length;
+          uniqueAdded=await saveVideos(db,data.items||[],[p],now,'Performer discovery search',{pageId});added+=uniqueAdded;metrics.examined+=ids.length;
           const observations=(await db.prepare('SELECT video_id,delay_seconds FROM discovery_observations WHERE source=\'Performer discovery search\' AND discovered_at=? AND video_id IN ('+ids.map(()=>'?').join(',')+')').bind(now,...ids).all()).results.filter(v=>!known.has(v.video_id));
           const found=new Set(observations.map(v=>v.video_id));
           const eligibleAfter=new Set((await db.prepare("SELECT id FROM channels WHERE discovery_scope='eligible'").all()).results.map(c=>c.id));
           newReactors=new Set((data.items||[]).filter(v=>found.has(v.id)&&!eligibleBefore.has(v.snippet.channelId)&&eligibleAfter.has(v.snippet.channelId)).map(v=>v.snippet.channelId)).size;
           for(const v of observations)if(v.delay_seconds!==null&&v.delay_seconds>=0&&v.delay_seconds<=604800){delaySamples++;delayTotal+=v.delay_seconds;maxDelay=Math.max(maxDelay,v.delay_seconds);}
         }
-        if(result.nextPageToken)cursor.page=result.nextPageToken;
-        else{cursor.page=null;cursor.term++;}
+        const outcome=await recordSearchResults(db,pageId,p.id,ids,beforeMatches,eligibleBeforePage,now);
+        await finishSearchPage(db,pageId,{status:'completed',results:ids.length,newVideos:outcome.newVideos,newReactors:outcome.newReactors});
+        const depth=cursor.depth??(cursor.page?0:1);
+        if(result.nextPageToken){cursor.page=result.nextPageToken;cursor.depth=depth?depth+1:0;}
+        else{cursor.page=null;cursor.term++;cursor.depth=1;}
         const continuing=Boolean(cursor.page)||(!cursor.query&&cursor.term<terms.length);
         if(continuing){
           await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(progressKey,JSON.stringify(cursor)).run();
@@ -292,6 +301,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
         await db.prepare('DELETE FROM state WHERE key=?').bind(`search-error:${p.id}`).run();
         await recordSearch({status:continuing?'continuing':'completed',query,results:ids.length,uniqueVideos:uniqueAdded,newReactors,windowEnd:cursor.startedAt,nextDueAt:new Date(Date.parse(now)+interval).toISOString()});
       }catch(error){
+        await finishSearchPage(db,pageId,{status:'failed',error:error.message});
         await recordSearch({status:'failed',reason:error.message});
         await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(`search-error:${p.id}`,error.message).run();
         throw error;
@@ -320,6 +330,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
   }catch(error){final='partial';detail+=error.message;}
   finally{
     await db.prepare('UPDATE runs SET finished_at=?,status=?,calls=?,channels=?,added=?,detail=?,history_pages=?,recent_added=?,history_added=?,api_ms=?,db_ms=?,duration_ms=?,records_examined=?,rows_read=?,rows_written=?,query_metrics=? WHERE id=?').bind(new Date().toISOString(),final,api.calls,scanned,added,detail,historyPages,recentAdded,historyAdded,api.requestMs,metrics.dbMs,Date.now()-startedMs,metrics.examined,metrics.rowsRead,metrics.rowsWritten,JSON.stringify([...metrics.queries.values()].sort((a,b)=>b.rowsRead-a.rowsRead).slice(0,8)),id).run();
+    await sampleDiscoveryHealth(db,env,{status:final,calls:api.calls,durationMs:Date.now()-startedMs,rowsRead:metrics.rowsRead,rowsWritten:metrics.rowsWritten});
     // Lease remains until its 120-second expiry, preventing accidental rapid repeats.
   }
   return {id,status:final,calls:api.calls,channels:scanned,added,detail};

@@ -708,9 +708,11 @@ Eligible channels whose latest uploads have not been checked in 24 hours receive
 
 Performer discovery alternates broad performer searches with a name-only search and up to three recent dated song searches. Song titles come from stored official MS Journey titles in “Song by Artist” format or existing catalog song fields. Missing song information leaves broad searches in rotation. Search windows overlap by seven days; video IDs prevent duplicate catalog entries and existing moderation decisions remain intact.
 
-With the default 20-page UTC daily budget, search pages are spaced at least 75 minutes apart, including continuations. Lower limits increase the interval. Existing legacy cursors finish with their original fixed windows. Runtime limits or API failures may delay a search; the daily cap is never increased by this update.
+The search budget counts request attempts, including retries, on Pacific calendar days. Production remains at 20/day. Spacing follows the allowance (1440 divided by the daily limit, with a 15-minute minimum); the existing 15-minute scheduler picks up due work. At 20/day the 72-minute interval normally becomes 75 minutes between scheduled searches. Existing cursors retain their original windows. Promotional and livestream titles are excluded from new song hints; hashtags are removed. The first release day conservatively carries over legacy UTC request counts. RJ counters exclude external scripts using the same Google project.
 
 Moderator query diagnostics show cumulative pages, newly cataloged videos, newly eligible reactors, and nonnegative publication-to-discovery delays up to seven days. Metrics start with this update; already known videos do not count as new discoveries.
+
+Moderators can select Load daily & weekly discovery report to inspect dated Pacific-day results, fresh median/p90 delays, older finds, request failures, coverage samples and weekly query/source breakdowns. Today is partial; weekly comparisons use completed days and show how many days have measurements. New page, attempt and result records preserve strategy/settings and first-discovery attribution. Legacy cumulative counters cannot reconstruct historical daily query performance. See docs/discovery-performance.md for definitions and limitations.
 
 ### Moderator discovery timing
 
