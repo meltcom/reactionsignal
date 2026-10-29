@@ -1,3 +1,4 @@
+import {archiveSettings,protectedViewName,builtinViewId,normalizedViewName,viewScope} from './view-settings.mjs';
 import {award} from './community.mjs';
 import {isFacebookDiscussion,facebookDiscussion} from './ms-discussion.mjs';
 import {canPublishDirectly} from './reputation.mjs';
@@ -9,6 +10,9 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 const txt=(v,min,max)=>{if(typeof v!=='string'||v.trim().length<min||v.trim().length>max)fail(`Use ${min}–${max} characters.`);return v.trim();};
 export function settings(input,performerIds=[]){
  const b=input||{},out={};
+ if(b.scope==='ms-journey'){try{return archiveSettings(b);}catch(e){fail(e.message);}}
+ if(b.scope!==undefined){if(b.scope!=='reactions')fail('Invalid view scope.');out.scope='reactions';}
+ if(b.msJourney!==undefined){try{out.msJourney=archiveSettings(b.msJourney);}catch(e){fail(e.message);}}
  const choices={followingReactorSort:['newest','ranked','personal','subscribers','name'],followingSongSort:['name','ranked'],followingGroupSort:['name','ranked'],theme:['light','dark','system'],accent:['teal','blue','violet'],layout:['cards','compact','large','table'],density:['compact','standard','spacious'],thumbnail:['small','medium','large'],sort:['latest','rated','views','comments','subscribers','discovered','new-reactor','reactor-ranked'],group:['none','performer','reactor','song','genre','date','source'],landing:['all','today','favorites','following','community'],performer:['all',...performerIds]};
  for(const [k,allowed] of Object.entries(choices))if(b[k]!==undefined){if(!allowed.includes(b[k]))fail(`Invalid ${k}.`);out[k]=b[k];}
  for(const k of ['hideShorts','hideWatched','verifiedOnly','favoritesOnly','autoplay'])if(b[k]!==undefined){if(typeof b[k]!=='boolean')fail(`Invalid ${k}.`);out[k]=b[k];}
@@ -90,8 +94,8 @@ export async function social(request,env,seed,user){try{
   ]);
   return json({ok:true,id});
  }
- if(path==='/preferences'){await run('INSERT INTO preferences VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET settings=excluded.settings,updated_at=excluded.updated_at',user.id,JSON.stringify(settings(b,performerIds)),now);return json({ok:true});}
- if(path==='/view'){if(b.remove){await run('DELETE FROM saved_views WHERE id=? AND user_id=?',txt(b.id,1,100),user.id);return json({ok:true});}if((await first('SELECT COUNT(*) n FROM saved_views WHERE user_id=?',user.id)).n>=50)fail('You can save up to 50 views.');await run('INSERT INTO saved_views VALUES(?,?,?,?,?)',crypto.randomUUID(),user.id,txt(b.name,1,60),JSON.stringify(settings(b.settings,performerIds)),now);return json({ok:true});}
+ if(path==='/preferences'){if(b.scope==='ms-journey')fail('Store archive preferences under msJourney.');await run('INSERT INTO preferences VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET settings=excluded.settings,updated_at=excluded.updated_at',user.id,JSON.stringify(settings(b,performerIds)),now);return json({ok:true});}
+ if(path==='/view'){if(builtinViewId(b.id)||b.builtin===true)fail('Built-in views cannot be overwritten, renamed or deleted.');if(!b.remove&&protectedViewName(b.name))fail('Small, Default and Large are protected. Save under a different name.');if(!b.remove&&b.id)fail('Save changes as a new view under a different name.');if(b.remove){await run('DELETE FROM saved_views WHERE id=? AND user_id=?',txt(b.id,1,100),user.id);return json({ok:true});}const existingViews=await all('SELECT name,settings FROM saved_views WHERE user_id=?',user.id);if(existingViews.some(v=>normalizedViewName(v.name)===normalizedViewName(b.name)&&viewScope(JSON.parse(v.settings).scope)===viewScope(b.settings?.scope)))fail('A personal view with that name already exists. Choose a different name.');if((await first('SELECT COUNT(*) n FROM saved_views WHERE user_id=?',user.id)).n>=50)fail('You can save up to 50 views.');await run('INSERT INTO saved_views VALUES(?,?,?,?,?)',crypto.randomUUID(),user.id,txt(b.name,1,60),JSON.stringify(settings(b.settings,performerIds)),now);return json({ok:true});}
  if(path==='/reactor-rating'){
   if(!/^UC[\w-]{22}$/.test(b.channelId||'')||typeof b.remove!=='boolean')fail('Choose a valid reactor.');
   if(!await first('SELECT 1 FROM channels WHERE id=?',b.channelId))fail('Unknown reactor.',404);

@@ -26,6 +26,9 @@ for(const name of ['app-192','app-512','app-maskable','app-apple'])assets['/imag
 assets['/member-guides.js']={type:'text/javascript; charset=utf-8',body:await readFile(new URL('member-guides.js',root),'utf8')};
 for(const name of ['reaction-journey-overview.pdf','reaction-journey-app-guide.pdf'])assets['/private-guides/'+name]={type:'application/pdf',base64:(await readFile(new URL('member-guides/'+name,root))).toString('base64')};
 const {createHash}=await import('node:crypto');
+const journeyBundle=await build({entryPoints:[fileURLToPath(new URL('journey-interface.mjs',root))],bundle:true,format:'iife',platform:'browser',target:'es2022',write:false,minify:true});
+assets['/journey-interface.js']={type:'text/javascript; charset=utf-8',body:journeyBundle.outputFiles[0].text};
+assets['/journey-interface.css']={type:'text/css; charset=utf-8',body:await readFile(new URL('journey-interface.css',root),'utf8')};
 const workerSource=await readFile(new URL('service-worker.js',root),'utf8');
 const version=createHash('sha256').update(JSON.stringify(assets)+workerSource).digest('hex').slice(0,16);
 assets['/service-worker.js']={type:'text/javascript; charset=utf-8',body:workerSource.replaceAll('__APP_VERSION__',version)};
@@ -37,7 +40,7 @@ seed.importRun=JSON.parse(await readFile(new URL('import-run.json',root),'utf8')
 assets['/release.json']={type:'application/json; charset=utf-8',body:JSON.stringify(release)};
 await writeFile(new URL('dist/release.json',root),JSON.stringify(release));
 await writeFile(new URL('dist/server/assets.mjs',root),`export const assets=${JSON.stringify(assets)};\nexport const seed=${JSON.stringify(seed)};\n`);
-for(const f of ['discovery-measurement.mjs','official-feed.mjs','cache.mjs','operations.mjs','rss.mjs','youtube-subscriptions.mjs','youtube-connection.mjs','db.mjs','discovery.mjs','video-format.mjs','format-recheck.mjs','video-metadata.mjs','approval-rules.mjs','channel-stats.mjs','community.mjs','ms-discussion.mjs','reputation.mjs','social.mjs','auth.mjs','performers.mjs','push.mjs','recheck.mjs','workbook-import.mjs','reconciliation.mjs'])await copyFile(new URL(`server/${f}`,root),new URL(`dist/server/${f}`,root));
+for(const f of ['view-settings.mjs','discovery-measurement.mjs','official-feed.mjs','cache.mjs','operations.mjs','rss.mjs','youtube-subscriptions.mjs','youtube-connection.mjs','db.mjs','discovery.mjs','video-format.mjs','format-recheck.mjs','video-metadata.mjs','approval-rules.mjs','channel-stats.mjs','community.mjs','ms-discussion.mjs','reputation.mjs','social.mjs','auth.mjs','performers.mjs','push.mjs','recheck.mjs','workbook-import.mjs','reconciliation.mjs'])await copyFile(new URL(`server/${f}`,root),new URL(`dist/server/${f}`,root));
 await build({entryPoints:[fileURLToPath(new URL('server/missioned-souls.mjs',root))],outfile:fileURLToPath(new URL('dist/server/missioned-souls.mjs',root)),bundle:true,format:'esm',platform:'neutral',target:'es2022'});
 await copyFile(new URL('server/security.mjs',root),new URL('dist/server/security.mjs',root));
 await copyFile(new URL('server/worker.mjs',root),new URL('dist/server/index.js',root));
