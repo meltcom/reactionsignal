@@ -29,7 +29,7 @@ async function communityApi(path,body){
   const result=await response.json();if(!response.ok)throw new Error(result.error||'Please try again.');return result;
 }
 function renderVideoDiscussionHeading(video){
- $('dialogTitle').textContent=video.title;$('dialogTitle').title=video.title;
+ const archive=!!video.archive;$('ratingForm').querySelector('h3').textContent=archive?'Rate this video':'Rate this reaction';$('ratingForm').querySelector('p').textContent=archive?'1 = poor · 3 = good · 5 = outstanding. Rate this video.':'1 = poor · 3 = good · 5 = outstanding. Rate the reaction’s quality and insight.';$('commentForm').elements.body.placeholder=archive?'What did you enjoy about this video?':'Share your thoughts about this reaction…';$('dialogTitle').textContent=video.title;$('dialogTitle').title=video.title;
  const channel=video.channelName||catalog?.channels?.find(c=>c.id===video.channelId)?.name||'';
  $('dialogChannel').textContent=channel?'Reactor · '+channel:'';$('dialogChannel').hidden=!channel;
 }

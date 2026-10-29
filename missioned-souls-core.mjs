@@ -36,15 +36,15 @@ export function viewGain(v,days,now=Date.now()){
  if(!candidates.length||v.views<candidates[0].views)return null;return v.views-candidates[0].views;
 }
 const inCategory=(video,category)=>category==='All videos'||(category==='Facebook only'?video.platform==='Facebook'&&!video.youtubeEquivalent:category==='YouTube only'?video.platform==='YouTube':(video.tags||[]).includes(category));
-export function selectVideos(videos,{category='All videos',source='all',query='',includeShorts=true,ranking='latest',year='all',visibility='visible'}={},now=Date.now()){
+export function selectVideos(videos,{format='all',limit='legacy',category='All videos',source='all',query='',includeShorts=true,ranking='latest',year='all',visibility='visible'}={},now=Date.now()){
  videos=videos.filter(v=>visibility==='managed'?['hidden','removed'].includes(v.visibility):!['hidden','removed'].includes(v.visibility));
  videos=videos.filter(v=>year==='all'||(year==='unknown'?!Number.isFinite(Date.parse(v.publishedAt||'')):Number.isFinite(Date.parse(v.publishedAt||''))&&String(new Date(v.publishedAt).getUTCFullYear())===year));
- let list=videos.filter(v=>visibility==='managed'||v.available!==false).filter(v=>inCategory(v,category)).filter(v=>source==='all'||v.platform===source).filter(v=>includeShorts||!(v.tags||[]).includes('Shorts')).filter(v=>v.title.toLowerCase().includes(query.toLowerCase()));
+ let list=videos.filter(v=>visibility==='managed'||v.available!==false).filter(v=>inCategory(v,category)).filter(v=>source==='all'||(source==='facebook-only'?v.platform==='Facebook'&&!v.youtubeEquivalent:v.platform===source)).filter(v=>format==='shorts'?(v.tags||[]).includes('Shorts'):format==='full'||!includeShorts?!(v.tags||[]).includes('Shorts'):true).filter(v=>v.title.toLowerCase().includes(query.toLowerCase()));
  const windows={day:1,week:7,month:30};
  const metric=v=>windows[ranking]?viewGain(v,windows[ranking],now):ranking==='latest'||ranking==='recent'?Date.parse(v.publishedAt):v[ranking];
  list=list.filter(v=>metric(v)!=null&&Number.isFinite(metric(v))).sort((a,b)=>metric(b)-metric(a)||a.id.localeCompare(b.id));
  if(ranking==='latest'){
-  const unknown=videos.filter(v=>(visibility==='managed'||v.available!==false)&&!v.publishedAt).filter(v=>inCategory(v,category)).filter(v=>source==='all'||v.platform===source).filter(v=>includeShorts||!(v.tags||[]).includes('Shorts')).filter(v=>v.title.toLowerCase().includes(query.toLowerCase()));list.push(...unknown);
+  const unknown=videos.filter(v=>(visibility==='managed'||v.available!==false)&&!v.publishedAt).filter(v=>inCategory(v,category)).filter(v=>source==='all'||(source==='facebook-only'?v.platform==='Facebook'&&!v.youtubeEquivalent:v.platform===source)).filter(v=>format==='shorts'?(v.tags||[]).includes('Shorts'):format==='full'||!includeShorts?!(v.tags||[]).includes('Shorts'):true).filter(v=>v.title.toLowerCase().includes(query.toLowerCase()));list.push(...unknown);
  }
- return ['recent','views','likes','comments','day','week','month'].includes(ranking)?list.slice(0,10):list;
+ return limit==='10'||limit==='legacy'&&['recent','views','likes','comments','day','week','month'].includes(ranking)?list.slice(0,10):list;
 }

@@ -52,6 +52,9 @@ test('release packages MS Journey visibility controls with matching help and exi
 });
 
 test('release retains compact cards, app navigation and optimized branding',()=>{
+ assert.ok(assets['/journey-interface.js']?.body.length>1000,'shared journey interface bundle');
+ assert.ok(assets['/journey-interface.css']?.body.includes('rgba(255,255,255,.88)'),'original coastal translucence');
+ assert.ok(assets['/index.html'].body.includes('src="/journey-interface.js"'),'shared interface loaded');
  const dashboard=assets['/dashboard.js'].body,css=assets['/dashboard.css'].body,mobile=assets['/mobile-app.js'].body;
  for(const feature of ['card-watch-status','card-watch-link','video-play-link','videoDiscussionActionsMarkup','lastFeedMarkup','dataIndexes'])assert.ok(dashboard.includes(feature),feature);
  assert.ok(css.includes('.card-heading')&&css.includes('.card-watch-link'));
