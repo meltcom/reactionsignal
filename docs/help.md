@@ -661,7 +661,7 @@ Contribution Points recognize helpful activity and determine your badge. Trusted
 
 - Connect / renew channel notifications renews channel subscriptions; received notifications still require API checks and matching.
 
-- DISCOVERY_DAILY_SEARCH_LIMIT currently limits performer searches to 20/day; other API calls and other scripts using the Google project also consume applicable quota.
+- DISCOVERY_DAILY_SEARCH_LIMIT limits performer search attempts to 40/day; other API calls and other scripts using the Google project also consume applicable quota.
 
 - Google Cloud’s YouTube Data API quota page is the source for actual quota usage.
 
@@ -708,7 +708,7 @@ Eligible channels whose latest uploads have not been checked in 24 hours receive
 
 Performer discovery alternates broad performer searches with a name-only search and up to three recent dated song searches. Song titles come from stored official MS Journey titles in “Song by Artist” format or existing catalog song fields. Missing song information leaves broad searches in rotation. Search windows overlap by seven days; video IDs prevent duplicate catalog entries and existing moderation decisions remain intact.
 
-The search budget counts request attempts, including retries, on Pacific calendar days. Production remains at 20/day. Spacing follows the allowance (1440 divided by the daily limit, with a 15-minute minimum); the existing 15-minute scheduler picks up due work. At 20/day the 72-minute interval normally becomes 75 minutes between scheduled searches. Existing cursors retain their original windows. Promotional and livestream titles are excluded from new song hints; hashtags are removed. The first release day conservatively carries over legacy UTC request counts. RJ counters exclude external scripts using the same Google project.
+The search budget counts request attempts, including retries, on Pacific calendar days. Production is configured for 40/day. Spacing follows the allowance (1440 divided by the daily limit, with a 15-minute minimum); the existing 15-minute scheduler picks up due work. At 40/day the 36-minute interval normally becomes 45 minutes between scheduled searches. Existing cursors retain their original windows. Promotional and livestream titles are excluded from new song hints; hashtags are removed. The first release day conservatively carries over legacy UTC request counts. RJ counters exclude external scripts using the same Google project.
 
 Moderator query diagnostics show cumulative pages, newly cataloged videos, newly eligible reactors, and nonnegative publication-to-discovery delays up to seven days. Metrics start with this update; already known videos do not count as new discoveries.
 

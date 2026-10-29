@@ -5,7 +5,7 @@ This release keeps the 15-minute scheduler, daily channel coverage, active-chann
 ## Search changes
 
 - Search spacing is `max(15, 1440/dailyLimit)` minutes; the next scheduled run picks up due work. At 20/day the interval is 72 minutes (normally 75 minutes on the existing cron); at 40 it is 36 minutes (normally 45). This is budget-aware pacing, not a guarantee that every quota slot is used.
-- The production cap stays 20. An increase to 40 requires checking the actual Google project's search quota and other consumers. The code can support a separately authorized configuration change later.
+- The authorized production cap is 40 attempts/day. The Missioned Souls Tracker console showed 100 search calls/day and 10,000 general queries/day. The deployed key's project association and external consumers have not been independently verified; monitor project-wide usage and quota errors during the rollout.
 - Every outgoing search attempt, including retries and network failures, reserves a slot before requesting YouTube. Caps reset on Pacific calendar days, including DST. The first measured day conservatively carries recorded searches from both overlapping legacy UTC days; carryover is a reservation, not an observed measurement attempt. Other processes using the same Google project are not included in RJ's counters.
 - Promotional announcements, sneak peeks, vlogs and livestream labels are excluded from new song hints. Hashtags are stripped; by-artist and dash-artist titles are parsed. Existing saved cursors retain their query/window until finished, so an old malformed term may finish before clean hints take effect.
 
@@ -21,7 +21,7 @@ Records are retained; this release adds no automatic deletion. Raw settings and 
 
 ## Moderator report
 
-Open Reactors → Discovery status & catalog coverage → Load daily & weekly discovery report. It uses the moderator-only, authenticated GET `/api/discovery/performance` endpoint, fetched on demand rather than every status poll. Responses are private/no-store.
+Open My Feed → Discovery status & catalog coverage → Load daily & weekly discovery report. It uses the moderator-only, authenticated GET `/api/discovery/performance` endpoint, fetched on demand rather than every status poll. Responses are private/no-store.
 
 The report shows 15 Pacific calendar dates including partial today. Weekly summaries compare the last seven completed Pacific dates with the preceding seven. Displayed measured-day and sample counts make incomplete periods visible. Initial weeks cannot be treated as full before/after comparisons. Fresh delay means 0–24 hours from publication to first discovery; older finds and unknown/premiere timings are separate. Median uses the middle pair for even samples, and p90 uses nearest rank.
 
