@@ -1,3 +1,4 @@
+import {pacificDay} from './discovery-measurement.mjs';
 import {officialFeedVideos} from './official-feed.mjs';
 export const EXCLUDED = ['pwNtcFZ_59I','N1VgQd6YGXY','dw3TLJ9tfdE','_605HPZxVcg','P69VWMewzQY'];
 // Fresh uploads are discovered within 24 hours of publication; older catalog finds are separate.
@@ -70,10 +71,10 @@ export async function status(db,env) {
   const rssLast=await db.prepare("SELECT value FROM state WHERE key='rss-last-batch'").first();
   const rssCoverage=await db.prepare("SELECT COUNT(*) total,SUM(CASE WHEN r.checked_at>=? AND r.error IS NULL THEN 1 ELSE 0 END) checked,SUM(CASE WHEN r.error IS NOT NULL THEN 1 ELSE 0 END) errors FROM channels c LEFT JOIN rss_checks r ON r.channel_id=c.id WHERE c.discovery_scope='eligible'").bind(since).first();
   const rssErrors=(await db.prepare("SELECT r.error,COUNT(*) channels FROM rss_checks r JOIN channels c ON c.id=r.channel_id WHERE c.discovery_scope='eligible' AND r.error IS NOT NULL GROUP BY r.error ORDER BY channels DESC LIMIT 10").all()).results;
-  const searchState=(await db.prepare("SELECT key,value FROM state WHERE key IN ('search:missioned-souls','search-progress:missioned-souls','search-error:missioned-souls','search-diagnostics:missioned-souls',?)").bind('search-budget:'+requestDay).all()).results;
+  const searchState=(await db.prepare("SELECT key,value FROM state WHERE key IN ('search:missioned-souls','search-progress:missioned-souls','search-error:missioned-souls','search-diagnostics:missioned-souls',?)").bind('search-attempt-budget:'+pacificDay()).all()).results;
   const searchValues=new Map(searchState.map(x=>[x.key,x.value]));
   const searchDiagnostic=searchValues.get('search-diagnostics:missioned-souls');
-  const discoverySearch={lastBatch:searchDiagnostic?JSON.parse(searchDiagnostic):null,lastCompletedAt:searchValues.get('search:missioned-souls')||null,pending:Boolean(searchValues.get('search-progress:missioned-souls')),error:searchValues.get('search-error:missioned-souls')||null,usedToday:Number(searchValues.get('search-budget:'+requestDay)||0)};
+  const discoverySearch={lastBatch:searchDiagnostic?JSON.parse(searchDiagnostic):null,lastCompletedAt:searchValues.get('search:missioned-souls')||null,pending:Boolean(searchValues.get('search-progress:missioned-souls')),error:searchValues.get('search-error:missioned-souls')||null,usedToday:Number(searchValues.get('search-attempt-budget:'+pacificDay())||0)};
   const repairState=await db.prepare("SELECT value FROM state WHERE key='discovery-repair-baseline-v1'").first();
   const repairBaseline=repairState?JSON.parse(repairState.value):null;
   const repairDelays=repairBaseline?(await db.prepare("SELECT source,COUNT(*) samples,AVG(delay_seconds) average_seconds,MAX(delay_seconds) max_seconds FROM discovery_observations WHERE discovered_at>=? AND delay_seconds BETWEEN 0 AND 604800 GROUP BY source ORDER BY source").bind(repairBaseline.at>since?repairBaseline.at:since).all()).results:[];
@@ -84,7 +85,7 @@ export async function status(db,env) {
   const unavailableChannels=(await db.prepare("SELECT id,name,recent_failures,recent_retry_at,recent_error FROM channels WHERE discovery_scope='eligible' AND recent_failures>0 ORDER BY recent_retry_at LIMIT 50").all()).results;
   const overdueChannels=(await db.prepare("SELECT id,name,recent_checked_at,recent_attempted_at,recent_retry_at,recent_error FROM channels WHERE discovery_scope='eligible' AND (recent_checked_at IS NULL OR recent_checked_at<?) ORDER BY recent_checked_at,recent_attempted_at,id LIMIT 50").bind(since).all()).results.map(c=>({...c,reason:c.recent_retry_at&&c.recent_retry_at>new Date().toISOString()?'Waiting for API retry':!c.recent_checked_at?'No successful recent-upload check yet':'Overdue; awaiting scheduler',error:c.recent_error||null}));
   const queryMetrics=(await db.prepare("SELECT value FROM state WHERE key>='search-query:missioned-souls:' AND key<'search-query:missioned-souls;' ORDER BY key").all()).results.map(r=>JSON.parse(r.value));
-  discoverySearch.queries=queryMetrics;
+  discoverySearch.queries=queryMetrics;discoverySearch.quotaDay=pacificDay();discoverySearch.quotaTimezone='America/Los_Angeles';
   coverage.overdueChannels=overdueChannels;
   return {olderDiscoveryDelay,olderDelaySources,delayWindow,discoverySearch,repairBaseline,repairDelays,delaySources,notificationDelays,rss:{lastBatch:rssLast?JSON.parse(rssLast.value):null,coverage:rssCoverage,errors:rssErrors},channelStats:channelStats?JSON.parse(channelStats.value):null,unavailableChannels,heldChannels,scopes,youtubeRequests,requestDay,delay,apiConfigured:Boolean(env.YOUTUBE_API_KEY),automation,lastScheduledAt:scheduled?.value||null,lastSuccessfulBatchAt:last?.finished_at||null,coverage,historyBacklog:backlog?.channels||0,lastDiscoveryRunAt:history.results.find(r=>r.finished_at)?.finished_at||null,runs:history.results,message};
 }

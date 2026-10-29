@@ -218,7 +218,7 @@ test('Missioned Souls history resumes pages, honors daily budgets and holds unce
  await d.prepare("DELETE FROM state WHERE key='discovery-lease'").run();
  const capped=await runDiscovery(env,seed,fetcher,{performerId:'missioned-souls'});assert.equal(capped.status,'partial');assert.match(capped.detail,/Daily search budget/);assert.equal(searches,1);
  assert.equal((await d.prepare("SELECT value FROM state WHERE key='search-progress:missioned-souls'").first()).value,progress);
- await d.prepare("DELETE FROM state WHERE key='discovery-lease' OR key LIKE 'search-budget:%'").run();
+ await d.prepare("DELETE FROM state WHERE key='discovery-lease' OR key LIKE 'search-attempt-budget:%'").run();
  await d.prepare("UPDATE state SET value=? WHERE key='search-touch:missioned-souls'").bind(new Date(Date.now()-25*3600000).toISOString()).run();
  await runDiscovery(env,seed,fetcher,{performerId:'missioned-souls'});assert.equal(searches,2);
  assert.equal(await d.prepare("SELECT value FROM state WHERE key='search-progress:missioned-souls'").first(),null);
@@ -243,7 +243,7 @@ test('weighted query rotation favors proven name searches and retains song and a
  assert.equal(q.filter(x=>x==='"Missioned Souls" reaction').length,6);
  assert.ok(q.includes('"I HATE MYSELF FOR LOVING YOU" reaction'));
  assert.ok(q.includes('"MissionedSoul" reaction'));
- assert.equal(searchInterval({}),75*60000);assert.equal(searchInterval({DISCOVERY_DAILY_SEARCH_LIMIT:10}),150*60000);
+ assert.equal(searchInterval({}),72*60000);assert.equal(searchInterval({DISCOVERY_DAILY_SEARCH_LIMIT:10}),144*60000);
 });
 test('official channel RSS refreshes recent song hints without Data API calls and falls back to cache',async()=>{
  const d=db(),channelId='UCabcdefghijklmnopqrstuv';
