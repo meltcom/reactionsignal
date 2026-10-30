@@ -46,6 +46,7 @@ function customize(){
 function openSharedAppearance(){account().openPreferences();$('preferencesTitle').textContent='Shared appearance';$('saveViewButton').hidden=true;$('restoreOriginalDefault').hidden=true;const sections=[...$('preferencesForm').querySelectorAll('.preference-section')];sections.slice(1).forEach(section=>section.hidden=true);sections[0].querySelectorAll('label').forEach(label=>{label.hidden=!['theme','accent'].includes(label.querySelector('select')?.name);});}
 function openMore(){
  const d=dialog('journey-more','More'),body=d.querySelector('.journey-dialog-body');body.replaceChildren();
+ if(scope==='ms-journey'&&window.msJourney?.canAddFacebook)body.append(button('Add a Facebook video',()=>{d.close();window.msJourney.addFacebook();}));
  body.append(button('Saved Views',()=>{d.close();openSaved();}),button(scope==='ms-journey'?'Customize MS Journey':'Customize feed',()=>{d.close();customize();}));
  if(scope==='ms-journey'&&window.msJourney?.moderator)body.append(button('Manage catalog',()=>{d.close();window.msJourney.manage();}));
  for(const source of document.querySelectorAll('#mainNav [data-page]')){if(source.closest('[hidden]')||['feed','saved','following','reactors','missioned-souls'].includes(source.dataset.page))continue;body.append(button(source.textContent.trim(),()=>{d.close();source.click();}));}
