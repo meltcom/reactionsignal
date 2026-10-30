@@ -21,3 +21,7 @@ body[data-journey=ms-journey] #submitOpen{display:none!important}
 @media(max-width:760px){#ms-grid .ms-card{display:grid;grid-template-columns:32% minmax(0,1fr)}#ms-grid[data-thumbnail=small] .ms-card{grid-template-columns:28% minmax(0,1fr)}#ms-grid[data-thumbnail=large] .ms-card{grid-template-columns:45% minmax(0,1fr)}#ms-grid .ms-thumb{align-self:start}#ms-grid h3{font-size:14px}.journey-ms-browse-toolbar label{margin:6px 0}#ms-grid .ms-card-body{padding:9px 10px}}
 
 .journey-space-switch{display:none;color:var(--teal);font-size:13px;text-decoration:underline;min-height:44px;align-items:center;justify-content:flex-end;margin:0 24px}html[data-interface=app] .journey-space-switch{display:flex}@media(max-width:760px){.journey-space-switch{display:flex;margin:0 16px}}
+
+/* Normalize the visible header logos despite the MS asset’s square padding. */
+.ms-header-link{width:128px;height:88px;justify-content:center;overflow:hidden}.ms-header-link img{width:128px;height:128px;max-width:none;object-fit:contain;flex-shrink:0}
+@media(max-width:600px){.ms-header-link{width:96px;height:66px}.ms-header-link img{width:96px;height:96px}}
