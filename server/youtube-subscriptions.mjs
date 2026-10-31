@@ -1,3 +1,4 @@
+import {quotaFetch} from './youtube-quota.mjs';
 import {database,seedDatabase,catalog} from './db.mjs';
 import {configured,startConnection,accessToken,deleteConnection} from './youtube-connection.mjs';
 import {readSubscriptions} from '../youtube-subscriptions-core.js';
@@ -30,7 +31,7 @@ export async function youtubeSubscriptions(request,env,seed,user){
  // A fresh check before every read/write also closes revocation gaps between cron runs.
  let token=await accessToken(env,row);
  if(path==='preview'){
-  try{const ids=await readSubscriptions(token,{fetcher:env.YOUTUBE_FETCH||fetch,signal:AbortSignal.timeout(30000)});return json({channelIds:ids,connectionId:row.id});}finally{token='';}
+  try{const ids=await readSubscriptions(token,{fetcher:quotaFetch(env,env.YOUTUBE_FETCH||fetch),signal:AbortSignal.timeout(30000)});return json({channelIds:ids,connectionId:row.id});}finally{token='';}
  }
  token='';
  if(body.connectionId!==row.id)return json({error:'The YouTube connection changed. Read subscriptions again.'},409);

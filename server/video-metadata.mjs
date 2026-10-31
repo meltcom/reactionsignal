@@ -13,7 +13,7 @@ export async function refreshVideoMetadata(env,fetcher=fetch,now=new Date()){
    AND (json_extract(s.value,'$.retryAt') IS NULL OR json_extract(s.value,'$.retryAt')<=?)
    ORDER BY COALESCE(json_extract(s.value,'$.metadataUpdatedAt'),''),v.published_at DESC LIMIT 50`).bind(cutoff,at).all()).results;
   if(!rows.length)return {status:'current',calls:0};
-  const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db);
+  const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db,env);
   const response=await api.get('videos',{part:'contentDetails,statistics',id:rows.map(r=>r.id).join(',')});
   if(!Array.isArray(response.items))throw new Error('Invalid YouTube metadata response');
   const items=new Map(response.items.map(v=>[v.id,v]));

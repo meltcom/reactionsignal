@@ -8,7 +8,7 @@ export async function refreshChannelStats(env, fetcher=fetch, now=new Date()) {
   const lease=String(+now+300000);
   const lock=await db.prepare("INSERT INTO state(key,value) VALUES('channel-stats-lock',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(state.value AS INTEGER)<?").bind(lease,+now).run();
   if (!lock.meta.changes) return {status:'busy',calls:0};
-  const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db);
+  const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db,env);
   try {
     const rows=(await db.prepare(`SELECT c.id,s.value FROM channels c LEFT JOIN state s ON s.key='youtube-channel-stats:'||c.id
       WHERE c.id GLOB 'UC*' AND length(c.id)=24
