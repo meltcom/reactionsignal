@@ -1,4 +1,6 @@
 import {discoveryPerformance} from './discovery-measurement.mjs';
+import {backfillBroker} from './backfill-broker.mjs';
+import {pruneQuotaRecords} from './youtube-quota.mjs';
 import {secureRedirect,secureResponse} from './security.mjs';
 import {recheckVideoFormats} from './format-recheck.mjs';
 import {discoveryCycle} from './rss.mjs';
@@ -50,6 +52,7 @@ export default {
     ctx.waitUntil((async()=>{
       try{
         const db=database(env);await seedDatabase(db,seed);
+        try{await pruneQuotaRecords(env);}catch{console.error('Quota receipt cleanup deferred');}
         await db.prepare("INSERT INTO state(key,value) VALUES('last-scheduled-invocation',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(new Date().toISOString()).run();
         await discoveryCycle(env,seed);await recheckBatch(env);
         try{await recheckVideoFormats(env);}catch{console.error('Video format recheck failed; retry next tick');}
@@ -62,6 +65,7 @@ export default {
 async function handleRequest(request,env,ctx){
     const path=new URL(request.url).pathname;
     try{
+      if(path.startsWith('/api/backfill/'))return await backfillBroker(request,env);
       if(path.startsWith('/private-guides/'))return new Response('Not found',{status:404});
       if(path.startsWith('/api/member-guides/')){
         if(request.method!=='GET'&&request.method!=='HEAD')return json({error:'Method not allowed'},405);

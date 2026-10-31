@@ -18,7 +18,7 @@ export async function reconcile(request,env,user,fetcher=fetch){
  if(!env.YOUTUBE_API_KEY)return json({error:'YouTube discovery credentials are not configured.'},503);
  const performer=await db.prepare("SELECT * FROM performers WHERE id='missioned-souls'").first();
  if(!performer||performer.status!=='active')return json({error:'Missioned Souls is not active.'},409);
- const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db),items=new Map();
+ const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db,env),items=new Map();
  for(let i=0;i<candidates.length;i+=50){const page=await api.get('videos',{id:candidates.slice(i,i+50).map(r=>r.id).join(','),part:'snippet,contentDetails,status',maxResults:50});for(const item of page.items||[])items.set(item.id,item);}
  const now=new Date().toISOString(),run=crypto.randomUUID(),source='Moderator reconciliation '+run,results=[],work=[];
  const oldMatches=new Map(),exclusions=new Map(),channels=new Map(),videos=new Map(),knownChannels=new Set();

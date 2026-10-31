@@ -8,7 +8,7 @@ export async function submissionMetadata(db,env,videoId,fetcher=fetch){
  const key='submission-metadata:'+videoId,cached=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();
  if(cached){try{const c=JSON.parse(cached.value);if(Date.now()-c.fetchedAt<600000)return c;}catch{}}
  if(!env.YOUTUBE_API_KEY)fail('YouTube metadata lookup is not configured. Enter verified details manually.',503);
- const data=await new YouTube(env.YOUTUBE_API_KEY,fetcher,db).get('videos',{part:'snippet,contentDetails,status',id:videoId});
+ const data=await new YouTube(env.YOUTUBE_API_KEY,fetcher,db,env).get('videos',{part:'snippet,contentDetails,status',id:videoId});
  const v=data.items?.find(v=>v.id===videoId);if(!v?.snippet||v.status?.privacyStatus!=='public')fail('This video is not publicly available on YouTube.',409);
  const duration=seconds(v.contentDetails?.duration),m={title:v.snippet.title,channelName:v.snippet.channelTitle,channelId:v.snippet.channelId,publishedAt:v.snippet.publishedAt,duration,format:duration!==null&&duration>180?'FULL_LENGTH':'UNKNOWN',fetchedAt:Date.now()};
  if(!/^UC[\w-]{22}$/.test(m.channelId||'')||!m.title||!m.publishedAt)fail('YouTube returned incomplete video details.',502);

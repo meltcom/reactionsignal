@@ -6,6 +6,16 @@ import {performerQueries} from '../server/discovery.mjs';
 import {readFileSync} from 'node:fs';
 import {configured} from '../server/youtube-connection.mjs';
 
+test('packaged backfill broker requires its dedicated token and stays disabled by default',async()=>{
+ const token='fixture-broker-token-'.repeat(3),env={BACKFILL_API_TOKEN:token,DISCOVERY_TOKEN:'discovery-only-token'};
+ const request=credential=>new Request('https://test/api/backfill/status',{headers:credential?{Authorization:'Bearer '+credential}:{}});
+ assert.equal((await worker.fetch(request(),env)).status,401);
+ assert.equal((await worker.fetch(request(env.DISCOVERY_TOKEN),env)).status,401);
+ const response=await worker.fetch(request(token),env);
+ assert.equal(response.status,200);assert.match(response.headers.get('Cache-Control'),/no-store/);
+ const status=await response.json();assert.equal(status.ready,false);assert.equal(status.reason,'tracking_disabled');assert.equal(status.searchLimit,0);
+});
+
 test('production deployment retains the required public YouTube OAuth configuration',()=>{
  const config=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
  assert.equal(config.vars.YOUTUBE_OAUTH_ORIGIN,'https://reactionjourney.com');

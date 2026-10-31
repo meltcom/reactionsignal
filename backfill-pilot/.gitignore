@@ -1,0 +1,10 @@
+data/
+.venv/
+sample-data/
+__pycache__/
+*.zip
+snapshot*.json
+monitor*.json
+validation-data/
+*.log
+release/

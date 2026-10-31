@@ -1,8 +1,9 @@
+import {quotaFetch} from './youtube-quota.mjs';
 const CHANNEL='UCeTfwcnUVurw7Qrk_KF5Idw';
 const put=(db,key,value)=>db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,JSON.stringify(value)).run();
 export async function refreshPlaylists(env,saveVideos,fetcher=fetch){
  if(!env.DB||!env.YOUTUBE_API_KEY)return {status:'blocked',message:'YouTube API access is unavailable.'};
- const db=env.DB,now=new Date().toISOString();
+ const db=env.DB,now=new Date().toISOString();fetcher=quotaFetch(env,fetcher);
  const lock=await db.prepare("INSERT INTO state(key,value) VALUES('ms-playlist-lock',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(state.value AS INTEGER) < ?").bind(String(Date.now()+600000),Date.now()).run();
  if(!lock.meta?.changes)return {status:'busy',message:'Playlist synchronization is already running.'};
  const api=async(endpoint,params)=>{

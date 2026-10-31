@@ -1,3 +1,4 @@
+import {quotaFetch} from './youtube-quota.mjs';
 import snapshot from '../ms-playlist-catalog.json' with {type:'json'};
 import {playlistCatalog,yearCatalog} from '../ms-journey-catalog.mjs';
 import {refreshPlaylists} from './ms-playlists.mjs';
@@ -86,6 +87,7 @@ export async function refreshMissionedSouls(env,seed,fetcher=fetch,{latestOnly=f
  const db=env.DB;if(!db)return {status:'blocked',message:'Catalog storage is unavailable.'};
  if(!env.YOUTUBE_API_KEY)return {status:'blocked',message:'YouTube API access is not configured. Import a saved catalog, or configure YOUTUBE_API_KEY on the server.'};
  const now=new Date().toISOString();
+ fetcher=quotaFetch(env,fetcher);
  // Database compare-and-set prevents concurrent manual and scheduled scans.
  const lock=await db.prepare("INSERT INTO state(key,value) VALUES('ms-lock',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(state.value AS INTEGER) < ?").bind(String(Date.now()+300000),Date.now()).run();
  if(!lock.meta?.changes)return {status:'busy',message:'A refresh is already running.'};
