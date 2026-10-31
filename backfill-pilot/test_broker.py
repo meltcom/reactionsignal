@@ -33,6 +33,7 @@ class BrokerTests(unittest.TestCase):
         self.assertEqual(result['_rj_quota_receipt']['units'],1)
         self.assertNotIn('unused-key',str(opener.request.headers)+opener.request.data.decode())
         self.assertEqual(opener.request.full_url,'https://reactionjourney.com/api/backfill/execute')
+        self.assertTrue(opener.request.get_header('User-agent').startswith('ReactionJourneyBackfillPilot/'))
 
     def test_denial_has_zero_provider_cost_and_lost_response_is_ambiguous(self):
         client=BrokerClient()

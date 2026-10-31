@@ -1,6 +1,6 @@
 # Missioned Souls historical backfill pilot
 
-Release candidate 0.3.0. Local Windows application with a shared-quota RJ broker. The broker Worker source must be reviewed and deployed before live activation. No database schema migration is required.
+Release candidate 0.3.1. The client identifies itself as `ReactionJourneyBackfillPilot/0.3.1`; Cloudflare rejects the default Python user agent on the live staging hostname. Local Windows application with a shared-quota RJ broker. The broker Worker source must be reviewed and deployed before live activation. No database schema migration is required.
 
 ## Launch and preview
 

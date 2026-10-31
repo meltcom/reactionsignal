@@ -15,11 +15,11 @@ manifest = {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for nam
 out = root / 'release'
 out.mkdir(exist_ok=True)
 (out / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
-with zipfile.ZipFile(out / 'rj-backfill-pilot-0.3.0.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+with zipfile.ZipFile(out / 'rj-backfill-pilot-0.3.1.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
     for name in files:
         archive.write(root / name, name)
     archive.write(out / 'manifest.json', 'manifest.json')
-with zipfile.ZipFile(out / 'rj-backfill-pilot-0.3.0.zip') as archive:
+with zipfile.ZipFile(out / 'rj-backfill-pilot-0.3.1.zip') as archive:
     for name, digest in manifest.items():
         if hashlib.sha256(archive.read(name)).hexdigest() != digest:
             raise RuntimeError('Package identity mismatch: ' + name)

@@ -1,4 +1,4 @@
-# Measurement protocol — release candidate 0.3.0
+# Measurement protocol — release candidate 0.3.1
 
 This records local pilot activity and reviewed effectiveness. It does not activate YouTube scanning, implement historical keyword searches, reserve shared production quota, or import videos into RJ. Shared reservations occur only through the separately deployed broker after its activation gates pass.
 

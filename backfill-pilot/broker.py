@@ -7,6 +7,7 @@ import urllib.parse
 import uuid
 
 PROTOCOL='rj-backfill-broker-v1'
+USER_AGENT='ReactionJourneyBackfillPilot/0.3.1'
 
 
 class BrokerError(RuntimeError):
@@ -39,7 +40,7 @@ class BrokerClient:
 
     def request(self,path,payload=None):
         origin,token=self.configuration()
-        headers={'Authorization':'Bearer '+token,'Accept':'application/json'}
+        headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':USER_AGENT}
         if payload is not None:
             headers['Content-Type']='application/json'
         request=urllib.request.Request(origin+path,data=json.dumps(payload).encode() if payload is not None else None,headers=headers)
