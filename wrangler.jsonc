@@ -25,7 +25,13 @@
     "SUPABASE_URL": "https://ovmvnfcbwirocsmtvaxd.supabase.co",
     "YOUTUBE_PUSH_CALLBACK_URL": "https://reactionjourney.com/api/youtube/push",
     "GOOGLE_YOUTUBE_CLIENT_ID": "962269158980-pd775oj74r8ba6fc1o8riog9vmbid77d.apps.googleusercontent.com",
-    "YOUTUBE_OAUTH_ORIGIN": "https://reactionjourney.com"
+    "YOUTUBE_OAUTH_ORIGIN": "https://reactionjourney.com",
+    "YOUTUBE_QUOTA_TRACKING": "0",
+    "YOUTUBE_QUOTA_VERIFIED": "0",
+    "YOUTUBE_GENERAL_DAILY_LIMIT": "0",
+    "BACKFILL_DAILY_GENERAL_LIMIT": "300",
+    "BACKFILL_GENERAL_RESERVE": "2000",
+    "BACKFILL_ENABLED": "0"
   },
   "observability": {
     "logs": {

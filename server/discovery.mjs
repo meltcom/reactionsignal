@@ -1,3 +1,4 @@
+import {quotaFetch,quotaPolicy,QuotaBlocked} from './youtube-quota.mjs';
 import { database, seedDatabase } from './db.mjs';
 import {reactionEvidence} from './approval-rules.mjs';
 import {videoFormat} from './video-format.mjs';
@@ -16,16 +17,16 @@ export function videoMetadata(item,at){
  return {duration:seconds(item.contentDetails?.duration),views:count(item.statistics?.viewCount),likes:count(item.statistics?.likeCount),youtubeComments:count(item.statistics?.commentCount),metadataUpdatedAt:at};
 }
 export class YouTube {
-  constructor(key,fetcher=fetch,usageDb=null){this.usageDb=usageDb;this.key=key;this.fetcher=fetcher.bind(globalThis);this.calls=0;this.requestMs=0;this.deadline=Date.now()+20000;}
+  constructor(key,fetcher=fetch,usageDb=null,quotaEnv={}){this.quotaEnv=quotaEnv;this.usageDb=usageDb;this.key=key;this.fetcher=quotaFetch(quotaEnv,fetcher.bind(globalThis));this.calls=0;this.requestMs=0;this.deadline=Date.now()+20000;}
   async get(endpoint,params,searchContext=null){
     if(endpoint==='videos'&&String(params.part||'').split(',').includes('contentDetails'))params={...params,part:[...new Set([...params.part.split(','),'player','statistics'])].join(','),maxWidth:480};
     for(let attempt=0;attempt<3;attempt++){
       if(this.calls>=28||Date.now()>this.deadline) throw new Error('Batch budget reached; continuation retained');
       const attemptId=endpoint==='search'&&searchContext?await reserveSearchAttempt(this.usageDb,searchContext.pageId,searchContext.limit):null;
       this.calls++;
-      if(this.usageDb)await this.usageDb.prepare("INSERT INTO state(key,value) VALUES(?, '1') ON CONFLICT(key) DO UPDATE SET value=CAST(state.value AS INTEGER)+1").bind('youtube-requests:'+new Date().toISOString().slice(0,10)+':'+endpoint).run();
+      if(this.usageDb&&(endpoint==='search'||!quotaPolicy(this.quotaEnv).tracking))await this.usageDb.prepare("INSERT INTO state(key,value) VALUES(?, '1') ON CONFLICT(key) DO UPDATE SET value=CAST(state.value AS INTEGER)+1").bind('youtube-requests:'+new Date().toISOString().slice(0,10)+':'+endpoint).run();
       const url=new URL(`https://www.googleapis.com/youtube/v3/${endpoint}`); for(const [k,v] of Object.entries(params)) if(v!==null&&v!==undefined)url.searchParams.set(k,String(v));
-      let response,body;const requestStart=Date.now();try { response=await this.fetcher(url,{headers:{'X-Goog-Api-Key':this.key},signal:AbortSignal.timeout(6000)});body=await response.json().catch(()=>({})); } catch { if(attemptId)await finishSearchAttempt(this.usageDb,attemptId,'network_error',null,Date.now()-requestStart);if(attempt===2) throw new Error('YouTube request timed out'); continue; } finally {this.requestMs+=Date.now()-requestStart;}
+      let response,body;const requestStart=Date.now();try { response=await this.fetcher(url,{headers:{'X-Goog-Api-Key':this.key},signal:AbortSignal.timeout(6000)});body=await response.json().catch(()=>({})); } catch(error) { if(error instanceof QuotaBlocked)throw error;if(attemptId)await finishSearchAttempt(this.usageDb,attemptId,'network_error',null,Date.now()-requestStart);if(attempt===2) throw new Error('YouTube request timed out'); continue; } finally {this.requestMs+=Date.now()-requestStart;}
       if(attemptId)await finishSearchAttempt(this.usageDb,attemptId,response.ok?'succeeded':'http_error',response.status,Date.now()-requestStart);
       if(response.ok)return body;
       if(response.status===429||response.status>=500){if(attempt<2){await new Promise(r=>setTimeout(r,200*(2**attempt)));continue;}}
@@ -162,7 +163,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
   const lease=await db.prepare("INSERT INTO state(key,value) VALUES('discovery-lease',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(state.value AS INTEGER)<?").bind(String(Date.now()+120000),Date.now()).run();
   if(!lease.meta.changes)return {status:'busy'};
   async function unavailable(channel,reason){const failures=(channel.recent_failures||0)+1;const retry=new Date(Date.now()+retryDelay(failures)).toISOString();await db.prepare('UPDATE channels SET uploads=NULL,recent_failures=?,recent_retry_at=?,recent_error=? WHERE id=?').bind(failures,retry,reason,channel.id).run();detail+=`${reason}: ${channel.name} (${channel.id}); retry after ${retry}; `;}
-  const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db);let added=0,scanned=0,historyPages=0,recentAdded=0,historyAdded=0,final='succeeded',detail='';
+  const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db,env);let added=0,scanned=0,historyPages=0,recentAdded=0,historyAdded=0,final='succeeded',detail='';
   await db.prepare('INSERT INTO runs(id,started_at,status) VALUES(?,?,?)').bind(id,now,'running').run();
   try{
     if(!await db.prepare("SELECT value FROM state WHERE key='discovery-repair-baseline-v1'").first()){

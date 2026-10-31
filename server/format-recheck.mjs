@@ -19,7 +19,7 @@ export async function recheckVideoFormats(env,fetcher=fetch){
     AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.video_id=v.id AND e.performer_id=m.performer_id))
    ORDER BY COALESCE(json_extract(s.value,'$.at'),''),v.published_at DESC,v.id LIMIT 50`).bind(cutoff).all()).results;
   if(!rows.length)return {status:'complete',processed:0,updated:0};
-  const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db);
+  const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db,env);
   const data=await api.get('videos',{part:'snippet,contentDetails,status,player',maxWidth:480,id:rows.map(v=>v.id).join(',')});
   const items=new Map((data.items||[]).map(v=>[v.id,v])),writes=[],resolved=new Set();
   for(const row of rows){
