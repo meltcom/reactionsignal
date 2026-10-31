@@ -7,3 +7,4 @@ snapshot*.json
 monitor*.json
 validation-data/
 *.log
+release/
