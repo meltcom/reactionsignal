@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,rm,symlink} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,rm,symlink,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {sourceFingerprint,artifactFingerprint,assertSameDeployment,assertRelease,assertReleaseCheckout} from '../scripts/release-provenance.mjs';
@@ -49,16 +49,16 @@ test('only the current reviewed main commit is a production release candidate',(
  assert.throws(()=>assertReleaseCheckout({...good,head:'b'.repeat(40),dirty:true,allowDirty:true}));
 });
 
-test('packaged file links cannot hide changed asset bytes from the integrity seal',async t=>{
- const root=await mkdtemp(join(tmpdir(),'release-linked-asset-'));
+test('placeholder hydration changes metadata without changing the seal, while changed bytes invalidate it',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'release-placeholder-'));
  try{
-  const packaged=join(root,'dist'),target=join(root,'asset-source.mjs');
-  await mkdir(packaged);await writeFile(target,'approved asset bytes');
-  try{await symlink(target,join(packaged,'assets.mjs'),'file');}
-  catch(error){if(['EPERM','EACCES','ENOTSUP'].includes(error.code)){t.skip('File symlinks unavailable on this host; directory alias rejection is checked separately');return;}throw error;}
-  const before=await artifactFingerprint(packaged);
-  await writeFile(target,'changed asset bytes');
-  assert.notEqual(await artifactFingerprint(packaged),before);
+  const asset=join(root,'assets.mjs');await writeFile(asset,'approved asset bytes');
+  let placeholder=false;
+  const readDirectory=async(path,options)=>(await readdir(path,options)).map(entry=>placeholder&&entry.name==='assets.mjs'?{name:entry.name,isDirectory:()=>false,isFile:()=>false,isSymbolicLink:()=>true}:entry);
+  const before=await artifactFingerprint(root,readDirectory);
+  placeholder=true;assert.equal(await artifactFingerprint(root,readDirectory),before);
+  await writeFile(asset,'changed asset bytes');
+  assert.notEqual(await artifactFingerprint(root,readDirectory),before);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
