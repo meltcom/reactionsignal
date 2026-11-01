@@ -24,13 +24,15 @@ export function assertSameDeployment(before,after){
 export function assertRelease(expected,actual){
  if(actual?.schema!==1||actual.sourceHash!==expected.sourceHash||actual.builtAt!==expected.builtAt)throw Error('Live release identity does not match this build. Deployment verification failed.');
 }
-export async function artifactFingerprint(root){
+export async function artifactFingerprint(root,readDirectory=readdir){
  const files=[];
  async function walk(directory){
-  for(const entry of await readdir(join(root,directory),{withFileTypes:true})){
+  for(const entry of await readDirectory(join(root,directory),{withFileTypes:true})){
    const path=directory?directory+'/'+entry.name:entry.name;
    if(entry.isDirectory())await walk(path);
-   else if(entry.isFile()&&path!=='build-integrity.json')files.push(path);
+   // OneDrive placeholders can change Dirent type during hydration. Seal every
+   // non-directory entry's bytes; readFile fails closed on unreadable entries.
+   else if(path!=='build-integrity.json')files.push(path);
   }
  }
  await walk('');const hash=createHash('sha256');

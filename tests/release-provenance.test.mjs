@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,rm,symlink,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {sourceFingerprint,artifactFingerprint,assertSameDeployment,assertRelease,assertReleaseCheckout} from '../scripts/release-provenance.mjs';
@@ -47,6 +47,29 @@ test('only the current reviewed main commit is a production release candidate',(
  assert.throws(()=>assertReleaseCheckout({...good,dirty:true}));
  assert.doesNotThrow(()=>assertReleaseCheckout({...good,dirty:true,allowDirty:true}));
  assert.throws(()=>assertReleaseCheckout({...good,head:'b'.repeat(40),dirty:true,allowDirty:true}));
+});
+
+test('placeholder hydration changes metadata without changing the seal, while changed bytes invalidate it',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'release-placeholder-'));
+ try{
+  const asset=join(root,'assets.mjs');await writeFile(asset,'approved asset bytes');
+  let placeholder=false;
+  const readDirectory=async(path,options)=>(await readdir(path,options)).map(entry=>placeholder&&entry.name==='assets.mjs'?{name:entry.name,isDirectory:()=>false,isFile:()=>false,isSymbolicLink:()=>true}:entry);
+  const before=await artifactFingerprint(root,readDirectory);
+  placeholder=true;assert.equal(await artifactFingerprint(root,readDirectory),before);
+  await writeFile(asset,'changed asset bytes');
+  assert.notEqual(await artifactFingerprint(root,readDirectory),before);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('unsupported directory aliases fail closed instead of disappearing from the artifact seal',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'release-directory-alias-'));
+ try{
+  const packaged=join(root,'dist'),target=join(root,'outside');
+  await mkdir(packaged);await mkdir(target);await writeFile(join(target,'backend.mjs'),'must not be silently omitted');
+  await symlink(target,join(packaged,'unexpected-directory'),'junction');
+  await assert.rejects(artifactFingerprint(packaged),{code:'EISDIR'});
+ }finally{await rm(root,{recursive:true,force:true});}
 });
 
 test('migration and regression-test changes invalidate source identity',async()=>{

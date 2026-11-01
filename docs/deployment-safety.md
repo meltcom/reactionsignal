@@ -14,6 +14,8 @@ The October 22, 2026 countdown publish used a downloaded legacy Worker upload as
 
 Run `npm run deploy:check` for a read-only freshness/integrity check. Database migrations remain separate (`npm run db:migrate`); only run migrations required and authorized for the release.
 
+Artifact fingerprints read every non-directory entry, including file links and OneDrive placeholders. A placeholder's directory-entry type can change during hydration without changing its bytes; filtering only `Dirent.isFile()` can omit a packaged asset and produce a false mismatch. Unreadable entries and directory aliases fail closed. Keep the complete byte seal and all release gates; do not waive an integrity failure based on matching UI assets.
+
 These safeguards apply to the checked-in release commands and agent instructions. They cannot prevent a human or another tool with Cloudflare access from bypassing them. The signed-in browser check remains an explicit required step; the command prints it as incomplete rather than claiming it ran automatically.
 
 The `/release.json` identity is available after deploying a build containing these changes. Adding the guards locally does not change the currently running site.
