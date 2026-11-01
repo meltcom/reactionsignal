@@ -25,3 +25,16 @@ body[data-journey=ms-journey] #submitOpen{display:none!important}
 /* Normalize the visible header logos despite the MS asset’s square padding. */
 .ms-header-link{width:128px;height:88px;justify-content:center;overflow:hidden}.ms-header-link img{width:128px;height:128px;max-width:none;object-fit:contain;flex-shrink:0}
 @media(max-width:600px){.ms-header-link{width:96px;height:66px}.ms-header-link img{width:96px;height:96px}}
+
+/* Phone presets: compact rows, generous default rows, then full-width cards.
+   Shared by the website and installed app; wider layouts retain their sizing. */
+@media(max-width:600px){
+ body[data-thumb=small] #videoGrid:not(.layout-table):not(.layout-large) .video-thumb{width:24%;max-width:none;aspect-ratio:16/9}
+ #videoGrid:not(.layout-table):not(.layout-large) .video-thumb{width:46%;max-width:none;aspect-ratio:16/9}
+ body[data-thumb=large] #videoGrid:not(.layout-table):not(.layout-large) .video-card{flex-direction:column}
+ body[data-thumb=large] #videoGrid:not(.layout-table):not(.layout-large) .video-thumb{width:100%;max-width:none;aspect-ratio:16/9;align-self:stretch;margin:0;border-radius:0}
+ #ms-grid .ms-card{grid-template-columns:46% minmax(0,1fr)}
+ #ms-grid[data-thumbnail=small] .ms-card{grid-template-columns:24% minmax(0,1fr)}
+ #ms-grid[data-thumbnail=large] .ms-card{grid-template-columns:minmax(0,1fr)}
+ #ms-grid .ms-thumb{width:100%;max-height:none;aspect-ratio:16/9}
+}
