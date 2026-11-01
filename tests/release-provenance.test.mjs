@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,rm,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {sourceFingerprint,artifactFingerprint,assertSameDeployment,assertRelease,assertReleaseCheckout} from '../scripts/release-provenance.mjs';
@@ -47,6 +47,29 @@ test('only the current reviewed main commit is a production release candidate',(
  assert.throws(()=>assertReleaseCheckout({...good,dirty:true}));
  assert.doesNotThrow(()=>assertReleaseCheckout({...good,dirty:true,allowDirty:true}));
  assert.throws(()=>assertReleaseCheckout({...good,head:'b'.repeat(40),dirty:true,allowDirty:true}));
+});
+
+test('packaged file links cannot hide changed asset bytes from the integrity seal',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'release-linked-asset-'));
+ try{
+  const packaged=join(root,'dist'),target=join(root,'asset-source.mjs');
+  await mkdir(packaged);await writeFile(target,'approved asset bytes');
+  try{await symlink(target,join(packaged,'assets.mjs'),'file');}
+  catch(error){if(['EPERM','EACCES','ENOTSUP'].includes(error.code)){t.skip('File symlinks unavailable on this host; directory alias rejection is checked separately');return;}throw error;}
+  const before=await artifactFingerprint(packaged);
+  await writeFile(target,'changed asset bytes');
+  assert.notEqual(await artifactFingerprint(packaged),before);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('unsupported directory aliases fail closed instead of disappearing from the artifact seal',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'release-directory-alias-'));
+ try{
+  const packaged=join(root,'dist'),target=join(root,'outside');
+  await mkdir(packaged);await mkdir(target);await writeFile(join(target,'backend.mjs'),'must not be silently omitted');
+  await symlink(target,join(packaged,'unexpected-directory'),'junction');
+  await assert.rejects(artifactFingerprint(packaged),{code:'EISDIR'});
+ }finally{await rm(root,{recursive:true,force:true});}
 });
 
 test('migration and regression-test changes invalidate source identity',async()=>{
