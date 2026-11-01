@@ -39,9 +39,10 @@ export async function backfillBroker(request,env,fetcher=fetch){
  catch(error){if(error instanceof QuotaBlocked)return json({error:error.message,code:error.code},error.status);throw error;}
  const url=new URL('https://www.googleapis.com/youtube/v3/'+endpoint);for(const [key,value] of Object.entries(query))url.searchParams.set(key,String(value));
  const started=Date.now();let response,data;
- try{response=await fetcher(url,{headers:{'X-Goog-Api-Key':env.YOUTUBE_API_KEY},redirect:'error',signal:AbortSignal.timeout(15000)});data=await response.json();}
+ try{response=await fetcher(url,{headers:{'X-Goog-Api-Key':env.YOUTUBE_API_KEY},redirect:'manual',signal:AbortSignal.timeout(15000)});if(response.status<300||response.status>=400)data=await response.json();}
  catch{await finishReservation(env,reservation,'network_error',null,Date.now()-started);return json({error:'Upstream request incomplete',code:'upstream_error'},502,1);}
  await finishReservation(env,reservation,response.ok?'succeeded':'http_error',response.status,Date.now()-started);
+ if(response.status>=300&&response.status<400)return json({error:'Unexpected YouTube redirect',code:'upstream_redirect',http_status:response.status},502,1);
  if(!response.ok)return json({error:'YouTube request rejected',code:'upstream_rejected',http_status:response.status},response.status,1);
  if(endpoint==='channels'){
   const uploads=data.items?.find(c=>c.id===channelId)?.contentDetails?.relatedPlaylists?.uploads;

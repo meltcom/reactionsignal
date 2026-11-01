@@ -80,7 +80,8 @@ export function quotaFetch(env,fetcher=fetch){
   const endpoint=url.pathname.split('/').at(-1),reservation=await reserveGeneral(env,{endpoint});
   await env.DB.prepare("INSERT INTO state(key,value) VALUES(?,'1') ON CONFLICT(key) DO UPDATE SET value=CAST(state.value AS INTEGER)+1").bind('youtube-requests:'+new Date().toISOString().slice(0,10)+':'+endpoint).run();
   const started=Date.now();let response;
-  try{response=await fetcher(input,{...options,redirect:'error'});}
+  // workerd supports manual/follow only. Never forward API credentials through a redirect.
+  try{response=await fetcher(input,{...options,redirect:'manual'});}
   catch(error){await finishReservation(env,reservation,'network_error',null,Date.now()-started);throw error;}
   await finishReservation(env,reservation,response.ok?'succeeded':'http_error',response.status,Date.now()-started);
   return response;
