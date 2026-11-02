@@ -25,7 +25,7 @@ assets['/youtube-subscriptions.js']={type:'text/javascript; charset=utf-8',body:
 for(const [name,type] of [['mobile-app.js','text/javascript; charset=utf-8'],['mobile-app.css','text/css; charset=utf-8'],['offline.html','text/html; charset=utf-8'],['app.webmanifest','application/manifest+json']])assets['/'+name]={type,body:await readFile(new URL(name,root),'utf8')};
 for(const name of ['app-192','app-512','app-maskable','app-apple'])assets['/images/'+name+'.png']={type:'image/png',base64:(await readFile(new URL('images/'+name+'.png',root))).toString('base64')};
 assets['/member-guides.js']={type:'text/javascript; charset=utf-8',body:await readFile(new URL('member-guides.js',root),'utf8')};
-for(const name of ['reaction-journey-overview.pdf','reaction-journey-app-guide.pdf'])assets['/private-guides/'+name]={type:'application/pdf',base64:(await readFile(new URL('member-guides/'+name,root))).toString('base64')};
+for(const name of ['reaction-journey-overview.pdf','reaction-journey-app-guide.pdf','reaction-journey-member-help.pdf','reaction-journey-full-help.pdf'])assets['/private-guides/'+name]={type:'application/pdf',base64:(await readFile(new URL('member-guides/'+name,root))).toString('base64')};
 const {createHash}=await import('node:crypto');
 const journeyBundle=await build({entryPoints:[fileURLToPath(new URL('journey-interface.mjs',root))],bundle:true,format:'iife',platform:'browser',target:'es2022',write:false,minify:true});
 assets['/journey-interface.js']={type:'text/javascript; charset=utf-8',body:journeyBundle.outputFiles[0].text};
