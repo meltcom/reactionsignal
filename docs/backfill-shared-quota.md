@@ -34,6 +34,14 @@ Manual scripts such as `scripts/preview-format-recovery.mjs` and the old Python 
 
 ## Verification and recovery
 
+### November 2 bounded fixture check
+
+After the complete November 1 Pacific tracking baseline, production broker admission is enabled with a temporary **two-unit daily backfill ceiling** for the authorized missing-metadata check. The shared 10,000-unit cap, 2,000-unit RJ reserve, zero backfill search allowance and current-health gate remain unchanged. The 300-unit figure above remains the reviewed maximum for a later pilot, not this diagnostic's active allowance. Staging remains disabled and must not call YouTube.
+
+The diagnostic requests only the saved 11 Bobcat and 22 BluebonnetBob IDs in two videos.list batches, with no automatic retries, catalog imports, full scanner or scheduler. Retain UUID receipts, raw responses, metadata hashes and a single-use local journal; reconcile both receipts and the daily backfill delta. An ambiguous attempt must be investigated without automatic retransmission. The server ceiling resets each Pacific day; it is not a permanent one-time budget. No multi-day scanner is authorized by this configuration. Revisit activation and the ceiling through the guarded workflow before any broader run.
+
+The baseline establishes quota accounting and recent-check coverage, with substantial RSS degradation during parts of the day and sparse discovery-delay samples. It does not establish recall or stable RSS reliability. Recheck fresh health immediately before capture. One two-batch diagnostic does not replace the separate bounded uploads-page, checkpoint/resume and export checks required before a multi-day evaluation.
+
 Tests exercise atomic competing reservations, idempotency, independent daily cap, the RJ reserve, Pacific reset, conservative initial carryover, health admission, network failures, legacy-client double-count prevention, broker authorization and playlist binding. Existing release/regression tests remain required. No live search/scan is part of the automated tests.
 
 Provider-path regression checks also run the real gateway and broker inside `workerd`, using isolated local D1 state and mocked outbound responses. Node-only fetch mocks do not validate Workers request options. Workers rejects `redirect: 'error'` before sending; use `manual`, retain the charged HTTP outcome, and reject broker redirects without parsing their bodies or forwarding `Location` or credentials. The October 31 initial rollout was restored to the recorded known-good version after this runtime mismatch was detected. Retain those failed reservations and establish a fresh complete tracking baseline after recovery before enabling backfill.
