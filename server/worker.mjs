@@ -70,7 +70,7 @@ async function handleRequest(request,env,ctx){
       if(path.startsWith('/api/member-guides/')){
         if(request.method!=='GET'&&request.method!=='HEAD')return json({error:'Method not allowed'},405);
         const result=await member(request,env);if(result.error)return result.error;
-        const names={overview:'reaction-journey-overview.pdf','app-guide':'reaction-journey-app-guide.pdf','member-help':'reaction-journey-member-help.pdf','full-help':'reaction-journey-full-help.pdf'},name=names[path.slice('/api/member-guides/'.length)];
+        const names={'app-guide':'reaction-journey-app-guide.pdf','member-help':'reaction-journey-member-help.pdf','full-help':'reaction-journey-full-help.pdf'},name=names[path.slice('/api/member-guides/'.length)];
         if(!name)return json({error:'Guide not found.'},404);
         if(name==='reaction-journey-full-help.pdf'&&!result.user.moderator)return json({error:'Moderator access required.'},403);
         const file=assets['/private-guides/'+name];if(!file?.base64)return json({error:'Guide unavailable.'},404);
