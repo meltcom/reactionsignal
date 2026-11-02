@@ -1,6 +1,7 @@
 import {quotaFetch,quotaPolicy,QuotaBlocked} from './youtube-quota.mjs';
 import { database, seedDatabase } from './db.mjs';
 import {reactionEvidence} from './approval-rules.mjs';
+import {recognizeCandidate,candidateEvidence,CANDIDATE_REVIEW_SOURCE} from './candidate-recognition.mjs';
 import {videoFormat} from './video-format.mjs';
 import {SEARCH_STRATEGY,pacificDay,startSearchPage,reserveSearchAttempt,finishSearchAttempt,finishSearchPage,recordSearchResults,sampleDiscoveryHealth} from './discovery-measurement.mjs';
 
@@ -43,19 +44,26 @@ export async function saveVideos(db,items,performers,runTime,source,context={}){
   let inserted=0;
   for(let offset=0;offset<unique.length;offset+=50){
     const chunk=unique.slice(offset,offset+50),ids=chunk.map(x=>x.id);
-    // One lookup round trip per 50-video chunk; one JSON binding stays below D1's bind limit.
-    const snapshot=await db.prepare(`WITH ids AS (SELECT value FROM json_each(?)) SELECT
+    // One lookup round trip per 50-video chunk; two JSON bindings stay below D1's bind limit.
+    const snapshot=await db.prepare(`WITH ids AS (SELECT value FROM json_each(?)),reactors AS (SELECT value FROM json_each(?)) SELECT
       (SELECT json_group_array(json_object('id',id,'channel_id',channel_id,'title',title,'published_at',published_at,'available',available,'checked_at',checked_at)) FROM videos WHERE id IN (SELECT value FROM ids)) old_json,
       (SELECT json_group_array(json_object('performer_id',performer_id,'video_id',video_id)) FROM matches WHERE video_id IN (SELECT value FROM ids)) matches_json,
-      (SELECT json_group_array(json_object('performer_id',performer_id,'video_id',video_id)) FROM exclusions WHERE video_id IN (SELECT value FROM ids)) excluded_json`).bind(JSON.stringify(ids)).first();
+      (SELECT json_group_array(json_object('performer_id',performer_id,'video_id',video_id)) FROM exclusions WHERE video_id IN (SELECT value FROM ids)) excluded_json,
+      (SELECT json_group_array(json_object('id',id,'scope',discovery_scope)) FROM channels WHERE id IN (SELECT value FROM reactors)) channel_scopes_json`).bind(JSON.stringify(ids),JSON.stringify([...new Set(chunk.map(item=>item.snippet.channelId))])).first();
     const old=new Map(JSON.parse(snapshot.old_json).map(v=>[v.id,v]));
     const matches=new Set(JSON.parse(snapshot.matches_json).map(v=>v.performer_id+':'+v.video_id));
     const excluded=new Set(JSON.parse(snapshot.excluded_json).map(v=>v.performer_id+':'+v.video_id));
+    const channelScopes=new Map(JSON.parse(snapshot.channel_scopes_json).map(c=>[c.id,c.scope]));
     const statements=[],channels=new Map();
     for(const item of chunk){
       const snippet=item.snippet,duration=seconds(item.contentDetails?.duration),prior=old.get(item.id);
       if(prior&&prior.channel_id!==snippet.channelId)continue;
-      const eligible=performers.map(p=>({p,classification:classify(snippet.title,JSON.parse(p.aliases),duration,{description:snippet.description})})).filter(({p,classification})=>classification&&!excluded.has(p.id+':'+item.id));
+      const eligible=performers.map(p=>{
+        const legacy=classify(snippet.title,JSON.parse(p.aliases),duration,{description:snippet.description});
+        const candidate=!legacy&&p.id==='missioned-souls'&&channelScopes.get(snippet.channelId)==='eligible'&&!matches.has(p.id+':'+item.id)
+          ?recognizeCandidate({id:item.id,...snippet}):null;
+        return {p,classification:legacy||(candidate?.candidate?'PENDING':null),candidate:candidate?.candidate?candidate:null};
+      }).filter(({p,classification})=>classification&&!excluded.has(p.id+':'+item.id));
       if(!eligible.length)continue;
       const changed=!prior||prior.title!==snippet.title||prior.published_at!==(snippet.publishedAt||null)||!prior.available;
       const stale=!prior?.checked_at||Date.parse(runTime)-Date.parse(prior.checked_at)>=7*86400000;
@@ -67,10 +75,16 @@ export async function saveVideos(db,items,performers,runTime,source,context={}){
         statements.push(db.prepare(`INSERT INTO videos(id,channel_id,title,published_at,discovered_at,checked_at,format,available) VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=excluded.published_at,checked_at=excluded.checked_at,format=CASE WHEN videos.format_locked=1 OR videos.format IN ('SHORT','FULL_LENGTH') THEN videos.format ELSE excluded.format END,available=1`).bind(item.id,snippet.channelId,snippet.title,snippet.publishedAt||null,runTime,runTime,detectedFormat));
       }
       if(!prior){inserted++;const lag=Date.parse(runTime)-Date.parse(snippet.publishedAt);statements.push(db.prepare('INSERT OR IGNORE INTO discovery_observations(video_id,source,discovered_at,published_at,delay_seconds,strategy_version,search_page_id) VALUES(?,?,?,?,?,?,?)').bind(item.id,source,runTime,snippet.publishedAt||null,Number.isFinite(lag)&&lag>=0?Math.floor(lag/1000):null,SEARCH_STRATEGY,context.pageId||null));}
-      for(const {p,classification:found} of missing){
+      for(const {p,classification:found,candidate} of missing){
         const classification=p.review_mode==='review'?'PENDING':found;
+        if(candidate){
+          const evidence=await candidateEvidence({id:item.id,...snippet});
+          statements.push(db.prepare("INSERT OR IGNORE INTO state(key,value) SELECT ?,? WHERE NOT EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?) AND NOT EXISTS(SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?) AND EXISTS(SELECT 1 FROM channels WHERE id=? AND discovery_scope='eligible')").bind('candidate-recognition:'+p.id+':'+item.id+':'+evidence.policyHash+':'+evidence.metadataHash,JSON.stringify({...evidence,at:runTime,source,proposedDisposition:'PENDING'}),p.id,item.id,p.id,item.id,snippet.channelId));
+        }
         statements.push(db.prepare("INSERT OR IGNORE INTO discovery_notifications(performer_id,video_id,created_at,source) SELECT ?,?,?,? WHERE ?='CONFIRMED' AND ?='active' AND NOT EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?) AND NOT EXISTS(SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?)").bind(p.id,item.id,runTime,source,classification,p.status,p.id,item.id,p.id,item.id));
-        statements.push(db.prepare('INSERT OR IGNORE INTO matches(performer_id,video_id,status,source) VALUES(?,?,?,?)').bind(p.id,item.id,classification,source));
+        statements.push(candidate
+          ?db.prepare("INSERT OR IGNORE INTO matches(performer_id,video_id,status,source) SELECT ?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?) AND EXISTS(SELECT 1 FROM channels WHERE id=? AND discovery_scope='eligible')").bind(p.id,item.id,classification,CANDIDATE_REVIEW_SOURCE+source,p.id,item.id,snippet.channelId)
+          :db.prepare('INSERT OR IGNORE INTO matches(performer_id,video_id,status,source) VALUES(?,?,?,?)').bind(p.id,item.id,classification,source));
       }
     }
     const channelStatements=[...channels].map(([id,name])=>db.prepare('INSERT INTO channels(id,name) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name WHERE channels.name IS NOT excluded.name').bind(id,name));
@@ -210,7 +224,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
     const allIds=[...new Set(pages.flatMap(({page})=>(page.items||[]).map(x=>x.contentDetails?.videoId).filter(Boolean)))];
     // Playlist titles screen unrelated uploads before costly video metadata requests.
     // Missing titles are fetched conservatively rather than discarded.
-    const candidates=new Set(pages.flatMap(({page})=>(page.items||[]).filter(x=>!x.snippet?.title||performers.some(p=>classify(x.snippet.title,JSON.parse(p.aliases),null))).map(x=>x.contentDetails?.videoId).filter(Boolean)));
+    const candidates=new Set(pages.flatMap(({page,channel})=>(page.items||[]).filter(x=>!x.snippet?.title||performers.some(p=>classify(x.snippet.title,JSON.parse(p.aliases),null)||p.id==='missioned-souls'&&recognizeCandidate({title:x.snippet.title,channelId:channel.id}).positiveTitleHint)).map(x=>x.contentDetails?.videoId).filter(Boolean)));
     const ids=[...candidates];metrics.examined+=allIds.length;
     const fetched=new Set(allIds.filter(id=>!candidates.has(id)));
     async function checkpointRecent(){for(const {channel,page} of pages){

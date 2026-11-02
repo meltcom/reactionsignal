@@ -1,0 +1,138 @@
+{
+  "version": "ms-candidate-contract-v1",
+  "status": "locked candidate expectations; no runtime implementation",
+  "purpose": "Supplement legacy recognition with review candidates; never approve content",
+  "normalization": [
+    "Unicode NFKC",
+    "locale-independent lowercase",
+    "collapse non-letter/non-number separators to spaces",
+    "match whole Unicode letter/number phrases",
+    "never join fields"
+  ],
+  "descriptionEvidence": [
+    "use narrative text",
+    "remove URLs",
+    "ignore original video/link/credits/source-link lines",
+    "hashtags and tag lists alone are supplementary, not candidate evidence"
+  ],
+  "rulesInPriorityOrder": [
+    {
+      "id": "canonical_name",
+      "phrase": "missioned souls",
+      "fields": [
+        "title",
+        "description"
+      ],
+      "strength": "strong",
+      "channels": "any"
+    },
+    {
+      "id": "singular_name",
+      "phrase": "missioned soul",
+      "fields": [
+        "title",
+        "description"
+      ],
+      "strength": "strong",
+      "channels": "any"
+    },
+    {
+      "id": "bobcat_abbreviation",
+      "phrase": "ms band",
+      "fields": [
+        "title",
+        "description"
+      ],
+      "strength": "weak",
+      "channels": [
+        "UCZ77h_VX7l7SOOh7uAmZuVA"
+      ]
+    },
+    {
+      "id": "bobcat_observed_typo",
+      "phrase": "missinoed soul band",
+      "fields": [
+        "title",
+        "description"
+      ],
+      "strength": "weak",
+      "channels": [
+        "UCZ77h_VX7l7SOOh7uAmZuVA"
+      ]
+    },
+    {
+      "id": "bluebonnet_mission_souls",
+      "phrase": "mission souls",
+      "fields": [
+        "title",
+        "description"
+      ],
+      "strength": "weak",
+      "channels": [
+        "UCFwf5lAecSKl2Dvk7kYcCJQ"
+      ]
+    },
+    {
+      "id": "bluebonnet_mission_of_souls",
+      "phrase": "mission of souls",
+      "fields": [
+        "title",
+        "description"
+      ],
+      "strength": "weak",
+      "channels": [
+        "UCFwf5lAecSKl2Dvk7kYcCJQ"
+      ]
+    },
+    {
+      "id": "exact_compact_title_hashtag",
+      "phrase": "#missionedsouls",
+      "fields": [
+        "title"
+      ],
+      "strength": "weak",
+      "channels": "any",
+      "matching": "exact complete hashtag token"
+    }
+  ],
+  "selection": "Strong evidence before weak; within equal strength title before description, then manifest rule order. Return one deterministic primary reason; extra evidence may be retained separately.",
+  "positiveTitleHint": "Compute from title evidence independently; a stronger description match must not erase a supported title hint.",
+  "outputFields": [
+    "candidate",
+    "strength",
+    "primaryRuleId",
+    "primaryField",
+    "normalizedMatch",
+    "positiveTitleHint",
+    "emitsApprovalDecision"
+  ],
+  "noEvidence": {
+    "candidate": false,
+    "strength": "none",
+    "primaryRuleId": null,
+    "primaryField": null,
+    "normalizedMatch": null,
+    "positiveTitleHint": false,
+    "emitsApprovalDecision": false
+  },
+  "guardOrder": [
+    "existing moderation decisions and exclusions",
+    "current channel/official-channel eligibility and availability",
+    "existing format locks",
+    "unchanged legacy classifier",
+    "new candidate output may add review only"
+  ],
+  "integration": {
+    "newCandidateFreshDisposition": "PENDING",
+    "newCandidateBackfillDisposition": "review",
+    "existingDecisions": "preserve exactly",
+    "formatInferenceChanges": false,
+    "globalAliasChanges": false,
+    "schedulerOrQueueChanges": false,
+    "cursorResets": false,
+    "automaticImports": false
+  },
+  "admissionLimit": "Positive title hints only supplement existing fresh screens. Description-only candidates still require metadata supplied by an existing handler; generic-title queue work is separate.",
+  "relatedVideoPolicy": "A reported or verified navigation link alone proves neither performer identity, reaction type nor excerpt/duplicate relationship. No inherited approval, format or deduplication.",
+  "contentReview": "Metadata assessments below are assistant review of text only, not media-verified ground truth. They are annotations, not an eight-class content classifier to implement."
+}

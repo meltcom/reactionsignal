@@ -9,12 +9,13 @@ import math
 import random
 import uuid
 from pathlib import Path
+from candidate_recognition import POLICY_VERSION, POLICY_HASH
 
 VERSION = 'measurements-v3-shared-broker'
-MATCHER = 'ms-name-v1'
+MATCHER = POLICY_VERSION
 OUTCOMES = ('verified_missing', 'false_positive', 'duplicate', 'excluded', 'unresolved')
 SOURCE_HASH = hashlib.sha256(b''.join((Path(__file__).parent / name).read_bytes()
-                                     for name in ('pilot.py', 'measurements.py', 'broker.py'))).hexdigest()
+                                     for name in ('pilot.py', 'measurements.py', 'broker.py', 'candidate_recognition.py')) + POLICY_HASH.encode()).hexdigest()
 
 
 def initialize(db):
@@ -65,7 +66,7 @@ def begin_batch(pilot, *, strategy='known-reactor-uploads', channel=None, query=
     from pilot import now, day
     config = dict(daily_general_limit=pilot.limit, daily_search_limit=0,
                   snapshot_hash=pilot.setting('snapshot_hash'), cutoff=pilot.setting('cutoff'),
-                  eligible_only=True, matcher=MATCHER, source_hash=SOURCE_HASH, metadata_policy='unknown-ids-only')
+                  eligible_only=True, matcher=MATCHER, matcher_policy_hash=POLICY_HASH, source_hash=SOURCE_HASH, metadata_policy='unknown-ids-only')
     config['broker_policy']=json.loads(pilot.setting('broker-status') or 'null')
     encoded = json.dumps(config, sort_keys=True)
     identifier = str(uuid.uuid4())

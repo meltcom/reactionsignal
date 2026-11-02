@@ -1,9 +1,11 @@
 import {database} from './db.mjs';
 import {YouTube,seconds} from './discovery.mjs';
 import {reactionEvidence} from './approval-rules.mjs';
+import {CANDIDATE_REVIEW_SOURCE} from './candidate-recognition.mjs';
 const norm=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const mentions=(s,aliases)=>aliases.some(a=>a&&` ${norm(s)} `.includes(` ${norm(a)} `));
 export function recommend(row,item){
+ if(row.source?.startsWith(CANDIDATE_REVIEW_SOURCE))return {outcome:'protected',reason:'Candidate identity evidence requires moderator content review.'};
  if(/moderator|manual/i.test(row.source))return {outcome:'protected',reason:'Explicit moderator/manual hold is preserved.'};
  if(row.review_mode!=='auto')return {outcome:'protected',reason:'Performer policy requires moderator approval.'};
  if(!item||item.status?.privacyStatus!=='public')return {outcome:'uncertain',reason:'Public video metadata is unavailable; no automatic removal.'};
@@ -50,6 +52,7 @@ export async function publishPreview(db,user){
  const rows=(await db.prepare("SELECT r.* FROM review_previews r JOIN matches m ON m.performer_id=r.performer_id AND m.video_id=r.video_id JOIN videos v ON v.id=m.video_id JOIN performers p ON p.id=m.performer_id WHERE r.outcome='strong' AND r.checked_at>=? AND m.status='PENDING' AND m.source=r.original_source AND v.title=r.original_title AND v.format=r.original_format AND v.channel_id=r.channel_id AND v.available=1 AND p.aliases=r.aliases AND p.review_mode='auto' AND p.status='active' AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id) ORDER BY r.checked_at DESC LIMIT 50").bind(cutoff).all()).results;
  let published=0;
  for(const r of rows){
+  if(r.original_source?.startsWith(CANDIDATE_REVIEW_SOURCE))continue;
   const source='Moderator applied metadata preview:'+crypto.randomUUID();
   const results=await db.batch([
    db.prepare(`UPDATE matches SET status='CONFIRMED',source=? WHERE performer_id=? AND video_id=? AND status='PENDING' AND source=? AND EXISTS(SELECT 1 FROM videos v WHERE v.id=? AND v.title=? AND v.format=? AND v.channel_id=? AND v.available=1) AND EXISTS(SELECT 1 FROM performers p WHERE p.id=? AND p.status='active' AND p.aliases=? AND p.review_mode='auto' AND p.review_mode=?) AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=? AND e.video_id=?)`).bind(source,r.performer_id,r.video_id,r.original_source,r.video_id,r.original_title,r.original_format,r.channel_id,r.performer_id,r.aliases,r.review_mode,r.performer_id,r.video_id),

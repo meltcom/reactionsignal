@@ -1,10 +1,12 @@
-# Measurement protocol — release candidate 0.3.1
+# Measurement protocol — release candidate 0.4.0
 
 This records local pilot activity and reviewed effectiveness. It does not activate YouTube scanning, implement historical keyword searches, reserve shared production quota, or import videos into RJ. Shared reservations occur only through the separately deployed broker after its activation gates pass.
 
 ## Evidence and provenance
 
 Each upload page attempt creates a measurement batch with an immutable ID, strategy, measurement/matcher versions, running Python source hash, configuration hash/JSON, RJ snapshot hash, reactor, historical cutoff and page depth. Query and date-window fields are included for a future keyword runner; there are no keyword results yet.
+
+New batches use the shared `ms-candidate-contract-v1` matcher and include its canonical policy hash. Retained video evidence includes the matched field, rule and metadata hash. Older batches, seen-row classifications, review decisions and campaign cutoff/snapshot remain unchanged. Read-only replay reports propose new dispositions separately; their counts are not silently substituted into historical cohorts or verified-yield metrics.
 
 Each network attempt is reserved before sending and records its batch, endpoint, quota bucket/units, retry index, start/finish timestamps, HTTP failure code where available and elapsed milliseconds. Transport failures and retries consume the request allowance. Reserved requests with no outcome are **unfinished**, not failed. Legacy attempts have null attribution and remain explicitly legacy. No historical attribution or timing is invented.
 
