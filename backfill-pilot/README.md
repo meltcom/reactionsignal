@@ -1,6 +1,14 @@
 # Missioned Souls historical backfill pilot
 
-Release candidate 0.3.1. The client identifies itself as `ReactionJourneyBackfillPilot/0.3.1`; Cloudflare rejects the default Python user agent on the live staging hostname. Local Windows application with a shared-quota RJ broker. The broker Worker source must be reviewed and deployed before live activation. No database schema migration is required.
+Release candidate 0.4.0. The client identifies itself as `ReactionJourneyBackfillPilot/0.4.0`; Cloudflare rejects the default Python user agent on the live staging hostname. Local Windows application with a shared-quota RJ broker. The broker Worker source must be reviewed and deployed before live activation. No database schema migration is required.
+
+## Shared candidate recognition
+
+New metadata is assessed with the same versioned Missioned Souls candidate policy used by RJ. Singular names and explicitly channel-scoped weak hints produce **review candidates**, never automatic reaction approvals. Original-link/credits lines, tag-only descriptions, substring lookalikes and names assembled across fields do not qualify. Candidate evidence retains policy/version hashes, matched field/reason and the metadata hash. Existing catalog decisions and already-seen rows keep their stored classification.
+
+The source policy lives at `server/candidate-policy.json`; the reviewed ZIP includes that exact file beside `candidate_recognition.py`. Measurement batches record the new matcher version and policy hash without rewriting older batches or frozen campaign settings. No scanner is started by building or installing the package.
+
+To audit previously retained metadata without network access or database changes, run `python replay_candidates.py --database data/campaign.sqlite3 --output candidate-audit-v1.json`. Use a fresh output filename for each audit. This emits proposals only; it does not reclassify stored rows, alter review decisions, reset cursors or import records. Content labels and related-video/excerpt relationships still require independent evidence.
 
 ## Launch and preview
 

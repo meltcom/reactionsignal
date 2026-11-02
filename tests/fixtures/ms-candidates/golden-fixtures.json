@@ -1,0 +1,2073 @@
+{
+  "schema": "ms-candidate-golden-fixtures-v1",
+  "status": "locked metadata candidate expectations; content truth incomplete",
+  "sourceCommit": "7491f45445c214ad23f2063831189f5d7673090a",
+  "sourcePack": {
+    "path": "../candidate-fixtures-enriched.json",
+    "sha256": "3d6f6c03870393c7c933f7e3a4eec6ace14f4c24ee54f04654da918028c29564"
+  },
+  "observedCases": [
+    {
+      "caseId": "CWZ3jCPWSKA",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "CWZ3jCPWSKA",
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "MISSIONED SOUL BAND / OOH KAROL",
+        "description": "",
+        "tags": []
+      },
+      "sourceMetadataSha256": "4e8a0039976f275e0b58fd00a14f03dec8db4247a7590f502e57a5ca8df475b8",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "singular_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned soul",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "title",
+        "text": "MISSIONED SOUL"
+      },
+      "metadataAssessment": {
+        "category": "undetermined_performance_or_reaction",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "1_52fqVC0cM",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "1_52fqVC0cM",
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "Missioned soul/because of you",
+        "description": "",
+        "tags": []
+      },
+      "sourceMetadataSha256": "acc4ee90d594e376042089b9cd38e3c0e328abc66a4611ab4f7ad2dd558a938b",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "singular_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned soul",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "title",
+        "text": "Missioned soul"
+      },
+      "metadataAssessment": {
+        "category": "undetermined_performance_or_reaction",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "_Q3z36dSZDM",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "_Q3z36dSZDM",
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "Ms band /bad name bon Jovi ",
+        "description": "",
+        "tags": []
+      },
+      "sourceMetadataSha256": "f8aeaf2a7cd7578631c53ca21625ea9e84fc44a4a24fc331ee36565900fd8db8",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "weak",
+        "primaryRuleId": "bobcat_abbreviation",
+        "primaryField": "title",
+        "normalizedMatch": "ms band",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "title",
+        "text": "Ms band"
+      },
+      "metadataAssessment": {
+        "category": "undetermined_performance_or_reaction",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "WhnTqglR_2A",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "WhnTqglR_2A",
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "I hate my self for loving you/MISSIONED SOUL BAND",
+        "description": "",
+        "tags": []
+      },
+      "sourceMetadataSha256": "faf74ae6a9933528a207da5f6a91eb52d2939ae09fcd95674fef06808cbb0ae6",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "singular_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned soul",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "title",
+        "text": "MISSIONED SOUL"
+      },
+      "metadataAssessment": {
+        "category": "undetermined_performance_or_reaction",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "YCETM0CD_Nw",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "YCETM0CD_Nw",
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "GIRL JUST WANNA TO HAVE FUN/MISSIONED SOUL",
+        "description": "",
+        "tags": []
+      },
+      "sourceMetadataSha256": "e7e56d2b292f6e0d8fd7628b10cc87e9e4df51bce30eec84767474dfd4d78033",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "singular_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned soul",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "title",
+        "text": "MISSIONED SOUL"
+      },
+      "metadataAssessment": {
+        "category": "undetermined_performance_or_reaction",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "0oAky76nLac",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "0oAky76nLac",
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "ITS A HEARTACHE/ MISSIONED SOUL",
+        "description": "",
+        "tags": []
+      },
+      "sourceMetadataSha256": "daa23d5ea273df8bf33ef61caa34049824ab9600866e02e694aeb7eacdbab292",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "singular_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned soul",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "title",
+        "text": "MISSIONED SOUL"
+      },
+      "metadataAssessment": {
+        "category": "undetermined_performance_or_reaction",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "JOyb0uOl9PM",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "JOyb0uOl9PM",
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "Have you ever seen the rain/missioned soul band",
+        "description": "",
+        "tags": []
+      },
+      "sourceMetadataSha256": "6485a466ed763e66f8dc11e16ab3b62e0040f9fabe6c24b1f990c01952116e2b",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "singular_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned soul",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "title",
+        "text": "missioned soul"
+      },
+      "metadataAssessment": {
+        "category": "undetermined_performance_or_reaction",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "aSyMVj3urmM",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "aSyMVj3urmM",
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "Missioned soul/Metallica song",
+        "description": "",
+        "tags": []
+      },
+      "sourceMetadataSha256": "a0f2a0dd2c4e3922433ccf59796ffb71e4c46208281b9870fc49378c1c698d93",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "singular_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned soul",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "title",
+        "text": "Missioned soul"
+      },
+      "metadataAssessment": {
+        "category": "undetermined_performance_or_reaction",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "1B_iYs4hYsg",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "1B_iYs4hYsg",
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "Missioned soul band /bad medicine ",
+        "description": "",
+        "tags": []
+      },
+      "sourceMetadataSha256": "7e51730be4378df7a03060aac0a47e61d81b8e66fc6b2ccb052198d8ecb95f16",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "singular_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned soul",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "title",
+        "text": "Missioned soul"
+      },
+      "metadataAssessment": {
+        "category": "undetermined_performance_or_reaction",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "UrsNTe1GOQo",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "UrsNTe1GOQo",
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "It must have been love /missioned soul band",
+        "description": "",
+        "tags": []
+      },
+      "sourceMetadataSha256": "7df0d5c8fec119e44fa76cd997ce96868c7af571021114633c5f25a7bf00f58d",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "singular_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned soul",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "title",
+        "text": "missioned soul"
+      },
+      "metadataAssessment": {
+        "category": "undetermined_performance_or_reaction",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "AWeQ--HGxeA",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "AWeQ--HGxeA",
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "MISSINOED SOUL BAND / SMOKE ON THE WATER ",
+        "description": "",
+        "tags": []
+      },
+      "sourceMetadataSha256": "be6e51b3fa604bdcac2026dc3cb4fd9e508edfc6236ba86e0610ecfc064c6691",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "weak",
+        "primaryRuleId": "bobcat_observed_typo",
+        "primaryField": "title",
+        "normalizedMatch": "missinoed soul band",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "title",
+        "text": "MISSINOED SOUL BAND"
+      },
+      "metadataAssessment": {
+        "category": "undetermined_performance_or_reaction",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "sQgeObe1QGI",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "sQgeObe1QGI",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Alone: A Cover Can Stand Beside a Classic #shorts",
+        "description": "Heart’s legendary recording and Missioned Souls’ performance can both be celebrated. Music isn’t a competition—listeners can respect the original and still feel a deeper connection to a new version.\n#Heart #MissionSouls #AloneSong #MusicCovers",
+        "tags": []
+      },
+      "sourceMetadataSha256": "b8b6b628d9f21ce88dfc394e14a50b8557d8054d3ee4eb6f61810c328567b31a",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "canonical_name",
+        "primaryField": "description",
+        "normalizedMatch": "missioned souls",
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "description",
+        "text": "Missioned Souls"
+      },
+      "metadataAssessment": {
+        "category": "cover_comparison_commentary",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "IMXlZ--CmI8",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "IMXlZ--CmI8",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Mission Souls Livestream Event #shorts",
+        "description": "Experience the Mission Souls livestream! Featuring a Cebu City concert, exclusive behind-the-scenes, and three easy ways to watch. Don't miss out!\n#MissionSouls #LiveStream #Concert #CebuCity",
+        "tags": []
+      },
+      "sourceMetadataSha256": "94be053c5498043f9dbd9aef87ed4fa862ac731e1b1f5108b9ae5ae1519b5669",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "weak",
+        "primaryRuleId": "bluebonnet_mission_souls",
+        "primaryField": "title",
+        "normalizedMatch": "mission souls",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "title",
+        "text": "Mission Souls"
+      },
+      "metadataAssessment": {
+        "category": "promotion_or_campaign",
+        "method": "assistant text review; media not watched",
+        "promotionHold": true
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "iTJOhJXlciU",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "iTJOhJXlciU",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "From Humble Studio to Global Stage #shorts",
+        "description": "Missioned Souls' worldwide acclaim started in a small Philippine studio, fueled by a family's dream of a larger music haven. Their journey proves passion transcends location.\n#MissionedSouls #FilipinoMusic #GlobalSuccess #MusicJourney",
+        "tags": []
+      },
+      "sourceMetadataSha256": "19170cf6c4b1cdd173f136941efd7cc39f201d708814ee79ca589b99ac9dc7ae",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "canonical_name",
+        "primaryField": "description",
+        "normalizedMatch": "missioned souls",
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "description",
+        "text": "Missioned Souls"
+      },
+      "metadataAssessment": {
+        "category": "performer_or_family_background",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "EoSEujsSNpQ",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "EoSEujsSNpQ",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Joan Jett's First Listen to \"I Love Rock 'n' Roll\" #shorts",
+        "description": "In 1976, Joan Jett first heard the iconic song \"I Love Rock 'n' Roll\" performed by Arrows on British television, long before it became synonymous with her own powerful rendition.\n#JoanJett #ILoveRockNRoll #MusicHistory #RockAndRoll",
+        "tags": []
+      },
+      "sourceMetadataSha256": "8b838c43cabfee88df1e74bec55c5ae3be420bbe228d3bda385ba0f1dcffdd5d",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "music_history_or_story",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "Mto3Z2odbl0",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "Mto3Z2odbl0",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "From Flop to Anthem: \"I Love Rock 'n' Roll\" #shorts",
+        "description": "The Arrows' 1975 version of \"I Love Rock 'n' Roll\" was a forgotten recording. Decades later, it became a global anthem, proving that sometimes, the biggest hits take time to find their audience.\n#ILoveRockAndRoll #MusicHistory #HitSong #CoverSongs",
+        "tags": []
+      },
+      "sourceMetadataSha256": "2168f5b493bffbb3aad186882f2b99ed12b81c16847662795d26dc8654d4e092",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "music_history_or_story",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "beD4U5icWFo",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "beD4U5icWFo",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Who Really Wrote \"I Love Rock 'n' Roll\"? #shorts",
+        "description": "Did Joan Jett truly co-write \"I Love Rock 'n' Roll\"? Explore the disputed credit and Alan Merrill's claim of sole authorship. The story behind a rock anthem.\n#ILoveRockNRoll #Songwriting #MusicHistory #AlanMerrill #JoanJett",
+        "tags": []
+      },
+      "sourceMetadataSha256": "87260ce48da487ff68736e319f0be5526ff21b7a227ee3d3277575032643dad4",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "music_history_or_story",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "3Y33lIsykQs",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "3Y33lIsykQs",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "The Secret History of \"I Love Rock 'n' Roll\" #shorts",
+        "description": "Discover the untold story behind \"I Love Rock 'n' Roll.\" Unravel Joan Jett's crucial role, a surprising songwriting credit twist, and the song's original inspiration. A deep dive into a rock anthem.\n#ILoveRocknRoll #JoanJett #MusicHistory #Songwriting #RockAnthem",
+        "tags": []
+      },
+      "sourceMetadataSha256": "88582b862b7753f144e5a10bb6db29c88c6eff392b949224d4001304e9c3b965",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "music_history_or_story",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "hXD2t-r5oTU",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "hXD2t-r5oTU",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Awkward Keyboards & Iconic Music Videos #shorts",
+        "description": "From cringey wall-mounted keyboards to the unforgettable energy of Journey's 1983 'Separate Ways' video. A look back at music's most unexpected hits and their enduring appeal.\n#MusicHistory #80sMusic #JourneyBand #RetroVideo",
+        "tags": []
+      },
+      "sourceMetadataSha256": "51b4a4afb474e89cc93bd4fce687ef7a204e436bd3a11917809f7c70f0ee2ac5",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "music_history_or_story",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "gs_3lJJ23x0",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "gs_3lJJ23x0",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Invisible Keyboard Performance Praised #shorts",
+        "description": "A presenter celebrates an artist's serious invisible keyboard performance, then humorously jokes about the keyboard finally appearing against a wall.\n#JonathanCain #PerformanceArt #InvisibleKeyboard #ComedySkit",
+        "tags": []
+      },
+      "sourceMetadataSha256": "37a65947400166c3cd6321b4500727189b3df428c4ddbcd4fb997f7abc4ce600",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "performance_humor_commentary",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "fPI5Pqhk3F4",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "fPI5Pqhk3F4",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Joan Jett's New Release: Where Will You Listen? #shorts",
+        "description": "Missioned Souls is dropping a new Joan Jett release! We want to know your listening plans. Plus, catch a live performance from the band!\n#JoanJett #MissionedSouls #NewMusic #BandPerformance",
+        "tags": []
+      },
+      "sourceMetadataSha256": "be40d458c683dac01445609d371f3ad6d6525dfe0220165d1d10fcb1f0d796c1",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "canonical_name",
+        "primaryField": "description",
+        "normalizedMatch": "missioned souls",
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "description",
+        "text": "Missioned Souls"
+      },
+      "metadataAssessment": {
+        "category": "promotion_or_campaign",
+        "method": "assistant text review; media not watched",
+        "promotionHold": true
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "Q-HrJwLJw38",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "Q-HrJwLJw38",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Music Rights: The Hidden YouTube Barrier #shorts",
+        "description": "A song's music is on streaming, but its performance video hits a separate rights wall on YouTube. Navigating the complexities of online content distribution.\n#MusicRights #YouTubeCopyright #ContentCreation #MusicIndustry",
+        "tags": []
+      },
+      "sourceMetadataSha256": "6792aa31f9676b05b3e7229ffe13e39a3c0a39d024c1600ec6eddf12302966bd",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "rights_commentary",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "eZAyvcsaayQ",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "eZAyvcsaayQ",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "The Family as an Instrument: A Musical Revelation #shorts",
+        "description": "Discover how a family's unique blend of personalities, faith, and culture creates a musical instrument unlike any other. It's not just about the songs, but the discovery itself.\n#FamilyBands #MusicalDiscovery #CreativeFamilies #UniqueTalent",
+        "tags": []
+      },
+      "sourceMetadataSha256": "513c4bd3464aaa4efc66d5cf40c7e00955d79a12be05eb76058edc199b80b9ee",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "performer_or_family_background",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "YrW-C-ENkdk",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "YrW-C-ENkdk",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Parents' Songs, Children's Experiences: A Unique Family Creation #shorts",
+        "description": "Is Mission of Souls evolving or embracing covers? Discover how parents' past experiences blended with children's emerging expressions create a truly unique family art form, unlike any other.\n#FamilyCreativity #MusicEvolution #Parenting #ChildhoodExperiences #OriginalMusic",
+        "tags": []
+      },
+      "sourceMetadataSha256": "621510f926f2391a00f915dcf384389f5a322de5dbf0276d05c8dfbc25c5225e",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "weak",
+        "primaryRuleId": "bluebonnet_mission_of_souls",
+        "primaryField": "description",
+        "normalizedMatch": "mission of souls",
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "description",
+        "text": "Mission of Souls"
+      },
+      "metadataAssessment": {
+        "category": "performer_or_family_background",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "XNAN5Izi3hE",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "XNAN5Izi3hE",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Can 'Whole Lotta Love' Hit 1 Million Views? #shorts",
+        "description": "We're tracking the views on 'Whole Lotta Love' across official and unofficial channels, aiming for one million plays on the official version. Will it make the cut?\n#WholeLottaLove #MusicViews #YouTubeGoals #OneMillionViews",
+        "tags": []
+      },
+      "sourceMetadataSha256": "567ee27270d79fa6dcd5e3a1ec2f18d557026a0cf4c294723006001a278ad126",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "promotion_or_campaign",
+        "method": "assistant text review; media not watched",
+        "promotionHold": true
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "T10SS_ogdVI",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "T10SS_ogdVI",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Four Siblings Become Musicians: What Are The Odds? #shorts",
+        "description": "Imagine a family with 4 children—3 sisters and 1 brother—all becoming musicians. The Jacksons, Bee Gees, Cowsills, The Corrs... what are the chances? With musical parents and shared influences, the probabilities shift dramatically.\n#MusicalFamilies #SiblingBands #MusicOdds #FamilyTalent",
+        "tags": []
+      },
+      "sourceMetadataSha256": "b91dfe3dafe8060ae2db661427ce030e3d8dacadb8e3b439b860194b917b7dc6",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "performer_or_family_background",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "WAzngmDBVcI",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "WAzngmDBVcI",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Nurture vs. Nature: The Soul Mates Debate #shorts",
+        "description": "Genetics, parenting, practice, or sibling influence? What truly crafts extraordinary talent like the Mission of Souls? Would their brilliance be lost in different families?\n#NatureVsNurture #Talent #Genetics #Parenting #SiblingInfluence #SoulMates",
+        "tags": []
+      },
+      "sourceMetadataSha256": "4b70364d5a2fb57b2a19374d95446ba065f743d98b10a2dd328b0ec4b9316de1",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "weak",
+        "primaryRuleId": "bluebonnet_mission_of_souls",
+        "primaryField": "description",
+        "normalizedMatch": "mission of souls",
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "description",
+        "text": "Mission of Souls"
+      },
+      "metadataAssessment": {
+        "category": "performer_or_family_background",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "IhZeFq8e018",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "IhZeFq8e018",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "The Probability Paradox Explained #shorts",
+        "description": "Are probabilities truly independent? Explore a thought experiment that challenges our assumptions and reveals a deeper layer of complexity in probability. Not for statisticians, but for the curious mind!\n#Probability #MathExplained #ThoughtExperiment #Curiosity #Logic",
+        "tags": []
+      },
+      "sourceMetadataSha256": "9ecffde202122e7ced12c80fd9c9d47bd0ec367fb7ff3fb255af7fc96add610e",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "probability_commentary",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "-ctndgOQJHE",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "-ctndgOQJHE",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "35-Year Journey: A Song's Global Return #shorts",
+        "description": "A 35-year journey for a song! \"I Still Think About You\" traveled the globe from YouTube back to its original creators, turning a Danger Danger founder into a Mission Souls fan for life. The power of music, rediscovered.\n#MissionSouls #DangerDanger #IStillThinkAboutYou #MusicStory #FanStory",
+        "tags": []
+      },
+      "sourceMetadataSha256": "d70d824d64e947552466c3890d3e1dad7885d44aea84e56125966bd304a60b20",
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "weak",
+        "primaryRuleId": "bluebonnet_mission_souls",
+        "primaryField": "description",
+        "normalizedMatch": "mission souls",
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": {
+        "field": "description",
+        "text": "Mission Souls"
+      },
+      "metadataAssessment": {
+        "category": "music_history_or_story",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "Y8J3wlSovbQ",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "Y8J3wlSovbQ",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "35-Year-Old Power Ballad Goes Viral with Filipino Family #shorts",
+        "description": "A power ballad, written decades ago in the Philippines, unexpectedly re-enters the lives of a Filipino family thanks to an Indonesian fan. Their kids, unfamiliar with the group, fall in love with the song, leading to a heartwarming family practice, rehearsal, and a perfectly executed one-take recording.\n#PowerBallad #FamilyGoals #MusicRevival #OneTake #FilipinoPride",
+        "tags": []
+      },
+      "sourceMetadataSha256": "202fb794399371b538331c17a6d1fc02c96b6eab5889af018904b2afb6bddcb1",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "music_history_or_story",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "FVEzHhZcIwA",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "FVEzHhZcIwA",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Unlikely Global Guitar Cover Goes Viral #shorts",
+        "description": "A young guitarist in the Philippines, never having heard of Danger Danger, learns Andy Timmons' part from an Indonesian request. Performed with family in one take, it reaches Andy Timmons himself.\n#GuitarCover #AndyTimmons #MusicDiscovery #GlobalTalent #Inspiration",
+        "tags": []
+      },
+      "sourceMetadataSha256": "d511e7037ff1c3b261f438b4036092f92f30a577365153d4dd72cbf875e2f8ad",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "music_history_or_story",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "o4kgYHM3ahk",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "o4kgYHM3ahk",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Songs That Still Matter After Decades #shortsfeed",
+        "description": "A song's enduring legacy: remembered, shared, requested internationally, perfected by practice, and rediscovered decades later, proving its lasting impact.\n#MusicLegacy #TimelessSongs #Songwriting #MusicDiscovery",
+        "tags": []
+      },
+      "sourceMetadataSha256": "1ea59dbae17eddfdd3007b0013db6d1e43405d6e0db9cd0dec7ad470db76d640",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "music_history_or_story",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    },
+    {
+      "caseId": "-jK0QvXUk4M",
+      "kind": "observed_provider_metadata",
+      "input": {
+        "id": "-jK0QvXUk4M",
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Woodstock’s Legacy: A Guest DJ’s Mission",
+        "description": "",
+        "tags": []
+      },
+      "sourceMetadataSha256": "6d04462bf1a97e28de89b6d0d32c4c76a3a004d922451a83247fea4c7101f5a0",
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "supportingExcerpt": null,
+      "metadataAssessment": {
+        "category": "undetermined_content",
+        "method": "assistant text review; media not watched",
+        "promotionHold": false
+      },
+      "contentTruth": null,
+      "formatTruth": null,
+      "reviewConstraint": "Do not approve or import from candidate evidence alone; no-evidence is not a verified content rejection."
+    }
+  ],
+  "syntheticCases": [
+    {
+      "caseId": "substring_commissioned",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Commissioned Souls community update",
+        "description": "",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "substring_suffix",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Soulslike cover",
+        "description": "",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "unicode_separator",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "MISSIONED—SOULS reaction",
+        "description": "",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "canonical_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned souls",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "compact_title_hashtag",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "#MissionedSouls",
+        "description": "",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "weak",
+        "primaryRuleId": "exact_compact_title_hashtag",
+        "primaryField": "title",
+        "normalizedMatch": "#missionedsouls",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "cross_field_name",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned",
+        "description": "Souls",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "narrative_description",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Alone #shorts",
+        "description": "I react to Missioned Souls performing Alone.",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "canonical_name",
+        "primaryField": "description",
+        "normalizedMatch": "missioned souls",
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "original_link_only",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Alone #shorts",
+        "description": "Original video: Missioned Souls https://example.invalid/original",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "canonical_promotion_title",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Souls tour update",
+        "description": "",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "canonical_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned souls",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "generic_history",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "An unrelated music-history short",
+        "description": "",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "abbreviation_wrong_channel",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "MS BAND / Bad Name",
+        "description": "",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "typo_wrong_channel",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "MISSINOED SOUL BAND / Smoke",
+        "description": "",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "mission_souls_wrong_channel",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "Mission Souls livestream",
+        "description": "",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "mission_of_souls_wrong_channel",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "A family discussion",
+        "description": "Mission of Souls is talented.",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "mission_of_souls_scoped",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "A family discussion",
+        "description": "Mission of Souls is talented.",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "weak",
+        "primaryRuleId": "bluebonnet_mission_of_souls",
+        "primaryField": "description",
+        "normalizedMatch": "mission of souls",
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "url_only",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "A cover",
+        "description": "https://example.invalid/Missioned-Souls",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "tags_only",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "A cover",
+        "description": "",
+        "tags": [
+          "Missioned Souls"
+        ]
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "description_hashtag_only",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "A cover",
+        "description": "#MissionedSouls #Music",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "description_tag_list",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "A cover",
+        "description": "#Missioned #Souls #Music",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "singular_unicode",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "Missioned—Soul Band",
+        "description": "",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "singular_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned soul",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "weak_prefix_suffix",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "XMS BANDish",
+        "description": "",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "credits_only",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "A cover",
+        "description": "Credits: Missioned Souls",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "narrative_after_credits",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "A cover",
+        "description": "Original video: https://example.invalid/original\nWe discuss Missioned Souls performing this song.",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "canonical_name",
+        "primaryField": "description",
+        "normalizedMatch": "missioned souls",
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "title_weak_description_strong",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "MS BAND / A song",
+        "description": "We discuss Missioned Souls.",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "canonical_name",
+        "primaryField": "description",
+        "normalizedMatch": "missioned souls",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "both_strong_fields",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Souls reaction",
+        "description": "We discuss Missioned Souls.",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": true,
+        "strength": "strong",
+        "primaryRuleId": "canonical_name",
+        "primaryField": "title",
+        "normalizedMatch": "missioned souls",
+        "positiveTitleHint": true,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    },
+    {
+      "caseId": "singular_word_suffix",
+      "kind": "synthetic_boundary_probe",
+      "input": {
+        "id": null,
+        "channelId": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "Missioned Soulmate music",
+        "description": "",
+        "tags": []
+      },
+      "expectedRecognizer": {
+        "candidate": false,
+        "strength": "none",
+        "primaryRuleId": null,
+        "primaryField": null,
+        "normalizedMatch": null,
+        "positiveTitleHint": false,
+        "emitsApprovalDecision": false
+      },
+      "contentTruth": null
+    }
+  ],
+  "decisionControls": [
+    {
+      "caseId": "qLlLiYH1ms0",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "qLlLiYH1ms0",
+        "channel_id": "UCZ77h_VX7l7SOOh7uAmZuVA",
+        "title": "Missioned soul band /long time ",
+        "published_at": "2026-10-20T09:59:06Z",
+        "checked_at": "2026-10-28T12:15:40.938Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "VTDwHLdKt18",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "VTDwHLdKt18",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "A Bigger Missioned Souls Studio Takes Shape #shorts",
+        "published_at": "2026-10-23T14:36:43Z",
+        "checked_at": "2026-10-30T15:30:47.469Z",
+        "available": 1,
+        "format": "SHORT",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "VsdFHwkgQp4",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "VsdFHwkgQp4",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Free Missioned Souls Livestream from Cebu #shorts",
+        "published_at": "2026-10-18T18:07:49Z",
+        "checked_at": "2026-10-25T20:00:43.637Z",
+        "available": 1,
+        "format": "SHORT",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "6Eu4f5oqXnk",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "6Eu4f5oqXnk",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Souls LIVE From Cebu! 🌎 FREE Worldwide Concert | October 23, 2026",
+        "published_at": "2026-10-18T10:03:07Z",
+        "checked_at": "2026-11-01T12:15:41.636Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "TXlv6i3dftU",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "TXlv6i3dftU",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "From Joan Jett to Missioned Souls: The Story of “I Love Rock ’n Roll”",
+        "published_at": "2026-10-16T10:00:35Z",
+        "checked_at": "2026-10-30T10:30:41.501Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "LSg8B-H8t68",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "LSg8B-H8t68",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Journey’s “Separate Ways”: Why Does Naces Play Cross-Handed? ",
+        "published_at": "2026-10-13T10:00:09Z",
+        "checked_at": "2026-10-27T11:45:40.672Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 1,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "5RMKxr577yQ",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "5RMKxr577yQ",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Why You Can’t Watch Missioned Souls’ “I Hate Myself for Loving You” on YouTube  ",
+        "published_at": "2026-10-08T10:00:29Z",
+        "checked_at": "2026-10-29T11:15:39.761Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 1,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "qqtrouCIQPA",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "qqtrouCIQPA",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "IS THE FAMILY ALREADY THE ORIGINAL?",
+        "published_at": "2026-10-07T10:00:01Z",
+        "checked_at": "2026-10-28T13:45:41.184Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 1,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "x2SBlESHn1Q",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "x2SBlESHn1Q",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Support Original Music: Watch 'Missioned Souls' on YouTube #shorts",
+        "published_at": "2026-10-05T01:34:30Z",
+        "checked_at": "2026-10-26T04:22:18.052Z",
+        "available": 1,
+        "format": "SHORT",
+        "format_locked": 1,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "29Lh-GagFDE",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "29Lh-GagFDE",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "What Can I Do to Help Missioned Souls?!",
+        "published_at": "2026-10-03T21:24:11Z",
+        "checked_at": "2026-11-01T13:45:41.925Z",
+        "available": 1,
+        "format": "SHORT",
+        "format_locked": 1,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "XfzYOv5M43I",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "XfzYOv5M43I",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Souls Hits the Woodstock Airwaves | Is This How It Starts?",
+        "published_at": "2026-10-02T10:00:24Z",
+        "checked_at": "2026-10-31T02:45:41.042Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "wIWMz69WReM",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "wIWMz69WReM",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "One in 10 Billion!!? How is this Possible!",
+        "published_at": "2026-09-30T10:00:15Z",
+        "checked_at": "2026-10-30T11:15:39.941Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "zfIG1njStpQ",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "zfIG1njStpQ",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "DANGER DANGER to MISSIONED SOULS — The 35-Year Journey of “I Still Think About You”",
+        "published_at": "2026-09-25T10:52:56Z",
+        "checked_at": "2026-10-30T22:30:40.679Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "v4OLp-H3VXM",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "v4OLp-H3VXM",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Why I’m No Longer Just a  Missioned Souls Promoter",
+        "published_at": "2026-09-15T16:38:37Z",
+        "checked_at": "2026-11-01T13:45:41.925Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "I-ZMFqBo_G4",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "I-ZMFqBo_G4",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "🔥🔥🔥MISSIONED SOULS TEXAS TOUR 2026 | UPDATED TICKET & LIVESTREAM DETAILS 🇺🇸🇵🇭 🔥🔥🔥",
+        "published_at": "2026-09-02T21:13:40Z",
+        "checked_at": "2026-10-30T22:30:40.679Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "YVKw2RrjY2A",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "YVKw2RrjY2A",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "MISSIONED SOULS TEXAS TOUR UPDATE! TICKETS & VENUES!",
+        "published_at": "2026-08-27T20:37:12Z",
+        "checked_at": "2026-10-30T22:30:40.679Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "bZjaclqysLA",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "bZjaclqysLA",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Souls Texas Tour Announcement-Dates are being Postponed",
+        "published_at": "2026-08-22T13:53:00Z",
+        "checked_at": "2026-10-30T22:30:40.679Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 1,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "G5GYrUmLZC8",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "G5GYrUmLZC8",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Souls Worldwide Livestream Dallas Show Announcement!",
+        "published_at": "2026-08-17T22:50:18Z",
+        "checked_at": "2026-10-30T22:30:40.679Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "ttaAsatK87I",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "ttaAsatK87I",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Souls Texas Tour Udpate 4 weeks to Show Time!",
+        "published_at": "2026-08-10T14:19:02Z",
+        "checked_at": "2026-10-30T22:30:40.679Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "nf5rHTkIOhI",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "nf5rHTkIOhI",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Souls   LIVE Requests, Tour Updates,Behind the Scenes",
+        "published_at": "2026-08-08T11:23:55Z",
+        "checked_at": "2026-10-30T22:30:40.679Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "ccrPMQjmuzc",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "ccrPMQjmuzc",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Souls Texas Tour Update & Behind the Scenes   ",
+        "published_at": "2026-07-23T17:08:29Z",
+        "checked_at": "2026-10-30T22:30:40.679Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "35_K9fgnDvE",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "35_K9fgnDvE",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Souls Texas Tour Update What is new & great!!🔥🔥💥💥",
+        "published_at": "2026-07-09T20:00:26Z",
+        "checked_at": "2026-10-30T22:30:40.679Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "uVNy8TXY8Xk",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "uVNy8TXY8Xk",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Souls Texas Tour Update with Ticket Information",
+        "published_at": "2026-07-02T18:35:34Z",
+        "checked_at": "2026-10-30T22:30:40.679Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    },
+    {
+      "caseId": "JBb9GmbBhoc",
+      "kind": "saved_decision_preservation_control",
+      "catalogSnapshot": {
+        "id": "JBb9GmbBhoc",
+        "channel_id": "UCFwf5lAecSKl2Dvk7kYcCJQ",
+        "title": "Missioned Souls Texas Tour Dates Announcement",
+        "published_at": "2026-07-01T20:33:01Z",
+        "checked_at": "2026-10-30T22:30:40.679Z",
+        "available": 1,
+        "format": "FULL_LENGTH",
+        "format_locked": 0,
+        "status": "CONFIRMED",
+        "exclusion_reason": null
+      },
+      "expectedDecision": "CONFIRMED",
+      "expectedMutation": "none",
+      "basis": "saved November 1 snapshot, not a new content approval"
+    }
+  ],
+  "relatedEvidence": "related-video-evidence.json",
+  "summary": {
+    "observed": 33,
+    "reviewCandidates": 18,
+    "strong": 12,
+    "weak": 6,
+    "noSupportedIdentity": 15,
+    "positiveTitleHints": 12,
+    "metadataAssessmentCounts": {
+      "undetermined_performance_or_reaction": 11,
+      "cover_comparison_commentary": 1,
+      "promotion_or_campaign": 3,
+      "performer_or_family_background": 5,
+      "music_history_or_story": 9,
+      "performance_humor_commentary": 1,
+      "rights_commentary": 1,
+      "probability_commentary": 1,
+      "undetermined_content": 1
+    },
+    "synthetic": 25,
+    "preservedDecisions": 24,
+    "mediaVerifiedContentLabels": 0
+  },
+  "notImplemented": [
+    "JavaScript adapter",
+    "Python adapter",
+    "fresh admission wiring",
+    "offline retained-campaign reclassification"
+  ],
+  "apiCalls": 0,
+  "catalogWrites": 0
+}

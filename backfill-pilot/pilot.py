@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zoneinfo import ZoneInfo
 import measurements
 from broker import BrokerClient, BrokerError
+from candidate_recognition import candidate_evidence
 
 ROOT = Path(__file__).resolve().parent
 PT = ZoneInfo('America/Los_Angeles')
@@ -181,12 +182,17 @@ class Pilot:
                         self.db.execute('INSERT INTO encounters VALUES(?,?,?,0)', (batch_id, vid, 'after_cutoff'))
                         continue
                     known = existing[vid]
-                    text = snippet.get('title', '') + ' ' + snippet.get('description', '')
-                    classification = 'existing:' + known[0] if known else 'review' if re.search(r'missioned[\s_-]*souls', text, re.I) else 'unmatched'
+                    if v and not known and snippet.get('channelId') not in (None, c['id']):
+                        raise RuntimeError('Metadata channel mismatch; review required')
+                    candidate = candidate_evidence(dict(id=vid, channelId=snippet.get('channelId') or c['id'],
+                                                        title=snippet.get('title', ''), description=snippet.get('description', ''), tags=snippet.get('tags', []))) if v and not known else None
+                    classification = 'existing:' + known[0] if known else 'review' if candidate and candidate['recognition']['candidate'] else 'unmatched'
                     if not v and not known:
                         classification = 'unavailable'
                     if known:
                         v = {'playlist_evidence': playlist_items.get(vid), 'metadata_skipped': 'Known RJ ID', 'snapshot_decision': known[0]}
+                    elif v:
+                        v = dict(v, _rj_candidate_recognition=candidate)
                     self.db.execute('INSERT OR IGNORE INTO videos VALUES(?,?,?,?,?,?,?,?)', (vid, c['id'], snippet.get('title', vid), published, classification, json.dumps(v), now(), day()))
                     is_new = not bool(known)
                     new_records += is_new

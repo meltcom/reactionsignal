@@ -1,0 +1,92 @@
+{
+  "version": "ms-candidate-contract-v1",
+  "rulesInPriorityOrder": [
+    {
+      "id": "canonical_name",
+      "phrase": "missioned souls",
+      "fields": [
+        "title",
+        "description"
+      ],
+      "strength": "strong",
+      "channels": "any"
+    },
+    {
+      "id": "singular_name",
+      "phrase": "missioned soul",
+      "fields": [
+        "title",
+        "description"
+      ],
+      "strength": "strong",
+      "channels": "any"
+    },
+    {
+      "id": "bobcat_abbreviation",
+      "phrase": "ms band",
+      "fields": [
+        "title",
+        "description"
+      ],
+      "strength": "weak",
+      "channels": [
+        "UCZ77h_VX7l7SOOh7uAmZuVA"
+      ]
+    },
+    {
+      "id": "bobcat_observed_typo",
+      "phrase": "missinoed soul band",
+      "fields": [
+        "title",
+        "description"
+      ],
+      "strength": "weak",
+      "channels": [
+        "UCZ77h_VX7l7SOOh7uAmZuVA"
+      ]
+    },
+    {
+      "id": "bluebonnet_mission_souls",
+      "phrase": "mission souls",
+      "fields": [
+        "title",
+        "description"
+      ],
+      "strength": "weak",
+      "channels": [
+        "UCFwf5lAecSKl2Dvk7kYcCJQ"
+      ]
+    },
+    {
+      "id": "bluebonnet_mission_of_souls",
+      "phrase": "mission of souls",
+      "fields": [
+        "title",
+        "description"
+      ],
+      "strength": "weak",
+      "channels": [
+        "UCFwf5lAecSKl2Dvk7kYcCJQ"
+      ]
+    },
+    {
+      "id": "exact_compact_title_hashtag",
+      "phrase": "#missionedsouls",
+      "fields": [
+        "title"
+      ],
+      "strength": "weak",
+      "channels": "any",
+      "matching": "exact complete hashtag token"
+    }
+  ],
+  "noEvidence": {
+    "candidate": false,
+    "strength": "none",
+    "primaryRuleId": null,
+    "primaryField": null,
+    "normalizedMatch": null,
+    "positiveTitleHint": false,
+    "emitsApprovalDecision": false
+  }
+}

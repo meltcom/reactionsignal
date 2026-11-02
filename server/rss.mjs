@@ -1,5 +1,6 @@
 import {database,seedDatabase} from './db.mjs';
 import {classify,runDiscovery} from './discovery.mjs';
+import {recognizeCandidate} from './candidate-recognition.mjs';
 import {feedEntries,boundedBody,processPushJobs,renewSubscriptions} from './push.mjs';
 // API coverage always runs before optional feed polling. Feed failures cannot
 // prevent the reliable path; new RSS hints are verified after polling.
@@ -38,7 +39,7 @@ export async function pollRss(env,seed,fetcher=fetch){
      const ids=[];
      for(const entry of xml.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry\s*>/g)){
       const title=/<title\b[^>]*>([\s\S]*?)<\/title\s*>/.exec(entry[1])?.[1];
-      if(!title||classify(title,aliases,null))ids.push(...feedEntries(`<entry>${entry[1]}</entry>`,c.id));
+      if(!title||classify(title,aliases,null)||recognizeCandidate({title,channelId:c.id}).positiveTitleHint)ids.push(...feedEntries(`<entry>${entry[1]}</entry>`,c.id));
      }
      for(const id of new Set(ids)){
       // Polling repeats do not reset retries or reopen completed jobs.
