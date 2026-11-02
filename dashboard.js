@@ -7,7 +7,7 @@ async function action(work,message='Saved.'){try{await work();await refreshDashb
 async function refreshDashboard(){dashboard=await socialApi('/dashboard');if(ready){if(page==='feed')renderVideos();if(activeCommunityVideo&&!activeCommunityReactor)renderVideoActions();if(page==='saved')renderSaved();if(page==='following')renderFollowing();if(page==='reputation')renderReputation();if(page==='reactors')renderReactors();if(activeCommunityReactor){const id=activeCommunityReactor.id;const input=$('reactorDiscussionRating').querySelector('input');if(input)input.value=myReactorRating(id)??'';$('dialogMeta').textContent='Reactor discussion · '+reactorRankLabel(id);}}}
 async function loadDashboard(initialDashboard){try{if(initialDashboard)dashboard=initialDashboard;else await refreshDashboard();prefs={...defaults,...dashboard.preferences};if(prefs.performer!=='all'&&!catalog.performers.some(p=>p.id===prefs.performer))prefs.performer=catalog.performers[0]?.id||'all';if(prefs.defaultView){const v=dashboard.views.find(v=>v.id===prefs.defaultView);if(v&&v.settings?.scope!=='ms-journey')prefs={...prefs,...v.settings};}feedMode='all';prefs.favoritesOnly=false;state.performer=prefs.performer;state.query=prefs.query;state.sort=prefs.sort;ready=true;window.dispatchEvent(new Event('journey-account-ready'));applyAppearance();syncControls();syncCommunityAccess();navigate(location.hash.slice(1)||'feed');}catch(e){notice(e.message);}}
 let moderatorUiReady=false;
-function syncCommunityAccess(){$('reviewNav').hidden=!communityState?.moderator;$('contactInboxNav').hidden=!communityState?.moderator;$('classificationReviewNav').hidden=!communityState?.moderator;$('moderatorNavSection').hidden=!communityState?.moderator;$('moderatorHelp').hidden=!communityState?.moderator;if(communityState?.moderator&&!moderatorUiReady){moderatorUiReady=true;loadAutomaticAdditions(true);$('reviewMount').append($('moderation'));$('moderation').hidden=false;}}
+function syncCommunityAccess(){$('reviewNav').hidden=!communityState?.moderator;$('contactInboxNav').hidden=!communityState?.moderator;$('classificationReviewNav').hidden=!communityState?.moderator;$('moderatorNavSection').hidden=!communityState?.moderator;$('moderatorHelp').hidden=!communityState?.moderator;$('fullHelpDownload').hidden=!communityState?.moderator;document.querySelectorAll('#help .help-staff-outline').forEach(node=>node.hidden=!communityState?.moderator);if(communityState?.moderator&&!moderatorUiReady){moderatorUiReady=true;loadAutomaticAdditions(true);$('reviewMount').append($('moderation'));$('moderation').hidden=false;}}
 function applyAppearance(){document.body.dataset.theme=prefs.theme;document.body.dataset.density=prefs.density;document.body.dataset.thumb=prefs.thumbnail;document.documentElement.style.setProperty('--columns',String(Math.max(2,prefs.columns||3)));document.documentElement.style.removeProperty('--teal');if(prefs.accent!=='teal')document.documentElement.style.setProperty('--teal',prefs.accent==='blue'?(prefs.theme==='dark'?'#8ac8ff':'#215fc4'):(prefs.theme==='dark'?'#d4afff':'#7442b4'));}
 function syncControls(){if($('includeShorts'))$('includeShorts').checked=!prefs.hideShorts;$('searchInput').value=state.query;$('sortFilter').value=state.sort;document.querySelectorAll('[data-feed]').forEach(b=>b.classList.toggle('active',b.dataset.feed===feedMode));}
 function clearFeedFilters(){
@@ -291,8 +291,6 @@ setInterval(async()=>{
  finally{catalogRefreshRunning=false;}
 },60000);
 
-// Help topic links expand their section without changing the active application page.
-document.querySelectorAll('#help a[href^="#help-"]').forEach(link=>link.onclick=e=>{e.preventDefault();const topic=document.getElementById(link.getAttribute("href").slice(1));if(topic){topic.open=true;topic.scrollIntoView({block:"start",behavior:"smooth"});topic.querySelector("summary").focus();}});
 
 function renderModeratorFormat(){
  let panel=$('moderatorFormat');if(!panel){panel=document.createElement('div');panel.id='moderatorFormat';$('dialogMeta').after(panel);}
@@ -417,3 +415,78 @@ window.journeyAccount={
  previewReactionView(value){const ms=prefs.msJourney;prefs={...prefs,...value,msJourney:ms};state.performer=prefs.performer;state.query=prefs.query;state.sort=prefs.sort;feedMode=prefs.landing;applyAppearance();syncControls();renderAll();},
  applyReactionView(value,presentationOnly=false){const keys=['layout','thumbnail','columns','density'];const settings=presentationOnly?Object.fromEntries(keys.map(k=>[k,value[k]])):value;this.previewReactionView(settings);navigate('feed');}
 };
+
+
+// Help topic links expand their section without changing the active application page.
+const helpPanel=$('help');
+helpPanel?.addEventListener('click',e=>{const link=e.target.closest('a[href^="#help-"]');if(!link)return;e.preventDefault();const topic=document.getElementById(link.getAttribute('href').slice(1));if(topic){topic.open=true;topic.scrollIntoView({block:'start',behavior:'smooth'});topic.querySelector('summary')?.focus();}});
+
+// Keep the help index compact and make every guide searchable, including moderator topics.
+const helpSearch=$('helpSearch');
+if(helpSearch){
+ const helpTopics=[...document.querySelectorAll('#help details[id^="help-"]:not(#help-downloads)')];
+ const helpLinks=[...document.querySelectorAll('#help a[href^="#help-"]')];
+ const helpStatus=$('helpSearchStatus');
+ const helpResults=$('helpSearchResults');
+ const helpCodes={
+  'help-start':'1.1.1','help-public-policies':'1.1.2','help-trouble':'1.1.3',
+  'help-feed':'1.2.1','help-video':'1.2.2','help-saved':'1.2.3','help-preferences':'1.2.4','help-ms-journey':'1.2.5',
+  'help-following':'1.3.1','help-following-groups':'1.3.2','help-following-sorts':'1.3.3','help-reactor-ratings':'1.3.4','help-hidden-reactors':'1.3.5','help-reactor-requests':'1.3.6','help-youtube-import':'1.3.7','help-resets':'1.3.8',
+  'help-chat':'1.4.1','help-profile':'1.4.2','help-points':'1.4.3','help-discovery':'1.5.1',
+  'help-corrections':'2.1.1','help-submission-review':'2.1.2','help-moderation':'2.1.3','help-reports':'2.1.4','help-trust-review':'2.1.5',
+  'help-submission-history':'2.2.1','help-ms-admin':'2.2.2','help-workbook':'2.2.3','help-reconcile':'2.2.4','help-classification':'2.2.5',
+  'help-user-activity':'2.3.1','help-channel-update':'2.3.2','help-contact-inbox':'2.3.3','help-youtube-admin':'2.3.4','help-rechecks':'2.3.5','help-settings':'2.3.6','help-profile-icon':'2.3.7','help-admin':'3.1.1'
+ };
+ const cleanText=value=>value.replace(/\s+/g,' ').trim();
+ const escapeHelp=value=>value.replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+ helpTopics.forEach(topic=>{
+  const code=helpCodes[topic.id];
+  const summary=topic.querySelector('summary strong');
+  if(code&&summary&&!summary.querySelector('.help-index-code')){
+   topic.dataset.helpCode=code;
+   summary.insertAdjacentHTML('afterbegin',`<span class="help-index-code">${code}</span><span class="help-index-separator"> · </span>`);
+  }
+  if(code){
+   const steps=[...topic.querySelectorAll('ul.help-steps > li')];
+   if(!steps.length){for(const item of topic.children)if(item.tagName==='P')steps.push(item);}
+   steps.forEach((item,index)=>{
+    if(item.querySelector(':scope > .help-item-code'))return;
+    if(item.tagName==='P')item.classList.add('help-step-card');
+    item.insertAdjacentHTML('afterbegin',`<span class="help-item-code">${code}.${index+1}</span><span class="help-item-separator"> </span>`);
+   });
+  }
+ });
+ const applyHelpSearch=()=>{
+  const query=cleanText(helpSearch.value).toLocaleLowerCase();
+  const matches=[];
+  let shown=0;
+  helpTopics.forEach(topic=>{
+   const available=!topic.closest('#moderatorHelp')?.hidden;
+   const clone=topic.cloneNode(true);
+   clone.querySelector('.help-index-code')?.remove();
+   clone.querySelectorAll('.help-item-code,.help-item-separator').forEach(node=>node.remove());
+   const content=cleanText(clone.textContent);
+   const index=query?content.toLocaleLowerCase().indexOf(query):-1;
+   const match=available&&(!query||index>=0);
+   topic.hidden=!match;
+   if(match){
+    shown++;
+    if(query){
+     const start=Math.max(0,index-62),end=Math.min(content.length,index+query.length+94);
+     const before=content.slice(start,index),phrase=content.slice(index,index+query.length),after=content.slice(index+query.length,end);
+     const snippet=`${start?'…':''}${escapeHelp(before)}<mark>${escapeHelp(phrase)}</mark>${escapeHelp(after)}${end<content.length?'…':''}`;
+     matches.push(`<li><a href="#${topic.id}"><strong>${topic.dataset.helpCode||''} ${escapeHelp(cleanText(topic.querySelector('summary strong').textContent.replace(/^(\d+(?:\.\d+){1,2})\s*·\s*/,'')))}</strong><span>${snippet}</span></a></li>`);
+    }else if(topic.dataset.searchOpened){topic.open=false;delete topic.dataset.searchOpened;}
+   }
+  });
+  helpLinks.forEach(link=>{const target=document.getElementById(link.getAttribute('href').slice(1));if(link.closest('#helpSearchResults'))return;link.closest('li').hidden=!target||!!target.hidden||!!target.closest('#moderatorHelp')?.hidden;});
+  helpResults.hidden=!query;
+  helpResults.innerHTML=query?`<h2>Exact phrase matches</h2>${matches.length?`<ol>${matches.join('')}</ol>`:'<p>No exact phrase matches. Try another word or phrase.</p>'}`:'';
+  helpStatus.textContent=query?`${shown} exact phrase match${shown===1?'':'es'} for “${helpSearch.value.trim()}”.`:`Search an exact word or phrase, or browse the numbered outline below.`;
+ };
+ helpSearch.addEventListener('input',applyHelpSearch);
+ $('clearHelpSearch').addEventListener('click',()=>{helpSearch.value='';applyHelpSearch();helpSearch.focus();});
+ const moderatorHelp=$('moderatorHelp');
+ if(moderatorHelp)new MutationObserver(applyHelpSearch).observe(moderatorHelp,{attributes:true,attributeFilter:['hidden']});
+ applyHelpSearch();
+}
