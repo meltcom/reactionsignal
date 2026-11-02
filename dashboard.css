@@ -184,12 +184,35 @@ body[data-density=spacious] #videoGrid .video-community{margin-top:12px;padding-
 #reputation .community-champion-header-badges{
   display:flex;
   align-items:center;
-  justify-content:flex-end;
+  justify-content:center;
   gap:12px;
   flex:0 0 auto;
-  margin-left:auto;
+  margin:0 0 16px;
   position:relative;
   z-index:1;
+}
+
+/* Keep the coastal banner readable and champion badges above the leaderboard. */
+#memberApp main > #reputation > .page-heading{grid-template-columns:minmax(0,1fr)}
+#reputation .reputation-leaderboard{border:2px solid var(--teal);border-top-width:6px;background:var(--white);box-shadow:0 6px 20px #172d3210}
+#reputation .reputation-leaderboard h2{color:var(--teal);font-size:26px;margin:0 0 16px}
+#reputation .reputation-leaderboard .follow-row:first-of-type{background:var(--cream);border-radius:8px;padding:12px}
+#reputation .reputation-leaderboard .follow-row{gap:12px}
+#reputation .reputation-leaderboard .follow-row>span{min-width:0;overflow-wrap:anywhere}
+#reputation .reputation-leaderboard .follow-row>strong{white-space:nowrap}
+#reputation .reputation-explainer{padding:0;overflow:hidden}
+#reputation .reputation-explainer>summary{display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;padding:18px 20px;list-style:none;min-height:56px}
+#reputation .reputation-explainer>summary::-webkit-details-marker{display:none}
+#reputation .reputation-explainer>summary::after{content:'+';font-size:24px;color:var(--teal);flex-shrink:0}
+#reputation .reputation-explainer[open]>summary::after{content:'−'}
+#reputation .reputation-explainer>summary h2{font-size:18px;margin:0;line-height:1.4}
+#reputation .reputation-explainer>summary:focus-visible{outline:3px solid var(--teal);outline-offset:-4px}
+#reputation .reputation-explainer-body{padding:0 20px 18px}
+@media(max-width:760px){
+ #reputation .community-champion-header-badges{margin:0 0 12px;gap:10px;justify-content:center}
+ #reputation .reputation-leaderboard h2{font-size:23px}
+ #reputation .reputation-explainer>summary{padding:16px}
+ #reputation .reputation-explainer-body{padding:0 16px 16px}
 }
 #reputation .community-champion-header-badge{
   display:block;
@@ -226,7 +249,7 @@ body[data-theme=dark] #memberApp main > .page-panel > h1:first-child{
   #memberApp main > .page-panel > .page-heading > button{grid-column:1/-1;justify-self:start;}
   #memberApp main > .page-panel > h1:first-child{min-height:96px;padding:14px 16px;gap:10px;}
   #reputation > .page-heading{min-height:144px;grid-template-columns:minmax(0,1fr);}
-  #reputation .community-champion-header-badges{grid-column:1;grid-row:2;gap:4px;margin:0 auto;}
+  #reputation .community-champion-header-badges{gap:10px;margin:0 0 12px;}
   #reputation .community-champion-header-badge{width:68px;height:68px;flex-basis:68px;}
 }
 
@@ -237,3 +260,14 @@ body[data-theme=dark] #memberApp main > .page-panel > h1:first-child{
 .help-outline,.help-outline ol{list-style:none;counter-reset:helpitem;margin:0;padding-left:0}.help-outline li{counter-increment:helpitem;display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:.55em;align-items:start;min-width:0}.help-outline li::before{content:counters(helpitem,".");grid-column:1;grid-row:1;color:var(--teal);font-weight:750;white-space:nowrap}.help-outline li>a,.help-outline li>strong{grid-column:2;grid-row:1;min-width:0}.help-outline li>ol{grid-column:1/-1;grid-row:2}.help-outline>li>ol{counter-reset:helpitem;padding-left:12px}.help-outline ol ol{padding-left:18px}.help-outline li{margin:6px 0}.help-outline a{display:inline-block;padding:3px 0}.help-outline>li>strong{display:block;margin:10px 0;color:var(--teal);font-size:17px}.help-index-code{font-weight:750;color:var(--teal);font-size:.78em;letter-spacing:.035em}.help-index-separator{color:var(--muted)}.help-search-results{margin:0 0 16px}.help-search-results h2{margin:0 0 8px;font-size:18px}.help-search-results ol{padding-left:23px;margin:0}.help-search-results li{margin:8px 0}.help-search-results li>a{display:grid;gap:4px;text-decoration:none;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--white)}.help-search-results li>a:hover{border-color:var(--teal);background:var(--cream)}.help-search-results li>a>span{font-size:14px;line-height:1.5;color:var(--muted)}.help-search-results mark{background:#ffe49e;color:var(--ink);padding:0 2px;border-radius:2px}.help-topic-index nav{max-width:940px}.help-role-heading{margin:26px 0 12px;font-size:24px;color:var(--teal)}@media(max-width:600px){.help-search-results li>a{padding:10px}.help-search-results li>a>span{font-size:13px}.help-outline>li>ol{padding-left:6px}.help-outline ol ol{padding-left:12px}.help-role-heading{font-size:21px}}
 
 .help-steps{list-style:none;margin:0;padding-left:0}.help-steps>li{margin-block:.7rem;padding:9px 11px;border:1px solid var(--line);border-left:3px solid var(--teal);border-radius:8px;background:var(--white);line-height:1.6}.help-item-code{display:inline-block;color:var(--teal);font-size:.8em;font-weight:750;letter-spacing:.025em;white-space:nowrap}.help-item-separator{white-space:pre}.help-steps>li::marker{content:''}@media(max-width:600px){.help-steps>li{padding:8px 9px;margin-block:.6rem;line-height:1.55}.help-item-code{font-size:.78em}}
+
+#reputation .community-champion-open{border:0;background:transparent;padding:4px;border-radius:12px;cursor:zoom-in;line-height:0;flex-shrink:0}
+#reputation .community-champion-open:hover{background:var(--cream)}
+#reputation .community-champion-open:focus-visible{outline:3px solid var(--teal);outline-offset:3px}
+.community-champion-dialog{width:fit-content;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);padding:16px;border:1px solid var(--line);background:var(--white);color:var(--ink);overflow:auto}
+.community-champion-dialog::backdrop{background:#10232ccc}
+.community-champion-dialog>header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
+.community-champion-dialog h2{font-size:18px;line-height:1.4;margin:0}
+.community-champion-dialog button{min-height:44px;flex-shrink:0}
+.community-champion-dialog>img{display:block;width:auto;height:auto;max-width:100%;max-height:calc(100dvh - 180px);object-fit:contain;margin:auto}
+.community-champion-dialog>a{display:block;text-align:center;padding:12px;color:var(--teal);text-decoration:underline;min-height:44px}
