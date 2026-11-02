@@ -1,5 +1,5 @@
 (()=>{
-const names={overview:'reaction-journey-overview.pdf','app-guide':'reaction-journey-app-guide.pdf','member-help':'reaction-journey-member-help.pdf','full-help':'reaction-journey-full-help.pdf'};
+const names={'app-guide':'reaction-journey-app-guide.pdf','member-help':'reaction-journey-member-help.pdf','full-help':'reaction-journey-full-help.pdf'};
 document.querySelectorAll('[data-open-guide-downloads]').forEach(b=>b.addEventListener('click',()=>{navigate('help');const section=document.getElementById('help-downloads');section.open=true;section.scrollIntoView({block:'start',behavior:'smooth'});section.querySelector('summary').focus();}));
 document.querySelectorAll('[data-member-guide]').forEach(button=>button.addEventListener('click',async()=>{
  const guide=button.dataset.memberGuide,status=document.getElementById('memberGuideStatus');
