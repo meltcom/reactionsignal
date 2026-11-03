@@ -271,3 +271,7 @@ body[data-theme=dark] #memberApp main > .page-panel > h1:first-child{
 .community-champion-dialog button{min-height:44px;flex-shrink:0}
 .community-champion-dialog>img{display:block;width:auto;height:auto;max-width:100%;max-height:calc(100dvh - 180px);object-fit:contain;margin:auto}
 .community-champion-dialog>a{display:block;text-align:center;padding:12px;color:var(--teal);text-decoration:underline;min-height:44px}
+
+/* Four champions fit a phone row; narrow phones use a balanced two-by-two grid. */
+#reputation .community-champion-header-badges{flex-wrap:wrap}
+@media(max-width:360px){#reputation .community-champion-header-badges{display:grid;grid-template-columns:repeat(2,max-content);justify-content:center}}
