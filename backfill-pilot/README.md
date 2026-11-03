@@ -1,6 +1,6 @@
 # Missioned Souls historical backfill pilot
 
-Release candidate 0.4.0. The client identifies itself as `ReactionJourneyBackfillPilot/0.4.0`; Cloudflare rejects the default Python user agent on the live staging hostname. Local Windows application with a shared-quota RJ broker. The broker Worker source must be reviewed and deployed before live activation. No database schema migration is required.
+Release candidate 0.4.1. The client identifies itself as `ReactionJourneyBackfillPilot/0.4.1`; Cloudflare rejects the default Python user agent on the live staging hostname. Local Windows application with a shared-quota RJ broker. The broker Worker source must be reviewed and deployed before live activation. No database schema migration is required.
 
 ## Shared candidate recognition
 
@@ -66,3 +66,7 @@ Daily review: confirm <=300 requests, zero searches, advancing checkpoints, insp
 Before production activation: review the sample UI; confirm scope, shared RJ quota coordination, and credentials locally; run `release.py`; review its SHA256 manifest; validate a bounded live page, checkpoint/resume, quota accounting, and both exports; then approve activation. This release candidate has not undergone that live test. Offline tests use fake API responses and consume no YouTube resources.
 
 `release.py` runs regression checks and packages only named source files. It excludes credentials, snapshots, virtual environment and SQLite state. No unrelated RJ changes are included. Retain the package and manifest for rollback. Pause and stop the application before upgrade; copy `data/` to a dated backup. Restore the prior source package and its matching data backup if a schema changes. Do not deploy this Python application with RJ's Worker release command; any future RJ changes must independently follow AGENTS.md and guarded `npm run deploy`.
+
+## 0.4.1 local HTTP repair
+
+Browser-aborted responses (including Windows error 10053), connection resets and broken pipes close only that HTTP connection without a traceback. Other errors still surface. Scan logic, quotas and checkpoints are unchanged. Restart the local server after installing this patch.

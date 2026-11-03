@@ -294,12 +294,17 @@ def make_server(pilot, port):
         def reply(self, body, kind='application/json', status=200):
             if isinstance(body, str):
                 body = body.encode()
-            self.send_response(status)
-            self.send_header('Content-Type', kind)
-            self.send_header('Cache-Control', 'no-store')
-            self.send_header('X-Content-Type-Options', 'nosniff')
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(status)
+                self.send_header('Content-Type', kind)
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('X-Content-Type-Options', 'nosniff')
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                # A browser may cancel a poll or navigate away mid-response.
+                # This affects this connection only, never the scan/checkpoint.
+                self.close_connection = True
         def trusted(self):
             return self.headers.get('Host') == f'127.0.0.1:{self.server.server_address[1]}'
         def do_GET(self):
