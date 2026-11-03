@@ -289,6 +289,12 @@ class Pilot:
 def make_server(pilot, port):
     token = secrets.token_urlsafe(32)
     class Handler(BaseHTTPRequestHandler):
+        def handle(self):
+            try:
+                super().handle()
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                # The peer can also disappear before its request is complete.
+                self.close_connection = True
         def log_message(self, *_):
             pass
         def reply(self, body, kind='application/json', status=200):

@@ -8,6 +8,21 @@ from pilot import Pilot, day, make_server
 CHANNEL = 'UC' + 'a' * 22
 
 class PilotTests(unittest.TestCase):
+    def test_clients_disconnecting_before_request_is_read(self):
+        p = self.make(lambda *_: {})
+        server = make_server(p, 0)
+        self.addCleanup(server.server_close)
+        handler = object.__new__(server.RequestHandlerClass)
+        handler.rfile = Mock()
+        for error in (BrokenPipeError(), ConnectionResetError(), ConnectionAbortedError(10053, 'Client aborted')):
+            with self.subTest(error=type(error).__name__):
+                handler.rfile.readline.side_effect = error
+                handler.handle()
+                self.assertTrue(handler.close_connection)
+        handler.rfile.readline.side_effect = OSError('Unexpected read failure')
+        with self.assertRaisesRegex(OSError, 'Unexpected read'):
+            handler.handle()
+
     def test_disconnected_http_clients_do_not_raise_or_change_campaign(self):
         p = self.make(lambda *_: {})
         server = make_server(p, 0)
