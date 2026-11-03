@@ -34,6 +34,14 @@ Manual scripts such as `scripts/preview-format-recovery.mjs` and the old Python 
 
 ## Verification and recovery
 
+### November 2 operating pilot allowance
+
+The user authorized accelerating the catalog backfill after reviewing the two-unit diagnostic bottleneck and the 300-unit operating ceiling. This release changes only the production backfill ceiling from 2 to 300 general requests per Pacific day. Already charged requests remain charged; the release does not reset the ledger. Keep the shared 10,000-unit cap, 2,000-unit RJ reserve, zero backfill searches, discovery-health admission, existing credential and staging backfill denial unchanged. No migrations, discovery scheduling changes, new campaign snapshot, cutoff changes or catalog imports are included.
+
+The installed 0.4.0 client already batches up to 50 unknown video IDs, skips known IDs, caches uploads playlists and saves each page checkpoint. The frozen campaign contains 437 eligible reactors, all with uploads playlists cached; current live RJ coverage includes additional reactors, which require a later campaign. Preserve this campaign rather than resetting it to include them.
+
+After the guarded release and its signed-in workflow verification, perform one bounded uploads-page call sequence with at most two additional provider requests. Reconcile server receipts and counters, reopen the saved checkpoint without repeating the page, and validate text/PDF reports before starting the seven-day operating pilot. Review the first completed 24 hours to adjust the forecast. The seven days contribute to the actual backfill; they are not a throwaway trial. No scheduler or automatic daily restart is included. The UI must remain open, and a cap pause needs manual resume after the Pacific reset.
+
 ### November 2 bounded fixture check
 
 After the complete November 1 Pacific tracking baseline, production broker admission is enabled with a temporary **two-unit daily backfill ceiling** for the authorized missing-metadata check. The shared 10,000-unit cap, 2,000-unit RJ reserve, zero backfill search allowance and current-health gate remain unchanged. The 300-unit figure above remains the reviewed maximum for a later pilot, not this diagnostic's active allowance. Staging remains disabled and must not call YouTube.
