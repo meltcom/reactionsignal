@@ -291,3 +291,4 @@ body[data-theme=dark] #memberApp main > .page-panel > h1:first-child{
 #dailyPointsDialog .daily-points-actions{display:grid;gap:10px}
 #dailyPointsDialog button{min-height:44px;white-space:normal}
 #dailyPointsDialog button:disabled{opacity:.65;cursor:not-allowed}
+#dailyPointsDialog .daily-points-coffee{font-size:36px;line-height:1;text-align:center;margin:20px 0 8px}
