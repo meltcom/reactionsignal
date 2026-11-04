@@ -96,7 +96,7 @@ async function save(body){
 el('ms-fetch-facebook').onclick=async()=>{
  const f=el('ms-form'),button=el('ms-fetch-facebook'),manual=el('ms-manual-facebook'),status=el('ms-fetch-facebook-status');button.disabled=true;manual.hidden=true;f.dataset.facebookMetadataUrl='';f.dataset.facebookThumbnailData='';status.textContent='Fetching available Facebook details and thumbnail…';
  try{
-  if(preview)throw new Error('Automatic Facebook lookup is available in the signed-in app preview, not this offline mockup.');
+  if(preview)throw new Error('This preview is offline and cannot contact Facebook. Test Get Facebook details & thumbnail on the signed-in Reaction Journey site.');
   const moderatorUpdate=!communityAdding&&(editing?.platform==='Facebook'||addingFacebook),lookupUrl=f.elements.url.value.trim(),details=await api({action:'fetch-facebook-metadata',url:lookupUrl}),fill=(key,value)=>{if(value!=null&&!String(f.elements[key].value).trim()){f.elements[key].value=String(value);return true;}return false;};if(f.elements.url.value.trim()!==lookupUrl)throw new Error('The Facebook link changed during lookup. Fetch details again.');f.dataset.facebookMetadataUrl=lookupUrl;
   const found=[];if(fill('title',details.title))found.push('title');if(fill('durationSeconds',details.durationSeconds))found.push('duration');if(fill('thumbnailUrl',details.thumbnailUrl))found.push('thumbnail URL');
   if(details.publishedAt&&!f.elements.publishedAt.value){const date=new Date(details.publishedAt);f.elements.publishedAt.value=new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);found.push('published date');}
