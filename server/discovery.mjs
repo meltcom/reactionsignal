@@ -246,40 +246,55 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
     }
     await checkpointRecent();
     if(pageError)throw pageError;
-    // Resume a fixed-window search one page at a time; completed windows become incremental.
+    // Scheduled discovery reserves three opportunities for current first pages,
+    // then one for the independent full-window catch-up cursor. Manual scans
+    // keep their existing resumable behavior. One shared cap/pacing applies.
     let searched=0;
     for(const p of performers){
       if(options.performerId&&p.id!==options.performerId)continue;
       const recordSearch=async report=>db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(`search-diagnostics:${p.id}`,JSON.stringify({at:now,dailyLimit:searchDailyLimit(env),...report})).run();
       if(searched>=4||api.calls>22||Date.now()>api.deadline-4000){await recordSearch({status:'deferred',reason:'Discovery run budget reached'});break;}
-      const key=`search:${p.id}`,progressKey=`search-progress:${p.id}`;
+      const turnKey=`search-lane-turn:${p.id}`,freshRotationKey=`search-fresh-rotation:${p.id}`;
+      const legacyKey=`search:${p.id}`,legacyProgressKey=`search-progress:${p.id}`;
       const quotaKey=`search-attempt-budget:${pacificDay(now)}`,rotationKey=`search-rotation:${p.id}`,touchKey=`search-touch:${p.id}`;
-      const stateKeys=[key,progressKey,quotaKey,rotationKey,touchKey];
+      const stateKeys=[legacyKey,legacyProgressKey,quotaKey,rotationKey,touchKey,turnKey,freshRotationKey,`search-fresh-progress:${p.id}`,`search-fresh:${p.id}`];
       const searchState=new Map((await db.prepare('SELECT key,value FROM state WHERE key IN ('+stateKeys.map(()=>'?').join(',')+')').bind(...stateKeys).all()).results.map(r=>[r.key,r]));
-      const prev=searchState.get(key),pending=searchState.get(progressKey);
+      const turn=Number(searchState.get(turnKey)?.value||0);
+      const fresh=!options.performerId&&turn%4!==3;
+      const lane=fresh?'fresh':'catchup';
+      const key=fresh?`search-fresh:${p.id}`:legacyKey,progressKey=fresh?`search-fresh-progress:${p.id}`:legacyProgressKey;
+      const selectedRotationKey=fresh?freshRotationKey:rotationKey;
+      const prev=searchState.get(key)||(fresh?searchState.get(legacyKey):null),pending=searchState.get(progressKey);
       const dailyLimit=searchDailyLimit(env);
       if(!dailyLimit){await recordSearch({status:'disabled',reason:'Daily search limit is zero'});continue;}
       const used=Number(searchState.get(quotaKey)?.value||0);
       if(used>=dailyLimit){await recordSearch({status:'capped',reason:'Daily search budget reached'});final='partial';detail+='Daily search budget reached; queued searches resume tomorrow. ';break;}
       const interval=searchInterval(env);
       const touched=searchState.get(touchKey);
-      if(touched&&(!pending||JSON.parse(pending.value).query)&&Date.parse(now)-Date.parse(touched.value)<interval){await recordSearch({status:'waiting',reason:'Budget-paced search interval',nextDueAt:new Date(Date.parse(touched.value)+interval).toISOString()});continue;}
-      if(!pending&&prev&&Date.parse(now)-Date.parse(prev.value)<interval){await recordSearch({status:'waiting',reason:`${interval/60000}-minute budget-paced interval`,lastCompletedAt:prev.value,nextDueAt:new Date(Date.parse(prev.value)+interval).toISOString()});continue;}
+      if(touched&&(!options.performerId||!pending||JSON.parse(pending.value).query)&&Date.parse(now)-Date.parse(touched.value)<interval){await recordSearch({status:'waiting',reason:'Budget-paced search interval',nextDueAt:new Date(Date.parse(touched.value)+interval).toISOString()});continue;}
+      if(!touched&&!pending&&prev&&Date.parse(now)-Date.parse(prev.value)<interval){await recordSearch({status:'waiting',reason:`${interval/60000}-minute budget-paced interval`,lastCompletedAt:prev.value,nextDueAt:new Date(Date.parse(prev.value)+interval).toISOString()});continue;}
       const terms=JSON.parse(p.aliases);
-      const rotation=Number(searchState.get(rotationKey)?.value||0);
+      const rotation=Number(searchState.get(selectedRotationKey)?.value||0);
       let cursor=pending?JSON.parse(pending.value):null;
       if(!cursor){
         const official=(await db.prepare("SELECT value FROM state WHERE key>='ms-video:' AND key<'ms-video;' ORDER BY key").all()).results.map(r=>JSON.parse(r.value));
         const queries=performerQueries(p,recentSongTitles([...official,...officialFeedVideos,...(seed.videos||[])]),rotation);
-        cursor={term:0,page:null,query:queries[rotation%queries.length],rotation,startedAt:now,after:prev?new Date(Date.parse(prev.value)-7*86400000).toISOString():p.lookback_days===0?null:new Date(Date.now()-p.lookback_days*86400000).toISOString()};
+        // First pages are supplemental. They never advance the catch-up
+        // watermark or replace its token; that lane still exhausts fixed windows.
+        const overlap=fresh?(searchState.get(legacyKey)||prev):prev;
+        cursor={term:0,page:null,query:queries[rotation%queries.length],rotation,startedAt:now,after:overlap?new Date(Date.parse(overlap.value)-7*86400000).toISOString():p.lookback_days===0?null:new Date(Date.now()-p.lookback_days*86400000).toISOString()};
       }
+      cursor.lane=lane;
       const query=cursor.query||`"${terms[cursor.term]||p.name}" reaction`;
       const pageId=await startSearchPage(db,{runId:id,performerId:p.id,query,cursor,env,at:now});
       searched++;
-      await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(`search-touch:${p.id}`,now).run();
+      await db.batch([
+        db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(touchKey,now),
+        ...(!options.performerId?[db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(turnKey,String((turn+1)%4))]:[])
+      ]);
       try{
         if(!pending)await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(progressKey,JSON.stringify(cursor)).run();
-        await recordSearch({status:'requesting',term:terms[cursor.term]||p.name,windowEnd:cursor.startedAt});
+        await recordSearch({status:'requesting',lane,term:terms[cursor.term]||p.name,windowEnd:cursor.startedAt});
         const result=await api.get('search',{part:'snippet',type:'video',order:'date',maxResults:50,q:query,publishedAfter:cursor.after,publishedBefore:cursor.startedAt,pageToken:cursor.page},{pageId,limit:dailyLimit});
         const ids=(result.items||[]).map(x=>x.id?.videoId).filter(Boolean);
         let uniqueAdded=0,newReactors=0,delaySamples=0,delayTotal=0,maxDelay=0;
@@ -301,23 +316,23 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
         const depth=cursor.depth??(cursor.page?0:1);
         if(result.nextPageToken){cursor.page=result.nextPageToken;cursor.depth=depth?depth+1:0;}
         else{cursor.page=null;cursor.term++;cursor.depth=1;}
-        const continuing=Boolean(cursor.page)||(!cursor.query&&cursor.term<terms.length);
+        const continuing=!fresh&&(Boolean(cursor.page)||(!cursor.query&&cursor.term<terms.length));
         if(continuing){
           await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(progressKey,JSON.stringify(cursor)).run();
           final='partial';detail+='Performer history scan continuation queued. ';
         }else await db.batch([
           db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,cursor.startedAt),
           db.prepare('DELETE FROM state WHERE key=?').bind(progressKey),
-          db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(rotationKey,String((cursor.rotation??rotation)+1))
+          db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(selectedRotationKey,String((cursor.rotation??rotation)+1))
         ]);
         const metricKey=`search-query:${p.id}:${query}`;
         const previous=JSON.parse((await db.prepare('SELECT value FROM state WHERE key=?').bind(metricKey).first())?.value||'{}');
         await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(metricKey,JSON.stringify({query,at:now,pages:(previous.pages||0)+1,results:(previous.results||0)+ids.length,uniqueVideos:(previous.uniqueVideos||0)+uniqueAdded,newReactors:(previous.newReactors||0)+newReactors,delaySamples:(previous.delaySamples||0)+delaySamples,delayTotal:(previous.delayTotal||0)+delayTotal,maxDelay:Math.max(previous.maxDelay||0,maxDelay)})).run();
         await db.prepare('DELETE FROM state WHERE key=?').bind(`search-error:${p.id}`).run();
-        await recordSearch({status:continuing?'continuing':'completed',query,results:ids.length,uniqueVideos:uniqueAdded,newReactors,windowEnd:cursor.startedAt,nextDueAt:new Date(Date.parse(now)+interval).toISOString()});
+        await recordSearch({status:continuing?'continuing':'completed',lane,query,results:ids.length,uniqueVideos:uniqueAdded,newReactors,windowEnd:cursor.startedAt,nextDueAt:new Date(Date.parse(now)+interval).toISOString()});
       }catch(error){
         await finishSearchPage(db,pageId,{status:'failed',error:error.message});
-        await recordSearch({status:'failed',reason:error.message});
+        await recordSearch({status:'failed',lane,reason:error.message});
         await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(`search-error:${p.id}`,error.message).run();
         throw error;
       }
