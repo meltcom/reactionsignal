@@ -2,11 +2,59 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from pilot import Pilot, day
+from unittest.mock import Mock
+from pilot import Pilot, day, make_server
 
 CHANNEL = 'UC' + 'a' * 22
 
 class PilotTests(unittest.TestCase):
+    def test_clients_disconnecting_before_request_is_read(self):
+        p = self.make(lambda *_: {})
+        server = make_server(p, 0)
+        self.addCleanup(server.server_close)
+        handler = object.__new__(server.RequestHandlerClass)
+        handler.rfile = Mock()
+        for error in (BrokenPipeError(), ConnectionResetError(), ConnectionAbortedError(10053, 'Client aborted')):
+            with self.subTest(error=type(error).__name__):
+                handler.rfile.readline.side_effect = error
+                handler.handle()
+                self.assertTrue(handler.close_connection)
+        handler.rfile.readline.side_effect = OSError('Unexpected read failure')
+        with self.assertRaisesRegex(OSError, 'Unexpected read'):
+            handler.handle()
+
+    def test_disconnected_http_clients_do_not_raise_or_change_campaign(self):
+        p = self.make(lambda *_: {})
+        server = make_server(p, 0)
+        self.addCleanup(server.server_close)
+        handler = object.__new__(server.RequestHandlerClass)
+        before = p.report()['today']
+        for phase in ('end_headers', 'write'):
+            for error in (BrokenPipeError(), ConnectionResetError(), ConnectionAbortedError(10053, 'Client aborted')):
+                with self.subTest(phase=phase, error=type(error).__name__):
+                    handler.send_response = Mock()
+                    handler.send_header = Mock()
+                    handler.end_headers = Mock(side_effect=error if phase == 'end_headers' else None)
+                    handler.wfile = Mock()
+                    handler.wfile.write.side_effect = error if phase == 'write' else None
+                    handler.close_connection = False
+                    handler.reply('{}')
+                    self.assertTrue(handler.close_connection)
+        self.assertEqual(p.report()['today'], before)
+
+    def test_unexpected_http_write_errors_are_not_hidden(self):
+        p = self.make(lambda *_: {})
+        server = make_server(p, 0)
+        self.addCleanup(server.server_close)
+        handler = object.__new__(server.RequestHandlerClass)
+        handler.send_response = Mock()
+        handler.send_header = Mock()
+        handler.end_headers = Mock()
+        handler.wfile = Mock()
+        handler.wfile.write.side_effect = OSError('Unexpected disk/socket failure')
+        with self.assertRaisesRegex(OSError, 'Unexpected'):
+            handler.reply('{}')
+
     def make(self, transport):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
