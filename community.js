@@ -40,7 +40,7 @@ function communityMessage(id,message){$(id).textContent=message;}
 async function loadCommunity({deferSecondary=false}={}){
   communityMessage('communityStatus','Loading community details...');
   try{
-    communityState=await communityApi('/summary');scoreMap=new Map(communityState.scores.map(s=>[s.video_id,s]));window.dispatchEvent(new Event('ms-community-updated'));
+    communityState=await communityApi('/summary');scoreMap=new Map(communityState.scores.map(s=>[s.video_id,s]));window.dispatchEvent(new Event('ms-community-updated'));window.dispatchEvent(new CustomEvent('rj-points-updated',{detail:{...communityState.dailyPoints,trusted:communityState.trusted}}));
     $('displayName').value=communityState.name;
     $('profileIcon').value=communityState.profile_icon||'initials';
     $('profileColor').value=communityState.profile_color||'teal';

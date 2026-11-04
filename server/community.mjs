@@ -3,6 +3,7 @@ import { database, seedDatabase } from './db.mjs';
 import {YouTube,seconds} from './discovery.mjs';
 import {auditStatement,restrictAccount} from './operations.mjs';
 import {sharedCache} from './cache.mjs';
+import {pointAllowance,offsetKey} from './donations.mjs';
 import {isFacebookDiscussion,facebookDiscussion} from './ms-discussion.mjs';
 export async function submissionMetadata(db,env,videoId,fetcher=fetch){
  const key='submission-metadata:'+videoId,cached=await db.prepare('SELECT value FROM state WHERE key=?').bind(key).first();
@@ -34,12 +35,12 @@ export function award(db,id,user,kind,amount,cap,now,guard='1',args=[],dailyKind
   return db.prepare(`INSERT OR IGNORE INTO points(id,user_id,kind,amount,created_at)
     SELECT ?,?,?,CASE
       WHEN EXISTS(SELECT 1 FROM members WHERE id=? AND trusted=1)
-        THEN MIN(?,MAX(0,?-COALESCE((SELECT SUM(amount) FROM points WHERE user_id=? AND amount>0 AND created_at>=? AND created_at<?),0)))
+        THEN MIN(?,MAX(0,?-MAX(0,COALESCE((SELECT SUM(amount) FROM points WHERE user_id=? AND amount>0 AND created_at>=? AND created_at<?),0)-CAST(COALESCE((SELECT value FROM state WHERE key=?),'0') AS INTEGER))))
       WHEN (SELECT COUNT(*) FROM points WHERE user_id=? AND kind IN (${dailyKinds.map(()=>'?').join(',')}) AND amount>0 AND created_at>=? AND created_at<?)<?
         THEN ?
       ELSE 0
     END,? WHERE (${guard})`)
-    .bind(id,user,kind,user,amount,trustedDailyPointLimit,user,start,end,user,...dailyKinds,start,end,cap,amount,now,...args);
+    .bind(id,user,kind,user,amount,trustedDailyPointLimit,user,start,end,offsetKey(user,now),user,...dailyKinds,start,end,cap,amount,now,...args);
 }
 const pending='EXISTS(SELECT 1 FROM contributions WHERE id=? AND status=\'pending\')';
 async function videoDecision(db,id){
@@ -126,6 +127,7 @@ export async function community(request,env,seed,user){
         return json({items:rows.results.slice(0,100).map(m=>({...m,trusted:m.trusted===1,trustReviewReady:m.trusted===0&&m.approved_count>=3&&!m.trust_reviewed_at,tier:tier(m.points),moderator:moderators.includes(m.email?.toLowerCase())})),hasMore:rows.results.length>100,offset});
       }
       if(path==='/summary'){
+        const dailyPoints=await pointAllowance(db,user.id);
         const aggregateRevision=(await db.prepare("SELECT value FROM state WHERE key='aggregate-revision'").first())?.value||'0';
         const totals=await db.prepare('SELECT COALESCE(SUM(amount),0) total FROM points WHERE user_id=?').bind(user.id).first();
         const scores=await sharedCache(db,'video-scores:'+aggregateRevision,30000,()=>db.prepare('SELECT video_id,COUNT(*) count,AVG(score) average,(SUM(score)+15.0)/(COUNT(*)+5) ranking FROM (SELECT video_id,score FROM ratings UNION ALL SELECT video_id,score FROM ms_archive_ratings) GROUP BY video_id').all());
@@ -134,7 +136,7 @@ export async function community(request,env,seed,user){
         const archiveComments=await db.prepare("SELECT video_id,COUNT(*) count FROM contributions WHERE kind='comment' AND channel_id IS NULL AND status='accepted' AND video_id LIKE 'facebook:https://%' GROUP BY video_id").all();
         const ledger=await db.prepare('SELECT kind,amount,created_at FROM points WHERE user_id=? AND amount<>0 ORDER BY created_at DESC LIMIT 30').bind(user.id).all();
         const approvals=await db.prepare(`SELECT ${approvedContributionCount} count FROM members m WHERE m.id=?`).bind(user.id).first();
-        return json({trusted:me?.trusted===1,approvedCount:approvals?.count||0,name:me?.name||'',profile_icon:me?.profile_icon||'initials',profile_color:me?.profile_color||'teal',profile_picture:me?.profile_picture||null,moderator:user.moderator,points:totals.total,tier:tier(totals.total),scores:scores.results,archiveComments:archiveComments.results,leaders:leaders.results,mine:mine.results,ledger:ledger.results});
+        return json({dailyPoints:{...dailyPoints,enabled:env.DONATION_RESETS_ENABLED==='1'},trusted:me?.trusted===1,approvedCount:approvals?.count||0,name:me?.name||'',profile_icon:me?.profile_icon||'initials',profile_color:me?.profile_color||'teal',profile_picture:me?.profile_picture||null,moderator:user.moderator,points:totals.total,tier:tier(totals.total),scores:scores.results,archiveComments:archiveComments.results,leaders:leaders.results,mine:mine.results,ledger:ledger.results});
       }
       if(path==='/video'){
         const video=u.searchParams.get('id'),archive=isFacebookDiscussion(video);if(archive){if(!await facebookDiscussion(db,seed,video))fail('This Facebook video is unavailable.',404);}else if(!/^[\w-]{11}$/.test(video||''))fail('Invalid video ID.');

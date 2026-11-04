@@ -10,6 +10,7 @@ import {finishConnection,checkYoutubeConnections} from './youtube-connection.mjs
 import { youtubeSubscriptions } from './youtube-subscriptions.mjs';
 import { social } from './social.mjs';
 import { community, profilePicture } from './community.mjs';
+import {donations} from './donations.mjs';
 import {refreshVideoMetadata} from './video-metadata.mjs';
 import { refreshChannelStats } from './channel-stats.mjs';
 import { authenticate, authConfig } from './auth.mjs';
@@ -65,6 +66,8 @@ export default {
 async function handleRequest(request,env,ctx){
     const path=new URL(request.url).pathname;
     try{
+      if(path==='/api/donations/ipn')return await donations(request,env,null);
+      if(path.startsWith('/api/donations/')){const result=await member(request,env);if(result.error)return result.error;return await donations(request,env,result.user);}
       if(path.startsWith('/api/backfill/'))return await backfillBroker(request,env);
       if(path.startsWith('/private-guides/'))return new Response('Not found',{status:404});
       if(path.startsWith('/api/member-guides/')){
