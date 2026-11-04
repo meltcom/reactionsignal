@@ -275,3 +275,19 @@ body[data-theme=dark] #memberApp main > .page-panel > h1:first-child{
 /* Four champions fit a phone row; narrow phones use a balanced two-by-two grid. */
 #reputation .community-champion-header-badges{flex-wrap:wrap}
 @media(max-width:360px){#reputation .community-champion-header-badges{display:grid;grid-template-columns:repeat(2,max-content);justify-content:center}}
+
+/* Search fields use a consistent light surface and readable black text in every theme. */
+#memberApp :is(input[type=search],#reactorSearch,#activitySearch,#channelSearch),#memberApp .search-box{background:#fff;color:#000;color-scheme:light}
+#memberApp :is(input[type=search],#reactorSearch,#activitySearch,#channelSearch){caret-color:#000;-webkit-text-fill-color:#000}
+#memberApp :is(input[type=search],#reactorSearch,#activitySearch,#channelSearch)::placeholder{color:#4b5563;-webkit-text-fill-color:#4b5563;opacity:1}
+
+#dailyPointsDialog{width:min(480px,calc(100% - 28px));max-height:calc(100dvh - 28px);overflow:auto;box-sizing:border-box;background:var(--white);color:var(--ink);border:1px solid var(--line);padding:24px}
+#dailyPointsDialog::backdrop{background:#10232999}
+#dailyPointsDialog header{display:flex;align-items:start;justify-content:space-between;gap:16px}
+#dailyPointsDialog h2{margin:0;font-size:24px;color:var(--ink)}
+#dailyPointsDialog p{line-height:1.6;color:var(--ink)}
+#dailyPointsDialog .daily-points-count{font-size:28px;font-weight:650;margin-bottom:8px}
+#dailyPointsDialog progress{width:100%;accent-color:var(--teal)}
+#dailyPointsDialog .daily-points-actions{display:grid;gap:10px}
+#dailyPointsDialog button{min-height:44px;white-space:normal}
+#dailyPointsDialog button:disabled{opacity:.65;cursor:not-allowed}
