@@ -76,6 +76,12 @@ test('release retains compact cards, app navigation and optimized branding',()=>
  assert.ok(assets['/index.html'].body.includes('images/reaction-journey-logo-small.webp'));
 });
 
+test('Facebook archive cards preserve the complete thumbnail inside the card frame',()=>{
+ const ms=assets['/missioned-souls.js'].body,css=assets['/journey-interface.css'].body;
+ assert.ok(ms.includes("v.platform==='Facebook'?' ms-card-facebook':''"));
+ assert.ok(css.includes('#ms-grid .ms-card-facebook .ms-thumb img{object-fit:contain'));
+});
+
 test('release describes dedicated YouTube membership while keeping import matching separate from active follows',()=>{
  const html=assets['/index.html'].body,imports=assets['/youtube-subscriptions.js'].body,dashboard=assets['/dashboard.js'].body;
  assert.ok(html.includes('separate system-managed Following group named YouTube imports'));

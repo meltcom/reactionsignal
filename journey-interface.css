@@ -38,3 +38,4 @@ body[data-journey=ms-journey] #submitOpen{display:none!important}
  #ms-grid[data-thumbnail=large] .ms-card{grid-template-columns:minmax(0,1fr)}
  #ms-grid .ms-thumb{width:100%;max-height:none;aspect-ratio:16/9}
 }
+#ms-grid .ms-card-facebook .ms-thumb img{object-fit:contain;background:#103f38}
