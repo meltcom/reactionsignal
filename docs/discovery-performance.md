@@ -1,5 +1,7 @@
 # Fresh discovery measurement release
 
+The subsequent [fresh-first scheduler](fresh-first-search.md) separates scheduled current first pages from full-window catch-up. Its strategy/version and per-page lane settings distinguish the new allocation from the original pacing described below. Caps, Pacific-day accounting, overlap, moderation and backfill protections remain unchanged.
+
 This release keeps the 15-minute scheduler, daily channel coverage, active-channel allocation, existing moderation decisions, seven-day overlapping query windows and 12/6/2 query-window rotation. It does not introduce a historical backfill campaign.
 
 ## Search changes

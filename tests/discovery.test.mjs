@@ -255,18 +255,18 @@ test('official channel RSS refreshes recent song hints without Data API calls an
  const cached=await refreshOfficialSearchFeed(d,async()=>{throw new Error('temporary feed outage');});
  assert.deepEqual(cached,videos);
 });
-test('paced rotation overlaps windows, preserves pagination, and counts unique discoveries only once',async()=>{
+test('manual paced rotation overlaps windows, preserves pagination, and counts unique discoveries only once',async()=>{
  const d=await isolatedDiscovery();await d.prepare("UPDATE channels SET discovery_scope='other'").run();
  const recent=new Date(Date.now()-2*3600000).toISOString();await d.prepare("INSERT INTO state(key,value) VALUES('search:missioned-souls',?)").bind(recent).run();
  let calls=0;const queries=[];
  const fake=async url=>{if(url.pathname.endsWith('/search')){calls++;queries.push(url.searchParams.get('q'));assert.equal(url.searchParams.get('publishedAfter'),new Date(Date.parse(recent)-7*86400000).toISOString());return Response.json({items:[{id:{videoId:'newvideo123'}}],...(calls===1?{nextPageToken:'next'}:{})});}if(url.pathname.endsWith('/videos'))return Response.json({items:[{...item('newvideo123'),snippet:{...item().snippet,channelId:'UCnewreactor123456789012',publishedAt:new Date(Date.now()-600000).toISOString()}}]});return Response.json({items:[]});};
  const env={DB:d,YOUTUBE_API_KEY:'fixture-only'};
- await runDiscovery(env,seed,fake);assert.equal(calls,1);
+ await runDiscovery(env,seed,fake,{performerId:'missioned-souls'});assert.equal(calls,1);
  await d.prepare("DELETE FROM state WHERE key='discovery-lease'").run();
  await runDiscovery(env,seed,fake);assert.equal(calls,1);
  await d.prepare("DELETE FROM state WHERE key='discovery-lease'").run();
  await d.prepare("UPDATE state SET value=? WHERE key='search-touch:missioned-souls'").bind(new Date(Date.now()-76*60000).toISOString()).run();
- await runDiscovery(env,seed,fake);assert.equal(calls,2);assert.equal(queries[0],queries[1]);
+ await runDiscovery(env,seed,fake,{performerId:'missioned-souls'});assert.equal(calls,2);assert.equal(queries[0],queries[1]);
  const metric=JSON.parse((await d.prepare("SELECT value FROM state WHERE key LIKE 'search-query:%'").first()).value);assert.equal(metric.pages,2);assert.equal(metric.uniqueVideos,1);assert.equal(metric.newReactors,1);assert.equal(metric.delaySamples,1);
 });
 
