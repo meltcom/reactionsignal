@@ -1,13 +1,13 @@
-export const SEARCH_STRATEGY='fresh-v3-first-pages-separate-catchup';
+export const SEARCH_STRATEGY='fresh-v4-core-query-rotation';
 export const REPORT_TIMEZONE='America/Los_Angeles';
 const dayFormatter=new Intl.DateTimeFormat('en-US',{timeZone:REPORT_TIMEZONE,year:'numeric',month:'2-digit',day:'2-digit'});
 export function pacificDay(at=new Date()){
  const parts=dayFormatter.formatToParts(new Date(at));
  const value=k=>parts.find(p=>p.type===k).value;return `${value('year')}-${value('month')}-${value('day')}`;
 }
-export function searchSettings(env){const configured=Number(env.DISCOVERY_DAILY_SEARCH_LIMIT??20);return {dailyLimit:Number.isFinite(configured)?Math.max(0,Math.min(80,Math.floor(configured))):20,timezone:REPORT_TIMEZONE,rotation:'12-name/6-reaction/2-experiment',windowOverlapDays:7,scheduler:'3-fresh/1-catchup'};}
+export function searchSettings(env){const configured=Number(env.DISCOVERY_DAILY_SEARCH_LIMIT??20);return {dailyLimit:Number.isFinite(configured)?Math.max(0,Math.min(80,Math.floor(configured))):20,timezone:REPORT_TIMEZONE,rotation:'12-name/6-reaction/2-experiment',freshRotation:'2-name/1-reaction',windowOverlapDays:7,scheduler:'3-fresh/1-catchup'};}
 export async function startSearchPage(db,{runId,performerId,query,cursor,env,at}){
- const id=crypto.randomUUID();await db.prepare('INSERT INTO discovery_search_pages(id,run_id,performer_id,strategy_version,settings_json,query,window_start,window_end,page_depth,started_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,runId,performerId,SEARCH_STRATEGY,JSON.stringify({...searchSettings(env),lane:cursor.lane||'catchup'}),query,cursor.after||null,cursor.startedAt,cursor.depth??(cursor.page?0:1),at).run();return id;
+ const id=crypto.randomUUID();await db.prepare('INSERT INTO discovery_search_pages(id,run_id,performer_id,strategy_version,settings_json,query,window_start,window_end,page_depth,started_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,runId,performerId,SEARCH_STRATEGY,JSON.stringify({...searchSettings(env),lane:cursor.lane||'catchup',rotation:cursor.lane==='fresh'?'2-name/1-reaction':'12-name/6-reaction/2-experiment'}),query,cursor.after||null,cursor.startedAt,cursor.depth??(cursor.page?0:1),at).run();return id;
 }
 export async function reserveSearchAttempt(db,pageId,limit,at=new Date().toISOString()){
  const day=pacificDay(at),key='search-attempt-budget:'+day;
