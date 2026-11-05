@@ -15,7 +15,7 @@ import {refreshVideoMetadata} from './video-metadata.mjs';
 import { refreshChannelStats } from './channel-stats.mjs';
 import { authenticate, authConfig } from './auth.mjs';
 import { youtubePush } from './push.mjs';
-import {recheckBatch} from './recheck.mjs';
+import {resolveAutomaticMatches} from './recheck.mjs';
 import { managePerformers } from './performers.mjs';
 import { reconcile } from './reconciliation.mjs';
 import { workbookImport } from './workbook-import.mjs';
@@ -55,7 +55,7 @@ export default {
         const db=database(env);await seedDatabase(db,seed);
         try{await pruneQuotaRecords(env);}catch{console.error('Quota receipt cleanup deferred');}
         await db.prepare("INSERT INTO state(key,value) VALUES('last-scheduled-invocation',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(new Date().toISOString()).run();
-        await discoveryCycle(env,seed);await recheckBatch(env);
+        await discoveryCycle(env,seed);await resolveAutomaticMatches(env);
         try{await recheckVideoFormats(env);}catch{console.error('Video format recheck failed; retry next tick');}
         const ms=await scheduledMissionedSouls(env,seed.missionedSouls);if(ms?.status==='error')await recordOperationalEvent(env,'ms-refresh-failed');
       }catch{await recordOperationalEvent(env,'scheduler-failed');}
