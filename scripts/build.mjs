@@ -45,6 +45,7 @@ await writeFile(new URL('dist/server/assets.mjs',root),`export const assets=${JS
 for(const f of ['candidate-recognition.mjs','candidate-policy.json','backfill-broker.mjs','youtube-quota.mjs','view-settings.mjs','discovery-measurement.mjs','official-feed.mjs','cache.mjs','operations.mjs','rss.mjs','youtube-subscriptions.mjs','youtube-connection.mjs','db.mjs','discovery.mjs','video-format.mjs','format-recheck.mjs','video-metadata.mjs','approval-rules.mjs','channel-stats.mjs','community.mjs','ms-discussion.mjs','reputation.mjs','social.mjs','auth.mjs','performers.mjs','push.mjs','recheck.mjs','workbook-import.mjs','reconciliation.mjs'])await copyFile(new URL(`server/${f}`,root),new URL(`dist/server/${f}`,root));
 await build({entryPoints:[fileURLToPath(new URL('server/missioned-souls.mjs',root))],outfile:fileURLToPath(new URL('dist/server/missioned-souls.mjs',root)),bundle:true,format:'esm',platform:'neutral',target:'es2022'});
 await copyFile(new URL('server/security.mjs',root),new URL('dist/server/security.mjs',root));
+await copyFile(new URL('server/automatic-matches.mjs',root),new URL('dist/server/automatic-matches.mjs',root));
 await copyFile(new URL('server/donations.mjs',root),new URL('dist/server/donations.mjs',root));
 await copyFile(new URL('server/worker.mjs',root),new URL('dist/server/index.js',root));
 await writeFile(new URL('dist/build-integrity.json',root),JSON.stringify({sha256:await artifactFingerprint(fileURLToPath(new URL('dist/',root)))}));

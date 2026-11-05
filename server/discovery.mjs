@@ -1,6 +1,7 @@
 import {quotaFetch,quotaPolicy,QuotaBlocked} from './youtube-quota.mjs';
 import { database, seedDatabase } from './db.mjs';
 import {reactionEvidence} from './approval-rules.mjs';
+import {automaticMatch,AUTOMATIC_MATCH_POLICY} from './automatic-matches.mjs';
 import {recognizeCandidate,candidateEvidence,CANDIDATE_REVIEW_SOURCE} from './candidate-recognition.mjs';
 import {videoFormat} from './video-format.mjs';
 import {SEARCH_STRATEGY,pacificDay,startSearchPage,reserveSearchAttempt,finishSearchAttempt,finishSearchPage,recordSearchResults,sampleDiscoveryHealth} from './discovery-measurement.mjs';
@@ -76,10 +77,12 @@ export async function saveVideos(db,items,performers,runTime,source,context={}){
       }
       if(!prior){inserted++;const lag=Date.parse(runTime)-Date.parse(snippet.publishedAt);statements.push(db.prepare('INSERT OR IGNORE INTO discovery_observations(video_id,source,discovered_at,published_at,delay_seconds,strategy_version,search_page_id) VALUES(?,?,?,?,?,?,?)').bind(item.id,source,runTime,snippet.publishedAt||null,Number.isFinite(lag)&&lag>=0?Math.floor(lag/1000):null,SEARCH_STRATEGY,context.pageId||null));}
       for(const {p,classification:found,candidate} of missing){
-        const classification=p.review_mode==='review'?'PENDING':found;
+        const resolution=automaticMatch({...p,performer_id:p.id,source,channel_id:snippet.channelId,discovery_scope:channelScopes.get(snippet.channelId)},item);
+        const classification=p.review_mode==='review'||resolution.deferred?'PENDING':resolution.status||found;
+        if(resolution.status)statements.push(db.prepare('INSERT OR IGNORE INTO state(key,value) VALUES(?,?)').bind('automatic-match:'+p.id+':'+item.id,JSON.stringify({policy:AUTOMATIC_MATCH_POLICY,phase:'proposal',at:runTime,status:classification,reason:resolution.reason,title:snippet.title,description:snippet.description||'',channelId:snippet.channelId,source})));
         if(candidate){
           const evidence=await candidateEvidence({id:item.id,...snippet});
-          statements.push(db.prepare("INSERT OR IGNORE INTO state(key,value) SELECT ?,? WHERE NOT EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?) AND NOT EXISTS(SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?) AND EXISTS(SELECT 1 FROM channels WHERE id=? AND discovery_scope='eligible')").bind('candidate-recognition:'+p.id+':'+item.id+':'+evidence.policyHash+':'+evidence.metadataHash,JSON.stringify({...evidence,at:runTime,source,proposedDisposition:'PENDING'}),p.id,item.id,p.id,item.id,snippet.channelId));
+          statements.push(db.prepare("INSERT OR IGNORE INTO state(key,value) SELECT ?,? WHERE NOT EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?) AND NOT EXISTS(SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?) AND EXISTS(SELECT 1 FROM channels WHERE id=? AND discovery_scope='eligible')").bind('candidate-recognition:'+p.id+':'+item.id+':'+evidence.policyHash+':'+evidence.metadataHash,JSON.stringify({...evidence,at:runTime,source,proposedDisposition:classification}),p.id,item.id,p.id,item.id,snippet.channelId));
         }
         statements.push(db.prepare("INSERT OR IGNORE INTO discovery_notifications(performer_id,video_id,created_at,source) SELECT ?,?,?,? WHERE ?='CONFIRMED' AND ?='active' AND NOT EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=?) AND NOT EXISTS(SELECT 1 FROM exclusions WHERE performer_id=? AND video_id=?)").bind(p.id,item.id,runTime,source,classification,p.status,p.id,item.id,p.id,item.id));
         statements.push(candidate

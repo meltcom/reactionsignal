@@ -24,12 +24,12 @@ test('Python/JavaScript outputs, policy hashes and metadata hashes are identical
  const expected=JSON.parse(python.stdout);
  for(let i=0;i<cases.length;i++)assert.deepEqual(await candidateEvidence(cases[i].input),expected[i],cases[i].caseId);
 });
-test('candidate additions become PENDING with immutable evidence; decisions, exclusions and format locks survive',async()=>{
+test('review-only candidate additions remain PENDING; evidence, decisions, exclusions and format locks survive',async()=>{
  const {db,sql}=releaseFixture();
  await seedDatabase(db,{performers:[{id:'missioned-souls',name:'Missioned Souls'}],channels:[],videos:[]});
  sql.exec('DELETE FROM matches; DELETE FROM videos; DELETE FROM channels; DELETE FROM discovery_notifications; DELETE FROM discovery_observations;');
  for(const row of fixture.observedCases)sql.prepare("INSERT OR IGNORE INTO channels(id,name,discovery_scope) VALUES(?,?,'eligible')").run(row.input.channelId,'Fixture reactor');
- const performers=(await db.prepare("SELECT * FROM performers WHERE id='missioned-souls'").all()).results;
+ const performers=(await db.prepare("SELECT * FROM performers WHERE id='missioned-souls'").all()).results.map(p=>({...p,review_mode:'review'}));
  const items=fixture.observedCases.map(r=>({id:r.input.id,snippet:{...r.input,publishedAt:'2020-01-01T00:00:00Z'},status:{privacyStatus:'public'},contentDetails:{duration:'PT4M'}}));
  await saveVideos(db,items,performers,'2026-11-02T19:00:00Z','offline fixture');
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM matches WHERE status='PENDING'").get().n,18);
@@ -83,7 +83,7 @@ test('recent and RSS title screens admit scoped hints without fetching generic t
  const env={DB:db,YOUTUBE_API_KEY:'local-fixture',DISCOVERY_RECENT_BATCH_SIZE:'1',DISCOVERY_HISTORY_PAGES:'0',DISCOVERY_DAILY_SEARCH_LIMIT:'0'};
  const result=await runDiscovery(env,seed,fetcher);
  assert.equal(result.status,'succeeded',result.detail);assert.deepEqual(requested,['recent00001']);
- assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get('recent00001').status,'PENDING');
+ assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get('recent00001').status,'CONFIRMED');
  const xml=`<feed><entry><yt:videoId>rssvid00001</yt:videoId><yt:channelId>${channel}</yt:channelId><title>MISSINOED SOUL BAND / Smoke</title></entry></feed>`;
  await pollRss(env,seed,async()=>new Response(xml));
  assert.equal(sql.prepare('SELECT video_id FROM push_jobs WHERE video_id=?').get('rssvid00001').video_id,'rssvid00001');

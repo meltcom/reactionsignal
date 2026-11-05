@@ -2,6 +2,41 @@ import {database} from './db.mjs';
 import {YouTube,seconds} from './discovery.mjs';
 import {reactionEvidence} from './approval-rules.mjs';
 import {CANDIDATE_REVIEW_SOURCE} from './candidate-recognition.mjs';
+import {automaticMatch,AUTOMATIC_MATCH_POLICY} from './automatic-matches.mjs';
+
+export async function resolveAutomaticMatches(env,fetcher=fetch){
+ const db=database(env);
+ if(!env.YOUTUBE_API_KEY)return {status:'blocked',processed:0};
+ const lock=await db.prepare("INSERT INTO state(key,value) VALUES('automatic-match-lease',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(state.value AS INTEGER)<?").bind(String(Date.now()+120000),Date.now()).run();
+ if(!lock.meta.changes)return {status:'busy',processed:0};
+ const now=new Date().toISOString(),api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db,env);let result={status:'succeeded',processed:0,published:0,rejected:0,deferred:0};
+ try{
+  const rows=(await db.prepare(`SELECT m.performer_id,m.video_id,m.source,v.title,v.format,v.channel_id,p.aliases,p.review_mode,c.discovery_scope FROM matches m JOIN videos v ON v.id=m.video_id JOIN performers p ON p.id=m.performer_id JOIN channels c ON c.id=v.channel_id LEFT JOIN state retry ON retry.key='automatic-match-retry:'||m.performer_id||':'||m.video_id WHERE m.status='PENDING' AND p.status='active' AND p.review_mode='auto' AND v.available=1 AND lower(m.source) NOT LIKE '%moderator%' AND lower(m.source) NOT LIKE '%manual%' AND (retry.value IS NULL OR retry.value<=?) AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id) ORDER BY m.video_id LIMIT 50`).bind(now).all()).results;
+  if(!rows.length)return result;
+  const data=await api.get('videos',{part:'snippet,contentDetails,status',id:[...new Set(rows.map(r=>r.video_id))].join(',')});
+  const items=new Map((data.items||[]).map(v=>[v.id,v]));
+  for(const row of rows){
+   const item=items.get(row.video_id),decision=automaticMatch(row,item);result.processed++;
+   if(!decision.status){
+    result.deferred++;await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind('automatic-match-retry:'+row.performer_id+':'+row.video_id,new Date(Date.now()+6*3600000).toISOString()).run();continue;
+   }
+   const source=AUTOMATIC_MATCH_POLICY+':'+crypto.randomUUID();
+   const evidence=JSON.stringify({policy:AUTOMATIC_MATCH_POLICY,at:now,performerId:row.performer_id,videoId:row.video_id,priorSource:row.source,...decision,metadata:{title:item.snippet.title,description:item.snippet.description||'',channelId:item.snippet.channelId}});
+   const applied=await db.batch([
+    db.prepare(`UPDATE matches SET status=?,source=? WHERE performer_id=? AND video_id=? AND status='PENDING' AND source=? AND EXISTS(SELECT 1 FROM videos v WHERE v.id=? AND v.title=? AND v.format=? AND v.channel_id=? AND v.available=1) AND EXISTS(SELECT 1 FROM performers p WHERE p.id=? AND p.status='active' AND p.aliases=? AND p.review_mode='auto') AND EXISTS(SELECT 1 FROM channels c WHERE c.id=? AND c.discovery_scope=?) AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=? AND e.video_id=?)`).bind(decision.status,source,row.performer_id,row.video_id,row.source,row.video_id,row.title,row.format,row.channel_id,row.performer_id,row.aliases,row.channel_id,row.discovery_scope,row.performer_id,row.video_id),
+    db.prepare('INSERT OR IGNORE INTO state(key,value) SELECT ?,? WHERE EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=? AND source=?)').bind('automatic-match:'+row.performer_id+':'+row.video_id,evidence,row.performer_id,row.video_id,source),
+    db.prepare("INSERT OR IGNORE INTO discovery_notifications(performer_id,video_id,created_at,source) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=? AND source=? AND status='CONFIRMED')").bind(row.performer_id,row.video_id,now,AUTOMATIC_MATCH_POLICY,row.performer_id,row.video_id,source)
+   ]);
+   if(applied[0].meta.changes)result[decision.status==='CONFIRMED'?'published':'rejected']++;
+  }
+ }catch{result={...result,status:'error',message:'Automatic resolution deferred; unprocessed decisions are unchanged.'};}
+ finally{
+  result={...result,at:now,calls:api.calls};
+  await db.prepare("INSERT INTO state(key,value) VALUES('automatic-match-last',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(JSON.stringify(result)).run();
+  await db.prepare("DELETE FROM state WHERE key='automatic-match-lease'").run();
+ }
+ return result;
+}
 const norm=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const mentions=(s,aliases)=>aliases.some(a=>a&&` ${norm(s)} `.includes(` ${norm(a)} `));
 export function recommend(row,item){

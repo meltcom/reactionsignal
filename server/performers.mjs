@@ -98,7 +98,7 @@ export async function managePerformers(request,env,seed,user){try{
   if(!['start','pause','batch','publish'].includes(b.action))fail('Choose a recheck action.');
   if(b.action==='publish')return json(await publishPreview(db,user));
   if(b.action==='start'||b.action==='pause')await db.prepare("INSERT INTO state(key,value) VALUES('recheck-enabled',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(b.action==='start'?'1':'0').run();
-  if(b.action==='start'||b.action==='batch'){const result=await recheckBatch(env);return json({...result,message:result.message||'Preview only: matches are unchanged. Further batches run every 15 minutes while enabled.'});}
+  if(b.action==='start'||b.action==='batch'){const result=await recheckBatch(env);return json({...result,message:result.message||'Manual preview only: this preview does not apply decisions. Automatic discovery resolution runs independently every 15 minutes.'});}
   return json({message:'Background recheck previews paused.'});
  }
 
