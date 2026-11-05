@@ -110,10 +110,11 @@ export function searchDailyLimit(env){
   const limit=Number(value);return Number.isFinite(limit)?Math.max(0,Math.min(80,Math.floor(limit))):20;
 }
 export function searchInterval(env){return Math.max(15,1440/Math.max(1,searchDailyLimit(env)))*60000;}
-export function performerQueries(p,songs=[],rotation=0){
+export function performerQueries(p,songs=[],rotation=0,{fresh=false}={}){
   const quote=s=>'"'+String(s).replace(/["\\]/g,' ').trim()+'"';
   const names=[...new Set([p.name,...JSON.parse(p.aliases)])].filter(Boolean);
   const main=quote(p.name), mainReaction=`${main} reaction`;
+  if(fresh)return [main,mainReaction,main];
   const aliasQueries=names.filter(name=>normalize(name)!==normalize(p.name)).map(name=>`${quote(name)} reaction`);
   const songQueries=[...new Set(songs.map(song=>String(song).trim()).filter(Boolean))].map(song=>`${quote(song)} reaction`);
   // Keep 20 weighted query windows per rotation: 12 exact-name, 6 name+reaction,
@@ -280,8 +281,9 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
       const rotation=Number(searchState.get(selectedRotationKey)?.value||0);
       let cursor=pending?JSON.parse(pending.value):null;
       if(!cursor){
-        const official=(await db.prepare("SELECT value FROM state WHERE key>='ms-video:' AND key<'ms-video;' ORDER BY key").all()).results.map(r=>JSON.parse(r.value));
-        const queries=performerQueries(p,recentSongTitles([...official,...officialFeedVideos,...(seed.videos||[])]),rotation);
+        const official=fresh?[]:(await db.prepare("SELECT value FROM state WHERE key>='ms-video:' AND key<'ms-video;' ORDER BY key").all()).results.map(r=>JSON.parse(r.value));
+        const songs=fresh?[]:recentSongTitles([...official,...officialFeedVideos,...(seed.videos||[])]);
+        const queries=performerQueries(p,songs,rotation,{fresh});
         // First pages are supplemental. They never advance the catch-up
         // watermark or replace its token; that lane still exhausts fixed windows.
         const overlap=fresh?(searchState.get(legacyKey)||prev):prev;

@@ -238,6 +238,7 @@ test('weighted query rotation favors proven name searches and retains song and a
   {title:'Undated by Artist'}
  ]);
  assert.deepEqual(songs,['I HATE MYSELF FOR LOVING YOU','DECODE','Old Song']);
+ assert.deepEqual(performerQueries(p,songs,0,{fresh:true}), ['"Missioned Souls"','"Missioned Souls" reaction','"Missioned Souls"']);
  const q=performerQueries(p,songs);assert.equal(q.length,20);
  assert.equal(q.filter(x=>x==='"Missioned Souls"').length,12);
  assert.equal(q.filter(x=>x==='"Missioned Souls" reaction').length,6);

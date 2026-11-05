@@ -26,6 +26,7 @@ test('three current first pages precede an unchanged legacy continuation, which 
   if(n<3)assert.equal((await db.prepare("SELECT value FROM state WHERE key='search-progress:missioned-souls'").first()).value,original);
  }
  assert.equal(requests.length,4);
+ assert.deepEqual(requests.slice(0,3).map(request=>request.q), ['"Missioned Souls"', '"Missioned Souls" reaction', '"Missioned Souls"']);
  for(const req of requests.slice(0,3)){assert.equal(req.pageToken,undefined);assert.ok(Date.parse(req.publishedBefore)>Date.parse(legacy.startedAt));}
  assert.equal(requests[3].pageToken,'legacy-token');assert.equal(requests[3].publishedAfter,legacy.after);assert.equal(requests[3].publishedBefore,legacy.startedAt);
  const next=JSON.parse((await db.prepare("SELECT value FROM state WHERE key='search-progress:missioned-souls'").first()).value);
