@@ -1,5 +1,9 @@
 # Missioned Souls historical backfill pilot
 
+Automatic publication requires both `BACKFILL_AUTO_PUBLISH=1` on the RJ Worker and `RJ_BACKFILL_AUTO_PUBLISH=1` in the Python launch environment. The Worker evaluates fresh metadata from the existing quota-metered request. It adds only public historical reactions on eligible channels and preserves existing RJ records and exclusions. Every addition has a server audit entry. Python's daily and weekly `published` counts reflect received broker receipts.
+
+For a bounded release check, stop the local pilot first and use its normal credential environment to run `python pilot.py --data data --publish-saved VIDEO_ID ...` with up to ten saved unresolved IDs. The command rechecks those IDs under the existing quota gates and reports the confirmed additions. A lost response may leave the server audit ahead of the local receipt count. Check the server audit before retrying or reporting final totals.
+
 Release candidate 0.4.0. The client identifies itself as `ReactionJourneyBackfillPilot/0.4.0`; Cloudflare rejects the default Python user agent on the live staging hostname. Local Windows application with a shared-quota RJ broker. The broker Worker source must be reviewed and deployed before live activation. No database schema migration is required.
 
 ## Shared candidate recognition
