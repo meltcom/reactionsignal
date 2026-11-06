@@ -1,3 +1,4 @@
+import {countdown} from './countdown.mjs';
 import {discoveryPerformance} from './discovery-measurement.mjs';
 import {backfillBroker} from './backfill-broker.mjs';
 import {pruneQuotaRecords} from './youtube-quota.mjs';
@@ -96,6 +97,7 @@ async function handleRequest(request,env,ctx){
         const result=await member(request,env);
         return result.error||json({id:result.user.id,email:result.user.email,moderator:result.user.moderator});
       }
+      if(path==='/api/countdown'||path==='/api/moderator/countdown'){const result=await member(request,env);if(result.error)return result.error;return await countdown(request,database(env),result.user,path==='/api/moderator/countdown');}
       if(path.startsWith('/api/operations/')){const result=await member(request,env);if(result.error)return result.error;return await operations(request,env,result.user);}
       if(path==='/api/missioned-souls'){const result=await member(request,env);if(result.error)return result.error;return await missionedSouls(request,env,seed.missionedSouls,result.user);}
       if(path==='/api/reconciliation'){const result=await member(request,env);if(result.error)return result.error;return await reconcile(request,env,result.user);}
