@@ -21,7 +21,7 @@ async function runtime(t,{redirect=false,publish=false}={}){
  const calls=[];
  const mf=new Miniflare(convertV4MiniflareOptions({
   modules:true,script:source.outputFiles[0].text,compatibilityDate:'2026-09-30',cf:false,
-  bindings:{YOUTUBE_API_KEY:'runtime-fixture-key',BACKFILL_API_TOKEN:credential,YOUTUBE_QUOTA_TRACKING:'1',YOUTUBE_QUOTA_VERIFIED:'1',YOUTUBE_GENERAL_DAILY_LIMIT:'10000',BACKFILL_DAILY_GENERAL_LIMIT:'300',BACKFILL_GENERAL_RESERVE:'2000',BACKFILL_ENABLED:'1',BACKFILL_AUTO_PUBLISH:publish?'1':'0'},
+  bindings:{YOUTUBE_API_KEY:'runtime-fixture-key',BACKFILL_API_TOKEN:credential,YOUTUBE_QUOTA_TRACKING:'1',YOUTUBE_QUOTA_VERIFIED:'1',YOUTUBE_GENERAL_DAILY_LIMIT:'10000',BACKFILL_DAILY_GENERAL_LIMIT:'300',BACKFILL_GENERAL_RESERVE:'2000',BACKFILL_ENABLED:'1',BACKFILL_AUTO_PUBLISH:publish?'1':'0',BACKFILL_AUTO_PUBLISH_IDS:publish?video:''},
   d1Databases:['DB'],
   outboundService:request=>{
    calls.push({url:request.url,key:request.headers.get('X-Goog-Api-Key')});
