@@ -105,3 +105,27 @@ test('receipt cleanup is bounded and preserves unrelated state and current reser
  assert.equal((await db.prepare("SELECT value FROM state WHERE key='unrelated-catalog-state'").first()).value,'keep');
  assert.equal((await quotaStatus(env,at)).ledger.general,1);
 });
+test('historical publication is opt-in, scoped and preserves catalog decisions on replay',async()=>{
+ const {env,db,sql}=await fixture();
+ await db.prepare('UPDATE discovery_health_samples SET sampled_at=?').bind(new Date().toISOString()).run();
+ sql.prepare("INSERT OR IGNORE INTO performers(id,name,aliases,status,review_mode) VALUES('missioned-souls','Missioned Souls','[\"Missioned Souls\"]','active','auto')").run();
+ sql.exec("UPDATE performers SET status='active',review_mode='auto' WHERE id='missioned-souls'");
+ const held='h'.repeat(11), future='f'.repeat(11), promo='p'.repeat(11), unrelated='u'.repeat(11), unavailable='n'.repeat(11);
+ sql.prepare("INSERT INTO matches(performer_id,video_id,status,source) VALUES('missioned-souls',?,'PENDING','Manual hold')").run(held);
+ const body={endpoint:'videos',params:{part:'snippet,contentDetails,status',id:[video,held,future,promo,unrelated,unavailable].join(',')},channel_id:channel,publish_before:'2026-10-30T00:00:00Z'};
+ const request=()=>new Request('https://test/api/backfill/execute',{method:'POST',headers:{Authorization:'Bearer '+env.BACKFILL_API_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({...body,request_id:crypto.randomUUID()})});
+ const item=(id,title='Missioned Souls Hysteria reaction',publishedAt='2026-10-01T00:00:00Z',privacyStatus='public')=>({id,snippet:{channelId:channel,title,publishedAt},status:{privacyStatus},contentDetails:{duration:'PT5M'}});
+ let calls=0;
+ const fetcher=async()=>{calls++;return Response.json({items:[item(video),item(held),item(future,undefined,'2026-11-01T00:00:00Z'),item(promo,'Missioned Souls reaction teaser'),item(unrelated,'Missioned Souls performance'),item(unavailable,undefined,undefined,'private')]});};
+ assert.equal((await backfillBroker(request(),env,fetcher)).status,403);
+ assert.equal(calls,0);
+ env.BACKFILL_AUTO_PUBLISH='1';
+ const result=await backfillBroker(request(),env,fetcher);
+ assert.equal(result.status,200);
+ assert.deepEqual((await result.json()).receipt.published,[video]);
+ assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(held).status,'PENDING');
+ assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(video).status,'CONFIRMED');
+ assert.equal(sql.prepare("SELECT count(*) AS n FROM state WHERE key LIKE 'historical-backfill:%'").get().n,1);
+ assert.deepEqual((await (await backfillBroker(request(),env,fetcher)).json()).receipt.published,[]);
+ assert.equal(calls,2);
+});

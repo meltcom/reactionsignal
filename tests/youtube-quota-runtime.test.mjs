@@ -17,16 +17,17 @@ const source=await build({stdin:{resolveDir:root,contents:`
   return backfillBroker(request,env);
  }};`},bundle:true,write:false,format:'esm',platform:'browser',target:'es2022'});
 
-async function runtime(t,{redirect=false}={}){
+async function runtime(t,{redirect=false,publish=false}={}){
  const calls=[];
  const mf=new Miniflare(convertV4MiniflareOptions({
   modules:true,script:source.outputFiles[0].text,compatibilityDate:'2026-09-30',cf:false,
-  bindings:{YOUTUBE_API_KEY:'runtime-fixture-key',BACKFILL_API_TOKEN:credential,YOUTUBE_QUOTA_TRACKING:'1',YOUTUBE_QUOTA_VERIFIED:'1',YOUTUBE_GENERAL_DAILY_LIMIT:'10000',BACKFILL_DAILY_GENERAL_LIMIT:'300',BACKFILL_GENERAL_RESERVE:'2000',BACKFILL_ENABLED:'1'},
+  bindings:{YOUTUBE_API_KEY:'runtime-fixture-key',BACKFILL_API_TOKEN:credential,YOUTUBE_QUOTA_TRACKING:'1',YOUTUBE_QUOTA_VERIFIED:'1',YOUTUBE_GENERAL_DAILY_LIMIT:'10000',BACKFILL_DAILY_GENERAL_LIMIT:'300',BACKFILL_GENERAL_RESERVE:'2000',BACKFILL_ENABLED:'1',BACKFILL_AUTO_PUBLISH:publish?'1':'0'},
   d1Databases:['DB'],
   outboundService:request=>{
    calls.push({url:request.url,key:request.headers.get('X-Goog-Api-Key')});
    assert.equal(new URL(request.url).origin,'https://www.googleapis.com');
-   return redirect?new MockResponse('<html>Moved</html>',{status:302,headers:{Location:'https://redirect.invalid/steal'}}):new MockResponse('{"items":[]}',{headers:{'Content-Type':'application/json'}});
+   const items=publish?[{id:video,snippet:{channelId:channel,title:'Missioned Souls Hysteria reaction',publishedAt:'2024-01-01T00:00:00Z'},status:{privacyStatus:'public'}}]:[];
+   return redirect?new MockResponse('<html>Moved</html>',{status:302,headers:{Location:'https://redirect.invalid/steal'}}):new MockResponse(JSON.stringify({items}),{headers:{'Content-Type':'application/json'}});
   }
  }));
  t.after(()=>mf.dispose());
@@ -41,9 +42,26 @@ async function runtime(t,{redirect=false}={}){
   ledger:JSON.parse((await db.prepare("SELECT value FROM state WHERE key LIKE 'youtube-quota-v1:day:%'").first()).value),
   ticket:JSON.parse((await db.prepare("SELECT value FROM state WHERE key LIKE 'youtube-quota-v1:request:%'").first()).value)
  });
- const broker=()=>mf.dispatchFetch('https://fixture/api/backfill/execute',{method:'POST',headers:{Authorization:'Bearer '+credential,'Content-Type':'application/json'},body:JSON.stringify({endpoint:'videos',params:{part:'snippet,contentDetails,status',id:video},channel_id:channel,request_id:crypto.randomUUID()})});
- return {mf,calls,evidence,broker};
+ if(publish){
+  await db.exec("CREATE TABLE performers(id TEXT PRIMARY KEY,aliases TEXT,status TEXT,review_mode TEXT);\nCREATE TABLE matches(performer_id TEXT,video_id TEXT,status TEXT,source TEXT,PRIMARY KEY(performer_id,video_id));\nCREATE TABLE exclusions(performer_id TEXT,video_id TEXT);\nCREATE TABLE videos(id TEXT PRIMARY KEY,channel_id TEXT,title TEXT,published_at TEXT,discovered_at TEXT,checked_at TEXT,format TEXT,available INTEGER);");
+  await db.prepare("INSERT INTO performers VALUES('missioned-souls',?,'active','auto')").bind('["Missioned Souls"]').run();
+ }
+ const broker=()=>mf.dispatchFetch('https://fixture/api/backfill/execute',{method:'POST',headers:{Authorization:'Bearer '+credential,'Content-Type':'application/json'},body:JSON.stringify({endpoint:'videos',params:{part:'snippet,contentDetails,status',id:video},channel_id:channel,request_id:crypto.randomUUID(),...(publish?{publish_before:'2025-01-01T00:00:00Z'}:{})})});
+ return {mf,db,calls,evidence,broker};
 }
+
+test('workerd publishes historical reactions atomically and returns the addition receipt',async t=>{
+ const {db,broker,calls}=await runtime(t,{publish:true});
+ const first=await broker();
+ assert.equal(first.status,200);
+ assert.deepEqual((await first.json()).receipt.published,[video]);
+ assert.equal(calls.length,1);
+ assert.equal((await db.prepare('SELECT status FROM matches WHERE video_id=?').bind(video).first()).status,'CONFIRMED');
+ assert.equal(JSON.parse((await db.prepare('SELECT value FROM state WHERE key=?').bind('historical-backfill:'+video).first()).value).id,video);
+ const replay=await broker();
+ assert.equal(replay.status,200);
+ assert.deepEqual((await replay.json()).receipt.published,[]);
+});
 
 test('workerd sends a general request and records a successful native-runtime receipt',async t=>{
  const {mf,calls,evidence}=await runtime(t);

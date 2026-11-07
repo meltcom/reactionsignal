@@ -72,8 +72,11 @@ class BrokerClient:
         allowed=('protocol','tracking','verified','enabled','generalLimit','backfillLimit','reserve','minimumCoverage','searchLimit','timezone','quotaDay','baselineDay','baselineComplete','ledger','health','healthy','ready','reason')
         return {k:result.get(k) for k in allowed}
 
-    def execute(self,endpoint,params,channel_id):
-        result=self.request('/api/backfill/execute',dict(endpoint=endpoint,params=params,channel_id=channel_id,request_id=str(uuid.uuid4())))
+    def execute(self,endpoint,params,channel_id,*,publish_before=None):
+        payload=dict(endpoint=endpoint,params=params,channel_id=channel_id,request_id=str(uuid.uuid4()))
+        if publish_before is not None:
+            payload['publish_before']=publish_before
+        result=self.request('/api/backfill/execute',payload)
         receipt=result.get('receipt',{})
         if receipt.get('protocol')!=PROTOCOL or receipt.get('units')!=1 or not isinstance(result.get('data'),dict):
             raise BrokerError('invalid_receipt',units=None)

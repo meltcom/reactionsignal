@@ -1,9 +1,54 @@
 import {quotaPolicy,quotaStatus,reserveGeneral,finishReservation,QuotaBlocked,QUOTA_PROTOCOL} from './youtube-quota.mjs';
+import {automaticMatch} from './automatic-matches.mjs';
+import {mentionsPerformer,reactionWording} from './approval-rules.mjs';
+import {EXCLUDED} from './db.mjs';
+import {seconds} from './discovery.mjs';
+import {videoFormat} from './video-format.mjs';
 const json=(value,status=200,charged=0)=>Response.json(value,{status,headers:{'Cache-Control':'private, no-store','X-RJ-Quota-Charged':String(charged),'X-RJ-Quota-Protocol':QUOTA_PROTOCOL}});
 async function authorized(request,env){
  if(!env.BACKFILL_API_TOKEN||env.BACKFILL_API_TOKEN.length<32)return false;
  const hash=async s=>new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)));
  const [a,b]=await Promise.all([hash(request.headers.get('Authorization')||''),hash('Bearer '+env.BACKFILL_API_TOKEN)]);let diff=0;for(let i=0;i<a.length;i++)diff|=a[i]^b[i];return diff===0;
+}
+const HISTORY_POLICY='historical-reactions-v1';
+const nonReaction=/\b(?:livestream|live stream|watch party|announcement|trailer|teaser|preview|tour updates?|behind the scenes|view count|analytics|tribute|fan girling)\b/i;
+export function historicalReaction(performer,item,channelId,cutoff){
+ const snippet=item?.snippet;
+ const published=Date.parse(snippet?.publishedAt);
+ if(!snippet?.title||!Number.isFinite(published)||published>cutoff||EXCLUDED.includes(item.id)||nonReaction.test(snippet.title))return false;
+ const aliases=JSON.parse(performer.aliases);
+ const narrative=String(snippet.description||'').split(/[\n.!?]+/).some(sentence=>
+  !/https?:\/\/|^\s*#|\boriginal\s+(?:video|link)\b/i.test(sentence)&&mentionsPerformer(sentence,aliases)&&reactionWording(sentence));
+ if(!narrative&&!(mentionsPerformer(snippet.title,aliases)&&reactionWording(snippet.title)))return false;
+ return automaticMatch({...performer,performer_id:'missioned-souls',channel_id:channelId,discovery_scope:'eligible'},item).status==='CONFIRMED';
+}
+async function publishHistorical(db,items,ids,channelId,cutoff,requestId){
+ const performer=await db.prepare("SELECT aliases,review_mode FROM performers WHERE id='missioned-souls' AND status='active' AND review_mode='auto'").first();
+ if(!performer)return [];
+ const added=[];
+ const at=new Date().toISOString();
+ const source='Automatic historical backfill '+requestId;
+ for(const item of items){
+  if(!ids.has(item.id)||!historicalReaction(performer,item,channelId,cutoff))continue;
+  const guard=`EXISTS(SELECT 1 FROM channels WHERE id=? AND discovery_scope='eligible')
+   AND EXISTS(SELECT 1 FROM performers WHERE id='missioned-souls' AND status='active' AND review_mode='auto' AND aliases=?)
+   AND NOT EXISTS(SELECT 1 FROM matches WHERE video_id=?)
+   AND NOT EXISTS(SELECT 1 FROM exclusions WHERE performer_id='missioned-souls' AND video_id=?)`;
+  const format=videoFormat(item,seconds(item.contentDetails?.duration));
+  const auditKey='historical-backfill:'+item.id;
+  const audit=JSON.stringify({id:item.id,channelId,requestId,at,policy:HISTORY_POLICY,title:item.snippet.title});
+  const claimed="EXISTS(SELECT 1 FROM state WHERE key=? AND value=?)";
+  const [, ,match]=await db.batch([
+   db.prepare(`INSERT OR IGNORE INTO state(key,value) SELECT ?,? WHERE ${guard}
+    AND NOT EXISTS(SELECT 1 FROM videos WHERE id=?)`).bind(auditKey,audit,channelId,performer.aliases,item.id,item.id,item.id),
+   db.prepare(`INSERT OR IGNORE INTO videos(id,channel_id,title,published_at,discovered_at,checked_at,format,available)
+    SELECT ?,?,?,?,?,?,?,1 WHERE ${claimed}`).bind(item.id,channelId,item.snippet.title,item.snippet.publishedAt,at,at,format,auditKey,audit),
+   db.prepare(`INSERT OR IGNORE INTO matches(performer_id,video_id,status,source)
+    SELECT 'missioned-souls',?,'CONFIRMED',? WHERE ${claimed}`).bind(item.id,source,auditKey,audit)
+  ]);
+  if(match.meta.changes===1)added.push(item.id);
+ }
+ return added;
 }
 export async function backfillBroker(request,env,fetcher=fetch){
  if(!await authorized(request,env))return json({error:'Backfill credential required',code:'unauthorized'},401);
@@ -14,9 +59,12 @@ export async function backfillBroker(request,env,fetcher=fetch){
  if(Number(request.headers.get('Content-Length'))>16000)return json({error:'Request too large'},413);
  let body;try{const text=await request.text();if(text.length>16000)return json({error:'Request too large'},413);body=JSON.parse(text);}catch{return json({error:'Invalid JSON'},400);}
  if(!body||Array.isArray(body)||typeof body!=='object')return json({error:'Invalid request'},400);
- const {endpoint,params,channel_id:channelId,request_id:requestId}=body;
+ const {endpoint,params,channel_id:channelId,request_id:requestId,publish_before:publishBefore}=body;
  if(!['channels','playlistItems','videos'].includes(endpoint)||!/^UC[\w-]{22}$/.test(channelId||'')||!params||Array.isArray(params)||typeof params!=='object')return json({error:'Only known-reactor read requests are supported'},400);
  if(!quotaPolicy(env).tracking||!env.DB||!env.YOUTUBE_API_KEY)return json({error:'Broker is not configured',code:'broker_unconfigured'},503);
+ const cutoff=typeof publishBefore==='string'?Date.parse(publishBefore):NaN;
+ if(publishBefore!==undefined&&(endpoint!=='videos'||!Number.isFinite(cutoff)||cutoff>Date.now()))return json({error:'Invalid historical cutoff',code:'invalid_publish_cutoff'},400);
+ if(publishBefore!==undefined&&env.BACKFILL_AUTO_PUBLISH!=='1')return json({error:'Automatic publication is disabled',code:'publish_disabled'},403);
  const channel=await env.DB.prepare("SELECT id,uploads FROM channels WHERE id=? AND discovery_scope='eligible' AND id<>'UCeTfwcnUVurw7Qrk_KF5Idw'").bind(channelId).first();
  if(!channel)return json({error:'Reactor is not currently eligible',code:'reactor_ineligible'},403);
  const accepted={channels:['part','id'],playlistItems:['part','playlistId','pageToken','maxResults'],videos:['part','id']};
@@ -48,5 +96,6 @@ export async function backfillBroker(request,env,fetcher=fetch){
   const uploads=data.items?.find(c=>c.id===channelId)?.contentDetails?.relatedPlaylists?.uploads;
   if(uploads)await env.DB.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind('backfill-upload-playlist:'+channelId,uploads).run();
  }
- return json({data,receipt:{protocol:QUOTA_PROTOCOL,requestId,quotaDay:reservation.quotaDay,units:1}},200,1);
+ const published=publishBefore===undefined?undefined:await publishHistorical(env.DB,data.items||[],new Set(query.id.split(',')),channelId,cutoff,requestId);
+ return json({data,receipt:{protocol:QUOTA_PROTOCOL,requestId,quotaDay:reservation.quotaDay,units:1,published}},200,1);
 }

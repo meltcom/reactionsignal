@@ -85,9 +85,11 @@ class Pilot:
     def http(self, endpoint, params):
         if not self.active_channel:
             raise BrokerError('missing_reactor_context',units=0)
+        if endpoint == 'videos' and os.environ.get('RJ_BACKFILL_AUTO_PUBLISH') == '1':
+            return self.broker.execute(endpoint,params,self.active_channel['id'],publish_before=self.setting('cutoff'))
         return self.broker.execute(endpoint,params,self.active_channel['id'])
 
-    def api(self, endpoint, **params):
+    def api(self, endpoint, *, include_receipt=False, **params):
         if endpoint not in ('channels', 'playlistItems', 'videos'):
             raise ValueError('Endpoint prohibited')
         for retry in range(3):
@@ -116,7 +118,7 @@ class Pilot:
                     raise BrokerError('missing_receipt',units=None)
                 with self.lock, self.db:
                     self.db.execute("UPDATE attempts SET success=1,status='succeeded',duration_ms=?,finished_at=?,quota_units=?,receipt_json=? WHERE id=?", ((time.perf_counter()-started)*1000, now(), 1, json.dumps(receipt) if receipt else None, attempt))
-                return result
+                return {**result, '_rj_quota_receipt': receipt or {}} if include_receipt else result
             except Exception as error:
                 code = getattr(error, 'code', None)
                 label = error.broker_code if isinstance(error,BrokerError) else 'HTTP ' + str(code) if code else type(error).__name__
@@ -164,7 +166,8 @@ class Pilot:
                     metadata_ids_avoided=?,metadata_requests_avoided=? WHERE id=?''',
                     (len(ids), sum(bool(existing[v]) for v in ids), sum(v in seen and not existing[v] for v in ids), len(unknown), len(ids)-len(unknown), avoided, batch_id))
                 self.db.commit()
-            data = self.api('videos', part='snippet,contentDetails,status', id=','.join(unknown)) if unknown else {'items': []}
+            data = self.api('videos', include_receipt=True, part='snippet,contentDetails,status', id=','.join(unknown)) if unknown else {'items': []}
+            published_ids = set(data.get('_rj_quota_receipt', {}).get('published', []))
             byid = {v['id']: v for v in data.get('items', [])}
             next_token = page.get('nextPageToken')
             if next_token and next_token == c['token']:
@@ -193,6 +196,9 @@ class Pilot:
                         v = {'playlist_evidence': playlist_items.get(vid), 'metadata_skipped': 'Known RJ ID', 'snapshot_decision': known[0]}
                     elif v:
                         v = dict(v, _rj_candidate_recognition=candidate)
+                        if vid in published_ids:
+                            classification = 'published:CONFIRMED'
+                            v['_rj_publication_receipt'] = data['_rj_quota_receipt']
                     self.db.execute('INSERT OR IGNORE INTO videos VALUES(?,?,?,?,?,?,?,?)', (vid, c['id'], snippet.get('title', vid), published, classification, json.dumps(v), now(), day()))
                     is_new = not bool(known)
                     new_records += is_new
@@ -268,9 +274,12 @@ class Pilot:
             days = [(today - dt.timedelta(days=i)).isoformat() for i in range(15)]
             daily = []
             for d in days:
-                daily.append(dict(day=d, requests=self.db.execute('SELECT COUNT(*) FROM attempts WHERE day=?', (d,)).fetchone()[0], failures=self.db.execute('SELECT COUNT(*) FROM attempts WHERE day=? AND (status="failed" OR (status IS NULL AND error IS NOT NULL))', (d,)).fetchone()[0], pages=self.db.execute('SELECT COUNT(*) FROM pages WHERE day=?', (d,)).fetchone()[0], examined=self.db.execute('SELECT COUNT(*) FROM videos WHERE day=?', (d,)).fetchone()[0], candidates=self.db.execute("SELECT COUNT(*) FROM videos WHERE day=? AND classification='review'", (d,)).fetchone()[0]))
+                added = self.db.execute("""SELECT COUNT(DISTINCT p.value)
+                    FROM attempts a, json_each(a.receipt_json, '$.published') p
+                    WHERE json_extract(a.receipt_json, '$.quotaDay')=?""", (d,)).fetchone()[0]
+                daily.append(dict(day=d, requests=self.db.execute('SELECT COUNT(*) FROM attempts WHERE day=?', (d,)).fetchone()[0], failures=self.db.execute('SELECT COUNT(*) FROM attempts WHERE day=? AND (status="failed" OR (status IS NULL AND error IS NOT NULL))', (d,)).fetchone()[0], pages=self.db.execute('SELECT COUNT(*) FROM pages WHERE day=?', (d,)).fetchone()[0], examined=self.db.execute('SELECT COUNT(*) FROM videos WHERE day=?', (d,)).fetchone()[0], candidates=self.db.execute("SELECT COUNT(*) FROM videos WHERE day=? AND classification='review'", (d,)).fetchone()[0], published=added))
             def aggregate(rows):
-                totals = {key: sum(r[key] for r in rows) for key in ('requests', 'failures', 'pages', 'examined', 'candidates')}
+                totals = {key: sum(r[key] for r in rows) for key in ('requests', 'failures', 'pages', 'examined', 'candidates', 'published')}
                 totals['measured_days'] = sum(r['requests'] > 0 for r in rows)
                 totals['candidates_per_request'] = round(totals['candidates'] / totals['requests'], 4) if totals['requests'] else None
                 return totals
@@ -289,17 +298,26 @@ class Pilot:
 def make_server(pilot, port):
     token = secrets.token_urlsafe(32)
     class Handler(BaseHTTPRequestHandler):
+        def handle(self):
+            try:
+                super().handle()
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                self.close_connection = True
+
         def log_message(self, *_):
             pass
         def reply(self, body, kind='application/json', status=200):
             if isinstance(body, str):
                 body = body.encode()
-            self.send_response(status)
-            self.send_header('Content-Type', kind)
-            self.send_header('Cache-Control', 'no-store')
-            self.send_header('X-Content-Type-Options', 'nosniff')
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(status)
+                self.send_header('Content-Type', kind)
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('X-Content-Type-Options', 'nosniff')
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                self.close_connection = True
         def trusted(self):
             return self.headers.get('Host') == f'127.0.0.1:{self.server.server_address[1]}'
         def do_GET(self):
@@ -386,8 +404,37 @@ def main():
     parser.add_argument('--snapshot', type=Path)
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--monitor', type=Path, help='Import a read-only RJ monitor snapshot')
+    parser.add_argument('--publish-saved', nargs='+', metavar='VIDEO_ID', help='Recheck and publish up to ten saved unresolved candidates through RJ')
     args = parser.parse_args()
+    if args.publish_saved and (args.snapshot or args.monitor or not (args.data / 'campaign.sqlite3').is_file()):
+        parser.error('Saved publication requires an existing campaign without seed or monitor options')
     pilot = Pilot(args.data)
+    if args.publish_saved:
+        if os.environ.get('RJ_BACKFILL_AUTO_PUBLISH') != '1' or not pilot.setting('cutoff'):
+            parser.error('Saved publication requires an opted-in seeded campaign')
+        ids = list(dict.fromkeys(args.publish_saved))
+        if len(ids) > 10 or any(not re.fullmatch(r'[\w-]{11}', video_id) for video_id in ids):
+            parser.error('Provide up to ten valid video IDs')
+        grouped = {}
+        for video_id in ids:
+            row = pilot.db.execute("""SELECT v.channel FROM videos v LEFT JOIN latest_reviews r ON r.video_id=v.id
+                WHERE v.id=? AND v.classification='review' AND r.outcome IS NULL""", (video_id,)).fetchone()
+            if row is None:
+                parser.error(f'{video_id} is not an unresolved saved candidate')
+            grouped.setdefault(row['channel'], []).append(video_id)
+        published = []
+        for channel, group in grouped.items():
+            pilot.active_channel = {'id': channel}
+            data = pilot.api('videos', include_receipt=True, part='snippet,contentDetails,status', id=','.join(group))
+            receipt = data.get('_rj_quota_receipt', {})
+            with pilot.db:
+                for video_id in receipt.get('published', []):
+                    pilot.db.execute("""UPDATE videos SET classification='published:CONFIRMED',
+                        evidence=json_set(evidence, '$._rj_publication_receipt', json(?))
+                        WHERE id=? AND classification='review'""", (json.dumps(receipt), video_id))
+                    published.append(video_id)
+        print(json.dumps({'published': published, 'skipped': [video_id for video_id in ids if video_id not in published]}))
+        return
     if args.snapshot:
         pilot.seed(json.loads(args.snapshot.read_text(encoding='utf-8-sig')))
     if args.monitor:
