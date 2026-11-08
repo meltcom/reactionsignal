@@ -45,6 +45,7 @@ async function runtime(t,{redirect=false,publish=false}={}){
  if(publish){
   await db.exec("CREATE TABLE performers(id TEXT PRIMARY KEY,aliases TEXT,status TEXT,review_mode TEXT);\nCREATE TABLE matches(performer_id TEXT,video_id TEXT,status TEXT,source TEXT,PRIMARY KEY(performer_id,video_id));\nCREATE TABLE exclusions(performer_id TEXT,video_id TEXT);\nCREATE TABLE videos(id TEXT PRIMARY KEY,channel_id TEXT,title TEXT,published_at TEXT,discovered_at TEXT,checked_at TEXT,format TEXT,available INTEGER);");
   await db.prepare("INSERT INTO performers VALUES('missioned-souls',?,'active','auto')").bind('["Missioned Souls"]').run();
+  await db.exec("INSERT INTO state VALUES('catalog-revision','0');\nCREATE TRIGGER catalog_match_insert AFTER INSERT ON matches BEGIN UPDATE state SET value=CAST(value AS INTEGER)+1 WHERE key='catalog-revision'; END;");
  }
  const broker=()=>mf.dispatchFetch('https://fixture/api/backfill/execute',{method:'POST',headers:{Authorization:'Bearer '+credential,'Content-Type':'application/json'},body:JSON.stringify({endpoint:'videos',params:{part:'snippet,contentDetails,status',id:video},channel_id:channel,request_id:crypto.randomUUID(),...(publish?{publish_before:'2025-01-01T00:00:00Z'}:{})})});
  return {mf,db,calls,evidence,broker};
