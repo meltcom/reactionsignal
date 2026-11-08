@@ -38,7 +38,7 @@ async function publishHistorical(db,items,ids,channelId,cutoff,requestId){
   const auditKey='historical-backfill:'+item.id;
   const audit=JSON.stringify({id:item.id,channelId,requestId,at,policy:HISTORY_POLICY,title:item.snippet.title});
   const claimed="EXISTS(SELECT 1 FROM state WHERE key=? AND value=?)";
-  const [, ,match]=await db.batch([
+  await db.batch([
    db.prepare(`INSERT OR IGNORE INTO state(key,value) SELECT ?,? WHERE ${guard}
     AND NOT EXISTS(SELECT 1 FROM videos WHERE id=?)`).bind(auditKey,audit,channelId,performer.aliases,item.id,item.id,item.id),
    db.prepare(`INSERT OR IGNORE INTO videos(id,channel_id,title,published_at,discovered_at,checked_at,format,available)
@@ -46,7 +46,15 @@ async function publishHistorical(db,items,ids,channelId,cutoff,requestId){
    db.prepare(`INSERT OR IGNORE INTO matches(performer_id,video_id,status,source)
     SELECT 'missioned-souls',?,'CONFIRMED',? WHERE ${claimed}`).bind(item.id,source,auditKey,audit)
   ]);
-  if(match.meta.changes===1)added.push(item.id);
+  // D1 change counts include trigger writes. Read the committed decision and
+  // request-owned audit instead of assuming exactly one row changed.
+  const committed=await db.prepare(`SELECT m.video_id FROM matches m
+   JOIN state s ON s.key=? AND s.value=?
+   WHERE m.performer_id='missioned-souls' AND m.video_id=?
+   AND m.status='CONFIRMED' AND m.source=?
+   AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id)`)
+   .bind(auditKey,audit,item.id,source).first();
+  if(committed)added.push(item.id);
  }
  return added;
 }
