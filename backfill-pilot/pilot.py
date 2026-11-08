@@ -52,6 +52,7 @@ class Pilot:
         CREATE TABLE IF NOT EXISTS videos(id TEXT PRIMARY KEY,channel TEXT,title TEXT,published TEXT,classification TEXT,evidence TEXT,found TEXT,day TEXT);
         CREATE TABLE IF NOT EXISTS attempts(id INTEGER PRIMARY KEY,at TEXT,day TEXT,endpoint TEXT,success INTEGER DEFAULT 0,error TEXT);
         CREATE TABLE IF NOT EXISTS pages(id INTEGER PRIMARY KEY,at TEXT,day TEXT,channel TEXT,token TEXT,next TEXT,items INTEGER);
+        CREATE TABLE IF NOT EXISTS publication_backlog(video_id TEXT PRIMARY KEY,checked_at TEXT,outcome TEXT,evidence TEXT,published_day TEXT);
         ''')
         self.db.commit()
         measurements.initialize(self.db)
@@ -255,12 +256,69 @@ class Pilot:
             self.setting('broker-status',json.dumps(dict(checked_at=now(),**status)))
         return status
 
+    def publish_backlog_step(self):
+        """Checkpoint one channel batch, reconciling server writes before retry."""
+        with self.lock:
+            rows = self.db.execute("""SELECT v.id,v.channel FROM videos v
+                LEFT JOIN latest_reviews r ON r.video_id=v.id
+                LEFT JOIN publication_backlog b ON b.video_id=v.id
+                WHERE v.classification='review' AND r.outcome IS NULL AND b.video_id IS NULL
+                ORDER BY v.channel,v.id LIMIT 50""").fetchall()
+            if not rows:
+                return False
+            channel = rows[0]['channel']
+            ids = [row['id'] for row in rows if row['channel'] == channel]
+            self.active_channel = {'id': channel, 'phase': 'Publishing saved candidates'}
+        try:
+            before = self.broker.publications(ids)
+            missing = [video_id for video_id in ids if before[video_id]['outcome'] == 'missing']
+            protected = False
+            data = {'items': []}
+            if missing:
+                try:
+                    data = self.api('videos', part='snippet,contentDetails,status', id=','.join(missing))
+                except BrokerError as error:
+                    if error.broker_code != 'reactor_ineligible':
+                        raise
+                    protected = True
+            after = before if protected else self.broker.publications(ids)
+            fresh = {item['id']: item for item in data.get('items', [])}
+            with self.lock, self.db:
+                for video_id in ids:
+                    result = dict(after[video_id])
+                    if protected and video_id in missing:
+                        result.update(outcome='protected', reason='Reactor is no longer eligible')
+                    if video_id in fresh:
+                        result['metadata'] = fresh[video_id]
+                    outcome = result['outcome']
+                    published_day = None
+                    if outcome == 'published':
+                        audit = result.get('audit') or {}
+                        if audit.get('id') != video_id or audit.get('channelId') != channel:
+                            raise ValueError('Publication audit identity mismatch')
+                        published_day = dt.datetime.fromisoformat(audit['at'].replace('Z', '+00:00')).astimezone(PT).date().isoformat()
+                    # Keep original candidate evidence and all review events.
+                    self.db.execute('INSERT INTO publication_backlog VALUES(?,?,?,?,?)',
+                                    (video_id, now(), 'skipped' if outcome == 'missing' else outcome,
+                                     json.dumps(result), published_day))
+                    if outcome == 'published':
+                        self.db.execute("""UPDATE videos SET classification='published:CONFIRMED'
+                            WHERE id=? AND classification='review'
+                            AND NOT EXISTS(SELECT 1 FROM latest_reviews WHERE video_id=?)""",
+                                        (video_id, video_id))
+            return True
+        finally:
+            with self.lock:
+                self.active_channel = None
+
     def run(self):
         self.message = 'Running'
         try:
             while not self.stop.is_set():
+                if os.environ.get('RJ_BACKFILL_AUTO_PUBLISH') == '1' and self.publish_backlog_step():
+                    continue
                 if not self.step():
-                    self.message = 'Sweep complete; review unresolved candidates and errors'
+                    self.message = 'Upload sweep and saved-candidate checks complete'
                     return
                 if self.stop.wait(3):
                     break
@@ -275,8 +333,12 @@ class Pilot:
             daily = []
             for d in days:
                 added = self.db.execute("""SELECT COUNT(DISTINCT p.value)
-                    FROM attempts a, json_each(a.receipt_json, '$.published') p
-                    WHERE json_extract(a.receipt_json, '$.quotaDay')=?""", (d,)).fetchone()[0]
+                    FROM (
+                        SELECT p.value FROM attempts a, json_each(a.receipt_json, '$.published') p
+                        WHERE json_extract(a.receipt_json, '$.quotaDay')=?
+                        UNION SELECT video_id AS value FROM publication_backlog
+                        WHERE outcome='published' AND published_day=?
+                    ) p""", (d, d)).fetchone()[0]
                 daily.append(dict(day=d, requests=self.db.execute('SELECT COUNT(*) FROM attempts WHERE day=?', (d,)).fetchone()[0], failures=self.db.execute('SELECT COUNT(*) FROM attempts WHERE day=? AND (status="failed" OR (status IS NULL AND error IS NOT NULL))', (d,)).fetchone()[0], pages=self.db.execute('SELECT COUNT(*) FROM pages WHERE day=?', (d,)).fetchone()[0], examined=self.db.execute('SELECT COUNT(*) FROM videos WHERE day=?', (d,)).fetchone()[0], candidates=self.db.execute("SELECT COUNT(*) FROM videos WHERE day=? AND classification='review'", (d,)).fetchone()[0], published=added))
             def aggregate(rows):
                 totals = {key: sum(r[key] for r in rows) for key in ('requests', 'failures', 'pages', 'examined', 'candidates', 'published')}
@@ -293,7 +355,12 @@ class Pilot:
             for c in channels:
                 c['display_state'] = 'Scanning now' if self.active_channel and self.active_channel['id'] == c['id'] else {'queued': 'Waiting for next page' if c['pages'] else 'Not started', 'exhausted': 'Upload history exhausted', 'error': 'Needs attention'}[c['state']]
             active = dict(self.active_channel) if self.active_channel else None
-            return dict(measurements=measurements.report(self), message=self.message, running=bool(self.worker and self.worker.is_alive()), today=daily[0], weekly=aggregate(daily[1:8]), previous_week=aggregate(daily[8:15]), daily=daily, channels=channels, active_channel=active, results=[dict(r) for r in self.db.execute('SELECT id,title,classification,published FROM videos ORDER BY found DESC LIMIT 100')], totals={r[0]: r[1] for r in self.db.execute('SELECT classification,COUNT(*) FROM videos GROUP BY classification')}, cutoff=self.setting('cutoff'), snapshot_at=self.setting('snapshot_at'), limit=self.limit, search_calls=0)
+            backlog = {row[0]: row[1] for row in self.db.execute('SELECT outcome,COUNT(*) FROM publication_backlog GROUP BY outcome')}
+            backlog['pending'] = self.db.execute("""SELECT COUNT(*) FROM videos v
+                LEFT JOIN latest_reviews r ON r.video_id=v.id
+                LEFT JOIN publication_backlog b ON b.video_id=v.id
+                WHERE v.classification='review' AND r.outcome IS NULL AND b.video_id IS NULL""").fetchone()[0]
+            return dict(backlog=backlog, measurements=measurements.report(self), message=self.message, running=bool(self.worker and self.worker.is_alive()), today=daily[0], weekly=aggregate(daily[1:8]), previous_week=aggregate(daily[8:15]), daily=daily, channels=channels, active_channel=active, results=[dict(r) for r in self.db.execute('SELECT id,title,classification,published FROM videos ORDER BY found DESC LIMIT 100')], totals={r[0]: r[1] for r in self.db.execute('SELECT classification,COUNT(*) FROM videos GROUP BY classification')}, cutoff=self.setting('cutoff'), snapshot_at=self.setting('snapshot_at'), limit=self.limit, search_calls=0)
 
 def make_server(pilot, port):
     token = secrets.token_urlsafe(32)

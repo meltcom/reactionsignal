@@ -143,4 +143,10 @@ test('historical publication is opt-in, scoped and preserves catalog decisions o
  assert.equal(sql.prepare("SELECT count(*) AS n FROM state WHERE key LIKE 'historical-backfill:%'").get().n,2);
  assert.deepEqual((await (await backfillBroker(request(),env,fetcher)).json()).receipt.published,[]);
  assert.equal(calls,2);
+ const lookup=await backfillBroker(new Request('https://test/api/backfill/publications?ids='+video+','+held,{headers:{Authorization:'Bearer '+env.BACKFILL_API_TOKEN}}),env,()=>assert.fail('Read-only audit must not call YouTube'));
+ const states=(await lookup.json()).rows;
+ assert.equal(states[0].outcome,'published');
+ assert.equal(states[0].audit.id,video);
+ assert.equal(states[1].outcome,'existing');
+ assert.equal((await backfillBroker(new Request('https://test/api/backfill/publications?ids='+video),env)).status,401);
 });

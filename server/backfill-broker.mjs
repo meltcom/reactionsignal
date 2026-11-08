@@ -62,6 +62,21 @@ export async function backfillBroker(request,env,fetcher=fetch){
  if(!await authorized(request,env))return json({error:'Backfill credential required',code:'unauthorized'},401);
  const path=new URL(request.url).pathname;
  if(path==='/api/backfill/status'&&request.method==='GET')return json(await quotaStatus(env));
+ if(path==='/api/backfill/publications'&&request.method==='GET'){
+  if(!env.DB)return json({error:'Catalog unavailable',code:'broker_unconfigured'},503);
+  const ids=(new URL(request.url).searchParams.get('ids')||'').split(',');
+  if(!ids.length||ids.length>50||ids.some(id=>!/^[-\w]{11}$/.test(id)))return json({error:'Invalid IDs',code:'invalid_ids'},400);
+  const rows=[];
+  for(const id of new Set(ids)){
+   const match=await env.DB.prepare("SELECT status,source FROM matches WHERE performer_id='missioned-souls' AND video_id=?").bind(id).first();
+   const excluded=await env.DB.prepare("SELECT 1 AS present FROM exclusions WHERE performer_id='missioned-souls' AND video_id=?").bind(id).first();
+   const audit=await env.DB.prepare('SELECT value FROM state WHERE key=?').bind('historical-backfill:'+id).first();
+   const evidence=audit?JSON.parse(audit.value):null;
+   const published=!excluded&&match?.status==='CONFIRMED'&&evidence&&match.source==='Automatic historical backfill '+evidence.requestId;
+   rows.push({id,outcome:excluded?'excluded':published?'published':match?'existing':'missing',audit:published?evidence:null});
+  }
+  return json({rows});
+ }
  if(path!=='/api/backfill/execute'||request.method!=='POST')return json({error:'Not found'},404);
  if(!request.headers.get('Content-Type')?.startsWith('application/json'))return json({error:'JSON required'},415);
  if(Number(request.headers.get('Content-Length'))>16000)return json({error:'Request too large'},413);
