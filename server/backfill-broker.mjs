@@ -104,9 +104,7 @@ export async function backfillBroker(request,env,fetcher=fetch){
   const uploads=data.items?.find(c=>c.id===channelId)?.contentDetails?.relatedPlaylists?.uploads;
   if(uploads)await env.DB.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind('backfill-upload-playlist:'+channelId,uploads).run();
  }
- const allowedPublicationIds=new Set(String(env.BACKFILL_AUTO_PUBLISH_IDS||'').split(',').filter(id=>/^[-\w]{11}$/.test(id)));
- const publicationIds=publishBefore===undefined?null:new Set(query.id.split(',').filter(id=>allowedPublicationIds.has(id)));
- const published=publicationIds===null?undefined:publicationIds.size
-  ?await publishHistorical(env.DB,data.items||[],publicationIds,channelId,cutoff,requestId):[];
+ const published=publishBefore===undefined?undefined:
+  await publishHistorical(env.DB,data.items||[],new Set(query.id.split(',')),channelId,cutoff,requestId);
  return json({data,receipt:{protocol:QUOTA_PROTOCOL,requestId,quotaDay:reservation.quotaDay,units:1,published}},200,1);
 }

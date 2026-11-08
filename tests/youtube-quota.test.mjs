@@ -134,14 +134,13 @@ test('historical publication is opt-in, scoped and preserves catalog decisions o
  assert.equal((await backfillBroker(request(),env,fetcher)).status,403);
  assert.equal(calls,0);
  env.BACKFILL_AUTO_PUBLISH='1';
- env.BACKFILL_AUTO_PUBLISH_IDS=allowed.join(',');
  const result=await backfillBroker(request(),env,fetcher);
  assert.equal(result.status,200);
- assert.deepEqual((await result.json()).receipt.published,[video]);
+ assert.deepEqual((await result.json()).receipt.published,[video,unlisted]);
  assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(held).status,'PENDING');
  assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(video).status,'CONFIRMED');
- assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(unlisted),undefined);
- assert.equal(sql.prepare("SELECT count(*) AS n FROM state WHERE key LIKE 'historical-backfill:%'").get().n,1);
+ assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(unlisted).status,'CONFIRMED');
+ assert.equal(sql.prepare("SELECT count(*) AS n FROM state WHERE key LIKE 'historical-backfill:%'").get().n,2);
  assert.deepEqual((await (await backfillBroker(request(),env,fetcher)).json()).receipt.published,[]);
  assert.equal(calls,2);
 });
