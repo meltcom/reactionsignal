@@ -55,7 +55,7 @@ class Pilot:
         ''')
         self.db.commit()
         measurements.initialize(self.db)
-        self.limit = 300
+        self.limit = 1000
 
     def setting(self, key, value=None):
         if value is not None:
@@ -234,7 +234,7 @@ class Pilot:
                 self.setting('broker-status',json.dumps(dict(checked_at=now(),**status)))
                 if status.get('ready') is not True:
                     raise ValueError('RJ quota gate: '+str(status.get('reason') or 'not_ready'))
-                if not all(status.get(k) is True for k in ('tracking','verified','enabled','baselineComplete','healthy')) or status.get('searchLimit')!=0 or not isinstance(status.get('backfillLimit'),int) or not 1<=status['backfillLimit']<=300 or not isinstance(status.get('reserve'),int) or status['reserve']<2000:
+                if not all(status.get(k) is True for k in ('tracking','verified','enabled','baselineComplete','healthy')) or status.get('searchLimit')!=0 or not isinstance(status.get('backfillLimit'),int) or not 1<=status['backfillLimit']<=1000 or not isinstance(status.get('reserve'),int) or status['reserve']<2000:
                     raise ValueError('Unverified quota policy')
                 self.limit=min(self.limit,status['backfillLimit'])
                 self.stop.clear()

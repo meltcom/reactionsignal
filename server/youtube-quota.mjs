@@ -5,7 +5,7 @@ const prefix='youtube-quota-v1:',baseline=prefix+'baseline-day';
 const integer=(value,fallback)=>/^\d+$/.test(String(value??''))&&Number.isSafeInteger(Number(value))?Number(value):fallback;
 export function quotaPolicy(env){
  return {protocol:QUOTA_PROTOCOL,tracking:env.YOUTUBE_QUOTA_TRACKING==='1',verified:env.YOUTUBE_QUOTA_VERIFIED==='1',enabled:env.BACKFILL_ENABLED==='1',
-  generalLimit:integer(env.YOUTUBE_GENERAL_DAILY_LIMIT,0),backfillLimit:Math.min(300,integer(env.BACKFILL_DAILY_GENERAL_LIMIT,0)),
+  generalLimit:integer(env.YOUTUBE_GENERAL_DAILY_LIMIT,0),backfillLimit:Math.min(1000,integer(env.BACKFILL_DAILY_GENERAL_LIMIT,0)),
   reserve:Math.max(2000,integer(env.BACKFILL_GENERAL_RESERVE,2000)),minimumCoverage:0.95,
   searchLimit:0,timezone:'America/Los_Angeles'};
 }
