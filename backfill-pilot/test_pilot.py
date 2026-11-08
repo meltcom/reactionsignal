@@ -2,11 +2,52 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock
 from pilot import Pilot, day
+from broker import BrokerError
 
 CHANNEL = 'UC' + 'a' * 22
 
 class PilotTests(unittest.TestCase):
+    def test_saved_backlog_preserves_checkpoint_on_quota_denial(self):
+        p = self.make(lambda *_: (_ for _ in ()).throw(BrokerError('backfill_daily_cap',units=0)))
+        with p.db:
+            p.db.execute("INSERT INTO videos VALUES(?,?,?,?,?,?,?,?)",
+                         ('backlog1234',CHANNEL,'Candidate','2020-01-01T00:00:00Z','review','{}','2026-10-30T00:00:00Z',day()))
+        p.broker.publications = Mock(return_value={'backlog1234':dict(id='backlog1234',outcome='missing',audit=None)})
+        with self.assertRaises(BrokerError):
+            p.publish_backlog_step()
+        self.assertEqual(p.db.execute('SELECT COUNT(*) FROM publication_backlog').fetchone()[0],0)
+        self.assertEqual(p.db.execute('SELECT classification FROM videos').fetchone()[0],'review')
+        self.assertIsNone(p.active_channel)
+
+    def test_saved_backlog_reconciles_lost_response_and_deduplicates_report(self):
+        p = self.make(lambda *_: self.fail('Already published ID must not call provider'))
+        video_id = 'backlog1234'
+        with p.db:
+            p.db.execute("INSERT INTO videos VALUES(?,?,?,?,?,?,?,?)",
+                         (video_id, CHANNEL, 'Missioned Souls reaction', '2020-01-01T00:00:00Z',
+                          'review', '{}', '2026-10-30T00:00:00Z', day()))
+        audit = dict(id=video_id, channelId=CHANNEL, at='2026-10-30T08:00:00Z', requestId='fixture')
+        p.broker.publications = Mock(return_value={video_id: dict(id=video_id,outcome='published',audit=audit)})
+        self.assertTrue(p.publish_backlog_step())
+        self.assertFalse(p.publish_backlog_step())
+        self.assertEqual(p.db.execute('SELECT classification FROM videos').fetchone()[0], 'published:CONFIRMED')
+        self.assertEqual(p.db.execute('SELECT COUNT(*) FROM publication_backlog').fetchone()[0], 1)
+        self.assertIsNone(p.active_channel)
+
+    def test_saved_backlog_checks_once_and_preserves_reviewed_records(self):
+        calls = []
+        p = self.make(lambda endpoint, params: calls.append(params['id']) or {'items': []})
+        with p.db:
+            p.db.execute("INSERT INTO videos VALUES(?,?,?,?,?,?,?,?)",
+                         ('backlog1234',CHANNEL,'Candidate','2020-01-01T00:00:00Z','review','{}','2026-10-30T00:00:00Z',day()))
+        p.broker.publications = Mock(return_value={'backlog1234':dict(id='backlog1234',outcome='missing',audit=None)})
+        self.assertTrue(p.publish_backlog_step())
+        self.assertFalse(p.publish_backlog_step())
+        self.assertEqual(calls,['backlog1234'])
+        self.assertEqual(p.db.execute('SELECT outcome FROM publication_backlog').fetchone()[0], 'skipped')
+
     def make(self, transport):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)

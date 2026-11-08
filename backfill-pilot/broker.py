@@ -7,7 +7,7 @@ import urllib.parse
 import uuid
 
 PROTOCOL='rj-backfill-broker-v1'
-USER_AGENT='ReactionJourneyBackfillPilot/0.4.0'
+USER_AGENT='ReactionJourneyBackfillPilot/0.5.0'
 
 
 class BrokerError(RuntimeError):
@@ -71,6 +71,15 @@ class BrokerClient:
             raise BrokerError('unverified_broker_protocol',units=0)
         allowed=('protocol','tracking','verified','enabled','generalLimit','backfillLimit','reserve','minimumCoverage','searchLimit','timezone','quotaDay','baselineDay','baselineComplete','ledger','health','healthy','ready','reason')
         return {k:result.get(k) for k in allowed}
+
+    def publications(self, ids):
+        result=self.request('/api/backfill/publications?'+urllib.parse.urlencode({'ids':','.join(ids)}))
+        rows=result.get('rows')
+        if (not isinstance(rows,list) or len(rows)!=len(ids)
+                or {row.get('id') for row in rows}!=set(ids)
+                or any(row.get('outcome') not in ('published','existing','excluded','missing') for row in rows)):
+            raise BrokerError('invalid_publication_status',units=0)
+        return {row['id']:row for row in rows}
 
     def execute(self,endpoint,params,channel_id,*,publish_before=None):
         payload=dict(endpoint=endpoint,params=params,channel_id=channel_id,request_id=str(uuid.uuid4()))
