@@ -19,6 +19,19 @@ test('defaults cannot start backfill and preserve unconfigured RJ fetch behavior
  let calls=0;const response=await quotaFetch({},async()=>{calls++;return Response.json({});})('https://www.googleapis.com/youtube/v3/videos');
  assert.equal(calls,1);assert.equal(response.status,200);
 });
+test('1000-unit allowance retains reserve and treats earlier usage as spent',async()=>{
+ const {env,db}=await fixture();
+ env.YOUTUBE_GENERAL_DAILY_LIMIT='10000';
+ env.BACKFILL_DAILY_GENERAL_LIMIT='1000';
+ assert.equal(quotaPolicy(env).backfillLimit,1000);
+ await db.prepare('INSERT INTO state VALUES(?,?)').bind('youtube-quota-v1:day:2026-10-30',JSON.stringify({general:300,backfill:300})).run();
+ await reserveGeneral(env,{endpoint:'videos',actor:'backfill',at});
+ const state=await quotaStatus(env,at);
+ assert.equal(state.ledger.backfill,301);
+ assert.equal(state.ready,true);
+ env.BACKFILL_DAILY_GENERAL_LIMIT='1001';
+ assert.equal(quotaPolicy(env).backfillLimit,1000);
+});
 test('concurrent backfill reservations never consume the 2000-request RJ reserve',async()=>{
  const {env,db}=await fixture();
  const results=await Promise.allSettled(Array.from({length:100},()=>reserveGeneral(env,{actor:'backfill',endpoint:'videos',at})));
@@ -121,14 +134,13 @@ test('historical publication is opt-in, scoped and preserves catalog decisions o
  assert.equal((await backfillBroker(request(),env,fetcher)).status,403);
  assert.equal(calls,0);
  env.BACKFILL_AUTO_PUBLISH='1';
- env.BACKFILL_AUTO_PUBLISH_IDS=allowed.join(',');
  const result=await backfillBroker(request(),env,fetcher);
  assert.equal(result.status,200);
- assert.deepEqual((await result.json()).receipt.published,[video]);
+ assert.deepEqual((await result.json()).receipt.published,[video,unlisted]);
  assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(held).status,'PENDING');
  assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(video).status,'CONFIRMED');
- assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(unlisted),undefined);
- assert.equal(sql.prepare("SELECT count(*) AS n FROM state WHERE key LIKE 'historical-backfill:%'").get().n,1);
+ assert.equal(sql.prepare('SELECT status FROM matches WHERE video_id=?').get(unlisted).status,'CONFIRMED');
+ assert.equal(sql.prepare("SELECT count(*) AS n FROM state WHERE key LIKE 'historical-backfill:%'").get().n,2);
  assert.deepEqual((await (await backfillBroker(request(),env,fetcher)).json()).receipt.published,[]);
  assert.equal(calls,2);
 });
