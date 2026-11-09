@@ -1,3 +1,7 @@
+## Current authorized release: 5,000-unit ceiling
+
+The user authorized 5,000 backfill general units per Pacific day, replacing the previous 1,000 ceiling. The shared cap remains 10,000, with at least 2,000 remaining units required when admitting backfill, zero backfill search calls, and unchanged discovery-health gates. RJ is not capped at 2,000 and may consume the reserve after backfill stops. Server and Python 0.5.1 must be upgraded together. Previously charged usage is retained. No migration, campaign reset, scheduler change or candidate-recognition expansion is included. Historical rollout notes below retain their original limits.
+
 # Shared RJ quota coordinator — review scope
 
 Source base: current main 465ec80. No production deployment, activation or migration is implied by this document.
