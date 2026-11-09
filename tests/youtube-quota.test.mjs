@@ -19,18 +19,18 @@ test('defaults cannot start backfill and preserve unconfigured RJ fetch behavior
  let calls=0;const response=await quotaFetch({},async()=>{calls++;return Response.json({});})('https://www.googleapis.com/youtube/v3/videos');
  assert.equal(calls,1);assert.equal(response.status,200);
 });
-test('1000-unit allowance retains reserve and treats earlier usage as spent',async()=>{
+test('5000-unit allowance retains reserve and treats earlier usage as spent',async()=>{
  const {env,db}=await fixture();
  env.YOUTUBE_GENERAL_DAILY_LIMIT='10000';
- env.BACKFILL_DAILY_GENERAL_LIMIT='1000';
- assert.equal(quotaPolicy(env).backfillLimit,1000);
- await db.prepare('INSERT INTO state VALUES(?,?)').bind('youtube-quota-v1:day:2026-10-30',JSON.stringify({general:300,backfill:300})).run();
+ env.BACKFILL_DAILY_GENERAL_LIMIT='5000';
+ assert.equal(quotaPolicy(env).backfillLimit,5000);
+ await db.prepare('INSERT INTO state VALUES(?,?)').bind('youtube-quota-v1:day:2026-10-30',JSON.stringify({general:1000,backfill:1000})).run();
  await reserveGeneral(env,{endpoint:'videos',actor:'backfill',at});
  const state=await quotaStatus(env,at);
- assert.equal(state.ledger.backfill,301);
+ assert.equal(state.ledger.backfill,1001);
  assert.equal(state.ready,true);
- env.BACKFILL_DAILY_GENERAL_LIMIT='1001';
- assert.equal(quotaPolicy(env).backfillLimit,1000);
+ env.BACKFILL_DAILY_GENERAL_LIMIT='5001';
+ assert.equal(quotaPolicy(env).backfillLimit,5000);
 });
 test('concurrent backfill reservations never consume the 2000-request RJ reserve',async()=>{
  const {env,db}=await fixture();
@@ -39,6 +39,20 @@ test('concurrent backfill reservations never consume the 2000-request RJ reserve
  const status=await quotaStatus(env,at);assert.deepEqual(status.ledger,{general:50,backfill:50});assert.equal(status.reason,'fresh_reserve_protected');
  await reserveGeneral(env,{actor:'rj',endpoint:'videos',at});
  assert.equal((await quotaStatus(env,at)).ledger.general,51);
+});
+
+test('5000 ceiling stops at the daily cap or shared reserve, whichever comes first',async()=>{
+ const {env,db}=await fixture();env.YOUTUBE_GENERAL_DAILY_LIMIT='10000';env.BACKFILL_DAILY_GENERAL_LIMIT='5000';
+ const key='youtube-quota-v1:day:2026-10-30';
+ await db.prepare('INSERT INTO state VALUES(?,?)').bind(key,JSON.stringify({general:6000,backfill:4999})).run();
+ await reserveGeneral(env,{actor:'backfill',endpoint:'videos',at});
+ assert.equal((await quotaStatus(env,at)).reason,'backfill_daily_cap');
+ await assert.rejects(reserveGeneral(env,{actor:'backfill',endpoint:'videos',at}),/backfill_daily_cap/);
+ await db.prepare('UPDATE state SET value=? WHERE key=?').bind(JSON.stringify({general:7999,backfill:4500}),key).run();
+ await reserveGeneral(env,{actor:'backfill',endpoint:'videos',at});
+ assert.equal((await quotaStatus(env,at)).reason,'fresh_reserve_protected');
+ await assert.rejects(reserveGeneral(env,{actor:'backfill',endpoint:'videos',at}),/fresh_reserve_protected/);
+ assert.equal((await quotaStatus(env,at)).ledger.general,8000);
 });
 test('concurrent retries with the same request ID reserve only once',async()=>{
  const {env}=await fixture(),requestId=crypto.randomUUID();

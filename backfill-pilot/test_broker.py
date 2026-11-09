@@ -16,6 +16,25 @@ class Reply(io.BytesIO):
 
 
 class BrokerTests(unittest.TestCase):
+    def test_5000_readiness_preserves_spent_usage_and_rejects_larger_policy(self):
+        from unittest.mock import Mock
+        for limit in (5000, 5001):
+            with self.subTest(limit=limit), tempfile.TemporaryDirectory() as folder:
+                p=Pilot(folder)
+                p.setting('cutoff','2026-10-30T00:00:00Z')
+                p.broker.status=Mock(return_value=dict(ready=True,tracking=True,verified=True,enabled=True,
+                    baselineComplete=True,healthy=True,searchLimit=0,backfillLimit=limit,reserve=2000))
+                p.run=Mock()
+                if limit==5000:
+                    p.start();p.worker.join(timeout=2)
+                    self.assertEqual(p.limit,5000)
+                    p.run.assert_called_once()
+                else:
+                    with self.assertRaisesRegex(ValueError,'Unverified quota policy'):p.start()
+                    p.run.assert_not_called()
+                self.assertEqual(p.db.execute('SELECT COUNT(*) FROM attempts').fetchone()[0],0)
+                p.db.close()
+
     def test_origin_and_redirect_protection(self):
         for origin in ('http://reactionjourney.com','https://reactionjourney.com.attacker.test','https://user:secret@reactionjourney.com','https://reactionjourney.com/path'):
             with patch.dict(os.environ,{'RJ_BACKFILL_ORIGIN':origin,'RJ_BACKFILL_TOKEN':'x'*40}):
