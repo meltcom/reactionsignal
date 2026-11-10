@@ -1,3 +1,9 @@
+## Optional evening catch-up
+
+With the production broker catch-up flag and RJ_BACKFILL_CATCHUP=1 in the protected Python child environment, 11 p.m. through midnight Pacific allows catch-up up to 9,500 combined shared general units, leaving a 500-unit admission buffer. Normal hours keep the 5,000 backfill ceiling and 2,000 admission reserve. Each request is atomically reserved and remains charged. At midnight the local request ceiling returns to 5,000 and the broker restores normal policy. No search or recognition policy changes.
+
+A successful normal start arms the monitor. Every 30 seconds during the final hour it may resume only a quota-stopped campaign; manual Pause disarms it. Auth/response-unknown errors and completed campaigns never trigger automatic catch-up. The dashboard and computer must remain running; no additional scheduler is installed. A fresh readiness check costs zero YouTube units. Gate checks and armed state are shown in the quota panel. The final-hour window may not have enough time to consume all available units.
+
 ## Current allowance: 5,000 units
 
 The daily ceiling is 5,000 within the shared 10,000 general-unit project allocation. Admission still stops at 8,000 combined usage to preserve 2,000 units for RJ at admission time. RJ may continue using its reserve afterward. Earlier usage remains charged; no reset or recognition-policy change is included.
@@ -12,7 +18,7 @@ Automatic publication requires both `BACKFILL_AUTO_PUBLISH=1` on the RJ Worker a
 
 For a bounded release check, stop the local pilot first and use its normal credential environment to run `python pilot.py --data data --publish-saved VIDEO_ID ...` with up to ten saved unresolved IDs. The command rechecks those IDs under the existing quota gates and reports the confirmed additions. A lost response may leave the server audit ahead of the local receipt count. Check the server audit before retrying or reporting final totals.
 
-Release candidate 0.5.1. The client identifies itself as `ReactionJourneyBackfillPilot/0.5.1`; Cloudflare rejects the default Python user agent on the live staging hostname. Local Windows application with a shared-quota RJ broker. The broker Worker source must be reviewed and deployed before live activation. No database schema migration is required.
+Release candidate 0.6.0. The client identifies itself as `ReactionJourneyBackfillPilot/0.6.0`; Cloudflare rejects the default Python user agent on the live staging hostname. Local Windows application with a shared-quota RJ broker. The broker Worker source must be reviewed and deployed before live activation. No database schema migration is required.
 
 ## Shared candidate recognition
 

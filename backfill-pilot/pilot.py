@@ -102,7 +102,7 @@ class Pilot:
             with self.lock:
                 self.db.execute('BEGIN IMMEDIATE')
                 used = self.db.execute('SELECT COUNT(*) FROM attempts WHERE day=?', (day(),)).fetchone()[0]
-                if used >= self.limit:
+                if used >= self.effective_limit():
                     self.db.rollback()
                     raise RuntimeError('Daily request cap reached; resume tomorrow')
                 batch_id = self.active_channel.get('batch_id') if self.active_channel else None
@@ -222,7 +222,35 @@ class Pilot:
             with self.lock:
                 self.active_channel = None
 
-    def start(self):
+    def effective_limit(self, at=None):
+        at = at or dt.datetime.now(PT)
+        return self.limit if at.astimezone(PT).hour == 23 else min(self.limit, 5000)
+
+    def pause(self):
+        with self.lock:
+            self.setting('catchup-armed', '0')
+            self.setting('last-stop-reason', 'Paused')
+            self.stop.set()
+
+    def catchup_tick(self, at=None):
+        at = at or dt.datetime.now(PT)
+        with self.lock:
+            reason = self.setting('last-stop-reason') or self.message
+            allowed = {'Daily request cap reached; resume tomorrow', 'RJ broker: backfill_daily_cap',
+                       'RJ broker: fresh_reserve_protected', 'RJ broker: shared_budget_exhausted'}
+            if (os.environ.get('RJ_BACKFILL_CATCHUP') != '1' or at.astimezone(PT).hour != 23
+                    or self.setting('catchup-armed') != '1' or reason not in allowed
+                    or self.starting or (self.worker and self.worker.is_alive())):
+                return False
+        try:
+            self.start(automatic=True)
+            return True
+        except ValueError as error:
+            with self.lock:
+                self.setting('catchup-last-check', json.dumps(dict(at=now(), result=str(error))))
+            return False
+
+    def start(self, automatic=False):
         with self.lock:
             if self.starting or (self.worker and self.worker.is_alive()):
                 raise ValueError('Already running')
@@ -233,11 +261,18 @@ class Pilot:
             status=self.broker.status()
             with self.lock:
                 self.setting('broker-status',json.dumps(dict(checked_at=now(),**status)))
+                if automatic and self.setting('catchup-armed') != '1':
+                    raise ValueError('Automatic catch-up disarmed by manual pause')
                 if status.get('ready') is not True:
                     raise ValueError('RJ quota gate: '+str(status.get('reason') or 'not_ready'))
-                if not all(status.get(k) is True for k in ('tracking','verified','enabled','baselineComplete','healthy')) or status.get('searchLimit')!=0 or not isinstance(status.get('backfillLimit'),int) or not 1<=status['backfillLimit']<=5000 or not isinstance(status.get('reserve'),int) or status['reserve']<2000:
+                catchup = (status.get('catchupActive') is True and status.get('catchupEnabled') is True
+                           and dt.datetime.now(PT).hour == 23 and os.environ.get('RJ_BACKFILL_CATCHUP') == '1')
+                max_limit, min_reserve = (9500, 500) if catchup else (5000, 2000)
+                if not all(status.get(k) is True for k in ('tracking','verified','enabled','baselineComplete','healthy')) or status.get('searchLimit')!=0 or not isinstance(status.get('backfillLimit'),int) or not 1<=status['backfillLimit']<=max_limit or not isinstance(status.get('reserve'),int) or status['reserve']<min_reserve:
                     raise ValueError('Unverified quota policy')
-                self.limit=min(self.limit,status['backfillLimit'])
+                self.limit=status['backfillLimit']
+                self.setting('catchup-armed', '1')
+                self.setting('last-stop-reason', 'Running')
                 self.stop.clear()
                 self.worker=threading.Thread(target=self.run,daemon=True)
                 self.worker.start()
@@ -319,12 +354,16 @@ class Pilot:
                     continue
                 if not self.step():
                     self.message = 'Upload sweep and saved-candidate checks complete'
+                    with self.lock:
+                        self.setting('last-stop-reason', self.message)
                     return
                 if self.stop.wait(3):
                     break
             self.message = 'Paused at checkpoint'
         except Exception as error:
             self.message = str(error) if isinstance(error, RuntimeError) else type(error).__name__
+            with self.lock:
+                self.setting('last-stop-reason', self.message)
 
     def report(self):
         with self.lock:
@@ -360,7 +399,7 @@ class Pilot:
                 LEFT JOIN latest_reviews r ON r.video_id=v.id
                 LEFT JOIN publication_backlog b ON b.video_id=v.id
                 WHERE v.classification='review' AND r.outcome IS NULL AND b.video_id IS NULL""").fetchone()[0]
-            return dict(backlog=backlog, measurements=measurements.report(self), message=self.message, running=bool(self.worker and self.worker.is_alive()), today=daily[0], weekly=aggregate(daily[1:8]), previous_week=aggregate(daily[8:15]), daily=daily, channels=channels, active_channel=active, results=[dict(r) for r in self.db.execute('SELECT id,title,classification,published FROM videos ORDER BY found DESC LIMIT 100')], totals={r[0]: r[1] for r in self.db.execute('SELECT classification,COUNT(*) FROM videos GROUP BY classification')}, cutoff=self.setting('cutoff'), snapshot_at=self.setting('snapshot_at'), limit=self.limit, search_calls=0)
+            return dict(catchup=dict(enabled=os.environ.get('RJ_BACKFILL_CATCHUP') == '1', armed=self.setting('catchup-armed') == '1', window='23:00-00:00 Pacific', shared_ceiling=9500, last_check=json.loads(self.setting('catchup-last-check') or 'null')), backlog=backlog, measurements=measurements.report(self), message=self.message, running=bool(self.worker and self.worker.is_alive()), today=daily[0], weekly=aggregate(daily[1:8]), previous_week=aggregate(daily[8:15]), daily=daily, channels=channels, active_channel=active, results=[dict(r) for r in self.db.execute('SELECT id,title,classification,published FROM videos ORDER BY found DESC LIMIT 100')], totals={r[0]: r[1] for r in self.db.execute('SELECT classification,COUNT(*) FROM videos GROUP BY classification')}, cutoff=self.setting('cutoff'), snapshot_at=self.setting('snapshot_at'), limit=self.effective_limit(), search_calls=0)
 
 def make_server(pilot, port):
     token = secrets.token_urlsafe(32)
@@ -441,7 +480,7 @@ def make_server(pilot, port):
                 if self.path == '/api/start':
                     pilot.start()
                 elif self.path == '/api/pause':
-                    pilot.stop.set()
+                    pilot.pause()
                 elif self.path == '/api/review':
                     measurements.save_review(pilot, payload)
                 elif self.path == '/api/sample':
@@ -462,8 +501,22 @@ def make_server(pilot, port):
 
 def serve(pilot, port):
     server = make_server(pilot, port)
+    closing = threading.Event()
+    def catchup_loop():
+        while not closing.wait(30):
+            try:
+                pilot.catchup_tick()
+            except Exception:
+                # Monitor failure cannot authorize a scan or kill the UI server.
+                with pilot.lock:
+                    pilot.setting('catchup-last-check', json.dumps(dict(at=now(), result='monitor_error')))
+    monitor = threading.Thread(target=catchup_loop,daemon=True)
+    monitor.start()
     print(f'Pilot UI: http://127.0.0.1:{server.server_address[1]}', flush=True)
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        closing.set()
 
 def main():
     parser = argparse.ArgumentParser()

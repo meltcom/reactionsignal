@@ -1,3 +1,9 @@
+## Optional final-hour catch-up release
+
+The user authorized catch-up up to 9,500 shared general units between 23:00 and midnight America/Los_Angeles. Production opt-in BACKFILL_CATCHUP_ENABLED=1 and Python 0.6.0 opt-in RJ_BACKFILL_CATCHUP=1 are coordinated. The broker uses a 500-unit admission buffer and an explicit 9,500 shared admission ceiling during that hour only. Earlier charges remain charged and the same health, eligibility, search prohibition, replay and concurrency protections apply. Outside that hour the 5,000 backfill ceiling and 2,000 admission reserve apply. RJ may subsequently consume the buffer. Server request audit records identify catch-up reservations.
+
+The Python dashboard monitor checks every 30 seconds during the final hour and only resumes a previously started, armed, quota-stopped campaign. Manual Pause disarms it. Completed sweeps and unknown-response/auth errors do not trigger catch-up. The monitor is tied to the running server and does not install a new scheduler; the existing normal midnight resume remains. Midnight restores normal limits per request. No production migration or campaign reset. The one-hour window cannot guarantee all usable units will be consumed; observe actual catch-up progress and shared usage before changing pacing.
+
 ## Current authorized release: 5,000-unit ceiling
 
 The user authorized 5,000 backfill general units per Pacific day, replacing the previous 1,000 ceiling. The shared cap remains 10,000, with at least 2,000 remaining units required when admitting backfill, zero backfill search calls, and unchanged discovery-health gates. RJ is not capped at 2,000 and may consume the reserve after backfill stops. Server and Python 0.5.1 must be upgraded together. Previously charged usage is retained. No migration, campaign reset, scheduler change or candidate-recognition expansion is included. Historical rollout notes below retain their original limits.

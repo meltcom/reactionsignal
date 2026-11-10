@@ -19,6 +19,33 @@ test('defaults cannot start backfill and preserve unconfigured RJ fetch behavior
  let calls=0;const response=await quotaFetch({},async()=>{calls++;return Response.json({});})('https://www.googleapis.com/youtube/v3/videos');
  assert.equal(calls,1);assert.equal(response.status,200);
 });
+
+test('evening catch-up is opt-in, Pacific-time bounded and restores the normal policy at midnight',()=>{
+ const env={BACKFILL_CATCHUP_ENABLED:'1',BACKFILL_DAILY_GENERAL_LIMIT:'5000',BACKFILL_GENERAL_RESERVE:'2000'};
+ for(const at of ['2026-11-10T07:00:00Z','2026-07-01T06:00:00Z']){
+  const p=quotaPolicy(env,new Date(at));assert.equal(p.catchupActive,true);assert.equal(p.backfillLimit,9500);assert.equal(p.reserve,500);
+ }
+ for(const at of ['2026-11-10T06:59:59Z','2026-11-10T08:00:00Z','2026-07-01T07:00:00Z']){
+  const p=quotaPolicy(env,new Date(at));assert.equal(p.catchupActive,false);assert.equal(p.backfillLimit,5000);assert.equal(p.reserve,2000);
+ }
+ assert.equal(quotaPolicy({...env,BACKFILL_CATCHUP_ENABLED:'0'},new Date('2026-11-10T07:30:00Z')).catchupActive,false);
+});
+
+test('catch-up concurrent reservations stop exactly at 9500 shared and preserve prior charges',async()=>{
+ const {env,db}=await fixture();const night=new Date('2026-11-10T07:30:00Z');
+ Object.assign(env,{YOUTUBE_GENERAL_DAILY_LIMIT:'10000',BACKFILL_DAILY_GENERAL_LIMIT:'5000',BACKFILL_CATCHUP_ENABLED:'1'});
+ await db.prepare('UPDATE discovery_health_samples SET sampled_at=?').bind(night.toISOString()).run();
+ await db.prepare('UPDATE discovery_health_samples SET checked=0').run();
+ assert.equal((await quotaStatus(env,night)).reason,'fresh_coverage_unhealthy');
+ await assert.rejects(reserveGeneral(env,{actor:'backfill',endpoint:'videos',at:night}),/fresh_coverage_unhealthy/);
+ await db.prepare('UPDATE discovery_health_samples SET checked=eligible').run();
+ await db.prepare('INSERT INTO state VALUES(?,?)').bind('youtube-quota-v1:day:2026-11-09',JSON.stringify({general:9499,backfill:6499})).run();
+ const calls=await Promise.allSettled(Array.from({length:10},()=>reserveGeneral(env,{actor:'backfill',endpoint:'videos',at:night})));
+ assert.equal(calls.filter(x=>x.status==='fulfilled').length,1);
+ const status=await quotaStatus(env,night);assert.deepEqual(status.ledger,{general:9500,backfill:6500});assert.equal(status.reason,'fresh_reserve_protected');
+ const midnight=new Date('2026-11-10T08:00:00Z');await db.prepare('UPDATE discovery_health_samples SET sampled_at=?').bind(midnight.toISOString()).run();
+ const reset=await quotaStatus(env,midnight);assert.equal(reset.backfillLimit,5000);assert.equal(reset.reserve,2000);assert.deepEqual(reset.ledger,{general:0,backfill:0});
+});
 test('5000-unit allowance retains reserve and treats earlier usage as spent',async()=>{
  const {env,db}=await fixture();
  env.YOUTUBE_GENERAL_DAILY_LIMIT='10000';
