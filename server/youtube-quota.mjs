@@ -3,10 +3,14 @@ import {pacificDay} from './discovery-measurement.mjs';
 export const QUOTA_PROTOCOL='rj-backfill-broker-v1';
 const prefix='youtube-quota-v1:',baseline=prefix+'baseline-day';
 const integer=(value,fallback)=>/^\d+$/.test(String(value??''))&&Number.isSafeInteger(Number(value))?Number(value):fallback;
-export function quotaPolicy(env){
+const pacificHour=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'2-digit',hourCycle:'h23'});
+export function quotaPolicy(env,at=new Date()){
+ const catchupEnabled=env.BACKFILL_CATCHUP_ENABLED==='1';
+ const catchupActive=catchupEnabled&&Number(pacificHour.format(new Date(at)))>=20;
  return {protocol:QUOTA_PROTOCOL,tracking:env.YOUTUBE_QUOTA_TRACKING==='1',verified:env.YOUTUBE_QUOTA_VERIFIED==='1',enabled:env.BACKFILL_ENABLED==='1',
-  generalLimit:integer(env.YOUTUBE_GENERAL_DAILY_LIMIT,0),backfillLimit:Math.min(5000,integer(env.BACKFILL_DAILY_GENERAL_LIMIT,0)),
-  reserve:Math.max(2000,integer(env.BACKFILL_GENERAL_RESERVE,2000)),minimumCoverage:0.95,
+  generalLimit:integer(env.YOUTUBE_GENERAL_DAILY_LIMIT,0),backfillLimit:catchupActive?9500:Math.min(5000,integer(env.BACKFILL_DAILY_GENERAL_LIMIT,0)),
+  reserve:catchupActive?500:Math.max(2000,integer(env.BACKFILL_GENERAL_RESERVE,2000)),minimumCoverage:0.95,
+  catchupEnabled,catchupActive,catchupWindow:'20:00-00:00 America/Los_Angeles',
   searchLimit:0,timezone:'America/Los_Angeles'};
 }
 export class QuotaBlocked extends Error{constructor(code,status=429){super(code);this.code=code;this.status=status;}}
@@ -26,7 +30,7 @@ async function initialize(env,at){
 }
 
 export async function quotaStatus(env,at=new Date()){
- const policy=quotaPolicy(env);
+ const policy=quotaPolicy(env,at);
  if(!policy.tracking||!env.DB)return {...policy,baselineComplete:false,ledger:null,health:null,ready:false,reason:'tracking_disabled'};
  const state=await initialize(env,at),ledger=JSON.parse((await env.DB.prepare('SELECT value FROM state WHERE key=?').bind(state.key).first()).value);
  const health=await env.DB.prepare('SELECT sampled_at,eligible,checked,run_status FROM discovery_health_samples ORDER BY sampled_at DESC LIMIT 1').first();
@@ -39,7 +43,7 @@ export async function quotaStatus(env,at=new Date()){
 
 export async function reserveGeneral(env,{actor='rj',requestId=crypto.randomUUID(),endpoint,at=new Date()}={}){
  if(!['rj','backfill'].includes(actor))throw new QuotaBlocked('invalid_actor',400);
- const policy=quotaPolicy(env);
+ const policy=quotaPolicy(env,at);
  if(!policy.tracking||!env.DB)throw new QuotaBlocked('tracking_disabled',503);
  if(!/^[a-zA-Z]+$/.test(endpoint||'')||endpoint==='search')throw new QuotaBlocked('endpoint_not_general',400);
  if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(requestId))throw new QuotaBlocked('invalid_request_id',400);
@@ -49,8 +53,8 @@ export async function reserveGeneral(env,{actor='rj',requestId=crypto.randomUUID
   const status=await quotaStatus(env,at);if(!status.ready)throw new QuotaBlocked(status.reason,429);
  }
  // RJ keeps priority. During tracking-only rollout it is counted but not capped until the actual project limit is verified.
- const limit=actor==='backfill'?policy.generalLimit-policy.reserve:policy.verified&&policy.generalLimit&&state.baselineDay<state.day?policy.generalLimit:Number.MAX_SAFE_INTEGER;
- const record={requestId,actor,endpoint,quotaDay:state.day,status:'reserved',at:new Date(at).toISOString(),units:1};
+ const limit=actor==='backfill'?Math.min(policy.generalLimit-policy.reserve,policy.catchupActive?9500:Infinity):policy.verified&&policy.generalLimit&&state.baselineDay<state.day?policy.generalLimit:Number.MAX_SAFE_INTEGER;
+ const record={requestId,actor,endpoint,quotaDay:state.day,status:'reserved',at:new Date(at).toISOString(),units:1,catchup:actor==='backfill'&&policy.catchupActive};
  // One transactional compare-and-increment covers BOTH counters. A repeated ticket cannot increment either.
  const result=await env.DB.batch([
   env.DB.prepare(`UPDATE state SET value=json_set(value,'$.general',json_extract(value,'$.general')+1,'$.backfill',json_extract(value,'$.backfill')+?)

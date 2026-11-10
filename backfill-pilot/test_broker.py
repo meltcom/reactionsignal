@@ -16,6 +16,44 @@ class Reply(io.BytesIO):
 
 
 class BrokerTests(unittest.TestCase):
+    def test_catchup_respects_manual_pause_window_and_unknown_response(self):
+        import datetime as dt
+        from unittest.mock import Mock
+        from pilot import PT
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ,{'RJ_BACKFILL_CATCHUP':'1'}):
+            p=Pilot(folder);p.start=Mock()
+            night=dt.datetime(2026,11,9,20,0,tzinfo=PT)
+            p.setting('last-stop-reason','Daily request cap reached; resume tomorrow')
+            p.setting('catchup-armed','1')
+            self.assertFalse(p.catchup_tick(night.replace(hour=19,minute=59,second=59)))
+            self.assertTrue(p.catchup_tick(night));p.start.assert_called_once_with(automatic=True)
+            p.start.reset_mock();p.pause()
+            self.assertFalse(p.catchup_tick(night));p.start.assert_not_called()
+            p.setting('catchup-armed','1');p.setting('last-stop-reason','RJ broker: response_unknown')
+            self.assertFalse(p.catchup_tick(night));p.start.assert_not_called()
+            p.limit=9500;self.assertEqual(p.effective_limit(night),9500)
+            self.assertEqual(p.effective_limit(night.replace(hour=0)),5000)
+            p.db.close()
+
+    def test_catchup_admission_requires_opt_in_and_cannot_override_concurrent_pause(self):
+        import datetime as dt
+        from unittest.mock import Mock
+        from pilot import PT
+        night=dt.datetime(2026,11,9,20,0,tzinfo=PT)
+        with tempfile.TemporaryDirectory() as folder, patch('pilot.dt.datetime') as clock:
+            clock.now.return_value=night
+            p=Pilot(folder);p.setting('cutoff','2026-10-30T00:00:00Z');p.run=Mock()
+            status=dict(ready=True,tracking=True,verified=True,enabled=True,baselineComplete=True,
+                        healthy=True,searchLimit=0,backfillLimit=9500,reserve=500,catchupEnabled=True,catchupActive=True)
+            p.broker.status=Mock(return_value=status)
+            with patch.dict(os.environ,{'RJ_BACKFILL_CATCHUP':'0'}):
+                with self.assertRaisesRegex(ValueError,'Unverified quota policy'):p.start()
+            with patch.dict(os.environ,{'RJ_BACKFILL_CATCHUP':'1'}):
+                p.start();p.worker.join(timeout=2);self.assertEqual(p.limit,9500)
+                p.broker.status=lambda: (p.pause() or status)
+                with self.assertRaisesRegex(ValueError,'disarmed'):p.start(automatic=True)
+            p.db.close()
+
     def test_5000_readiness_preserves_spent_usage_and_rejects_larger_policy(self):
         from unittest.mock import Mock
         for limit in (5000, 5001):

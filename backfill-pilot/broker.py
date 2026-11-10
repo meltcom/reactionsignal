@@ -7,7 +7,7 @@ import urllib.parse
 import uuid
 
 PROTOCOL='rj-backfill-broker-v1'
-USER_AGENT='ReactionJourneyBackfillPilot/0.5.1'
+USER_AGENT='ReactionJourneyBackfillPilot/0.6.0'
 
 
 class BrokerError(RuntimeError):
