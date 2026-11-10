@@ -39,7 +39,7 @@ test('catch-up concurrent reservations stop exactly at 9500 shared and preserve 
  assert.equal((await quotaStatus(env,night)).reason,'fresh_coverage_unhealthy');
  await assert.rejects(reserveGeneral(env,{actor:'backfill',endpoint:'videos',at:night}),/fresh_coverage_unhealthy/);
  await db.prepare('UPDATE discovery_health_samples SET checked=eligible').run();
- await db.prepare('INSERT INTO state VALUES(?,?)').bind('youtube-quota-v1:day:2026-11-09',JSON.stringify({general:9499,backfill:6499})).run();
+ await db.prepare('UPDATE state SET value=? WHERE key=?').bind(JSON.stringify({general:9499,backfill:6499}),'youtube-quota-v1:day:2026-11-09').run();
  const calls=await Promise.allSettled(Array.from({length:10},()=>reserveGeneral(env,{actor:'backfill',endpoint:'videos',at:night})));
  assert.equal(calls.filter(x=>x.status==='fulfilled').length,1);
  const status=await quotaStatus(env,night);assert.deepEqual(status.ledger,{general:9500,backfill:6500});assert.equal(status.reason,'fresh_reserve_protected');
