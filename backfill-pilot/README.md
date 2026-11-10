@@ -1,8 +1,8 @@
 ## Optional evening catch-up
 
-With the production broker catch-up flag and RJ_BACKFILL_CATCHUP=1 in the protected Python child environment, 11 p.m. through midnight Pacific allows catch-up up to 9,500 combined shared general units, leaving a 500-unit admission buffer. Normal hours keep the 5,000 backfill ceiling and 2,000 admission reserve. Each request is atomically reserved and remains charged. At midnight the local request ceiling returns to 5,000 and the broker restores normal policy. No search or recognition policy changes.
+With the production broker catch-up flag and RJ_BACKFILL_CATCHUP=1 in the protected Python child environment, 8 p.m. through midnight Pacific allows catch-up up to 9,500 combined shared general units, leaving a 500-unit admission buffer. Normal hours keep the 5,000 backfill ceiling and 2,000 admission reserve. Each request is atomically reserved and remains charged. At midnight the local request ceiling returns to 5,000 and the broker restores normal policy. No search or recognition policy changes.
 
-A successful normal start arms the monitor. Every 30 seconds during the final hour it may resume only a quota-stopped campaign; manual Pause disarms it. Auth/response-unknown errors and completed campaigns never trigger automatic catch-up. The dashboard and computer must remain running; no additional scheduler is installed. A fresh readiness check costs zero YouTube units. Gate checks and armed state are shown in the quota panel. The final-hour window may not have enough time to consume all available units.
+A successful normal start arms the monitor. Every 30 seconds during the evening window it may resume only a quota-stopped campaign; manual Pause disarms it. Auth/response-unknown errors and completed campaigns never trigger automatic catch-up. The dashboard and computer must remain running; no additional scheduler is installed. A fresh readiness check costs zero YouTube units. Gate checks and armed state are shown in the quota panel. The evening window may not have enough time to consume all available units.
 
 ## Current allowance: 5,000 units
 

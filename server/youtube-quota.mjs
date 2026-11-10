@@ -6,11 +6,11 @@ const integer=(value,fallback)=>/^\d+$/.test(String(value??''))&&Number.isSafeIn
 const pacificHour=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'2-digit',hourCycle:'h23'});
 export function quotaPolicy(env,at=new Date()){
  const catchupEnabled=env.BACKFILL_CATCHUP_ENABLED==='1';
- const catchupActive=catchupEnabled&&pacificHour.format(new Date(at))==='23';
+ const catchupActive=catchupEnabled&&Number(pacificHour.format(new Date(at)))>=20;
  return {protocol:QUOTA_PROTOCOL,tracking:env.YOUTUBE_QUOTA_TRACKING==='1',verified:env.YOUTUBE_QUOTA_VERIFIED==='1',enabled:env.BACKFILL_ENABLED==='1',
   generalLimit:integer(env.YOUTUBE_GENERAL_DAILY_LIMIT,0),backfillLimit:catchupActive?9500:Math.min(5000,integer(env.BACKFILL_DAILY_GENERAL_LIMIT,0)),
   reserve:catchupActive?500:Math.max(2000,integer(env.BACKFILL_GENERAL_RESERVE,2000)),minimumCoverage:0.95,
-  catchupEnabled,catchupActive,catchupWindow:'23:00-00:00 America/Los_Angeles',
+  catchupEnabled,catchupActive,catchupWindow:'20:00-00:00 America/Los_Angeles',
   searchLimit:0,timezone:'America/Los_Angeles'};
 }
 export class QuotaBlocked extends Error{constructor(code,status=429){super(code);this.code=code;this.status=status;}}

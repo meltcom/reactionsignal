@@ -224,7 +224,7 @@ class Pilot:
 
     def effective_limit(self, at=None):
         at = at or dt.datetime.now(PT)
-        return self.limit if at.astimezone(PT).hour == 23 else min(self.limit, 5000)
+        return self.limit if at.astimezone(PT).hour >= 20 else min(self.limit, 5000)
 
     def pause(self):
         with self.lock:
@@ -238,7 +238,7 @@ class Pilot:
             reason = self.setting('last-stop-reason') or self.message
             allowed = {'Daily request cap reached; resume tomorrow', 'RJ broker: backfill_daily_cap',
                        'RJ broker: fresh_reserve_protected', 'RJ broker: shared_budget_exhausted'}
-            if (os.environ.get('RJ_BACKFILL_CATCHUP') != '1' or at.astimezone(PT).hour != 23
+            if (os.environ.get('RJ_BACKFILL_CATCHUP') != '1' or at.astimezone(PT).hour < 20
                     or self.setting('catchup-armed') != '1' or reason not in allowed
                     or self.starting or (self.worker and self.worker.is_alive())):
                 return False
@@ -266,7 +266,7 @@ class Pilot:
                 if status.get('ready') is not True:
                     raise ValueError('RJ quota gate: '+str(status.get('reason') or 'not_ready'))
                 catchup = (status.get('catchupActive') is True and status.get('catchupEnabled') is True
-                           and dt.datetime.now(PT).hour == 23 and os.environ.get('RJ_BACKFILL_CATCHUP') == '1')
+                           and dt.datetime.now(PT).hour >= 20 and os.environ.get('RJ_BACKFILL_CATCHUP') == '1')
                 max_limit, min_reserve = (9500, 500) if catchup else (5000, 2000)
                 if not all(status.get(k) is True for k in ('tracking','verified','enabled','baselineComplete','healthy')) or status.get('searchLimit')!=0 or not isinstance(status.get('backfillLimit'),int) or not 1<=status['backfillLimit']<=max_limit or not isinstance(status.get('reserve'),int) or status['reserve']<min_reserve:
                     raise ValueError('Unverified quota policy')
@@ -399,7 +399,7 @@ class Pilot:
                 LEFT JOIN latest_reviews r ON r.video_id=v.id
                 LEFT JOIN publication_backlog b ON b.video_id=v.id
                 WHERE v.classification='review' AND r.outcome IS NULL AND b.video_id IS NULL""").fetchone()[0]
-            return dict(catchup=dict(enabled=os.environ.get('RJ_BACKFILL_CATCHUP') == '1', armed=self.setting('catchup-armed') == '1', window='23:00-00:00 Pacific', shared_ceiling=9500, last_check=json.loads(self.setting('catchup-last-check') or 'null')), backlog=backlog, measurements=measurements.report(self), message=self.message, running=bool(self.worker and self.worker.is_alive()), today=daily[0], weekly=aggregate(daily[1:8]), previous_week=aggregate(daily[8:15]), daily=daily, channels=channels, active_channel=active, results=[dict(r) for r in self.db.execute('SELECT id,title,classification,published FROM videos ORDER BY found DESC LIMIT 100')], totals={r[0]: r[1] for r in self.db.execute('SELECT classification,COUNT(*) FROM videos GROUP BY classification')}, cutoff=self.setting('cutoff'), snapshot_at=self.setting('snapshot_at'), limit=self.effective_limit(), search_calls=0)
+            return dict(catchup=dict(enabled=os.environ.get('RJ_BACKFILL_CATCHUP') == '1', armed=self.setting('catchup-armed') == '1', window='20:00-00:00 Pacific', shared_ceiling=9500, last_check=json.loads(self.setting('catchup-last-check') or 'null')), backlog=backlog, measurements=measurements.report(self), message=self.message, running=bool(self.worker and self.worker.is_alive()), today=daily[0], weekly=aggregate(daily[1:8]), previous_week=aggregate(daily[8:15]), daily=daily, channels=channels, active_channel=active, results=[dict(r) for r in self.db.execute('SELECT id,title,classification,published FROM videos ORDER BY found DESC LIMIT 100')], totals={r[0]: r[1] for r in self.db.execute('SELECT classification,COUNT(*) FROM videos GROUP BY classification')}, cutoff=self.setting('cutoff'), snapshot_at=self.setting('snapshot_at'), limit=self.effective_limit(), search_calls=0)
 
 def make_server(pilot, port):
     token = secrets.token_urlsafe(32)

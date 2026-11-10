@@ -22,10 +22,10 @@ class BrokerTests(unittest.TestCase):
         from pilot import PT
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ,{'RJ_BACKFILL_CATCHUP':'1'}):
             p=Pilot(folder);p.start=Mock()
-            night=dt.datetime(2026,11,9,23,5,tzinfo=PT)
+            night=dt.datetime(2026,11,9,20,0,tzinfo=PT)
             p.setting('last-stop-reason','Daily request cap reached; resume tomorrow')
             p.setting('catchup-armed','1')
-            self.assertFalse(p.catchup_tick(night.replace(hour=22)))
+            self.assertFalse(p.catchup_tick(night.replace(hour=19,minute=59,second=59)))
             self.assertTrue(p.catchup_tick(night));p.start.assert_called_once_with(automatic=True)
             p.start.reset_mock();p.pause()
             self.assertFalse(p.catchup_tick(night));p.start.assert_not_called()
@@ -39,7 +39,7 @@ class BrokerTests(unittest.TestCase):
         import datetime as dt
         from unittest.mock import Mock
         from pilot import PT
-        night=dt.datetime(2026,11,9,23,5,tzinfo=PT)
+        night=dt.datetime(2026,11,9,20,0,tzinfo=PT)
         with tempfile.TemporaryDirectory() as folder, patch('pilot.dt.datetime') as clock:
             clock.now.return_value=night
             p=Pilot(folder);p.setting('cutoff','2026-10-30T00:00:00Z');p.run=Mock()

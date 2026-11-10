@@ -22,10 +22,10 @@ test('defaults cannot start backfill and preserve unconfigured RJ fetch behavior
 
 test('evening catch-up is opt-in, Pacific-time bounded and restores the normal policy at midnight',()=>{
  const env={BACKFILL_CATCHUP_ENABLED:'1',BACKFILL_DAILY_GENERAL_LIMIT:'5000',BACKFILL_GENERAL_RESERVE:'2000'};
- for(const at of ['2026-11-10T07:00:00Z','2026-07-01T06:00:00Z']){
+ for(const at of ['2026-11-10T04:00:00Z','2026-07-01T03:00:00Z','2026-11-10T07:59:59Z']){
   const p=quotaPolicy(env,new Date(at));assert.equal(p.catchupActive,true);assert.equal(p.backfillLimit,9500);assert.equal(p.reserve,500);
  }
- for(const at of ['2026-11-10T06:59:59Z','2026-11-10T08:00:00Z','2026-07-01T07:00:00Z']){
+ for(const at of ['2026-11-10T03:59:59Z','2026-07-01T02:59:59Z','2026-11-10T08:00:00Z','2026-07-01T07:00:00Z']){
   const p=quotaPolicy(env,new Date(at));assert.equal(p.catchupActive,false);assert.equal(p.backfillLimit,5000);assert.equal(p.reserve,2000);
  }
  assert.equal(quotaPolicy({...env,BACKFILL_CATCHUP_ENABLED:'0'},new Date('2026-11-10T07:30:00Z')).catchupActive,false);
