@@ -31,7 +31,8 @@ test('release packages the approved member UI and keeps PR44 search rotation',()
  const welcome=html.slice(html.indexOf('<main id="welcome"'));
  assert.ok(welcome.includes('id="googleSignIn"')&&welcome.includes('id="emailSignIn"'));
  assert.ok(!welcome.includes('welcome-benefits'));
- for(const feature of ['includeShorts','feed-search-filters','function feedVideos()','const firstReaction=new Map()','const latestByReactor=new Map()','choice.onchange=','followAllReactors'])assert.ok(dashboard.includes(feature),`Missing dashboard feature: ${feature}`);
+ for(const feature of ['includeShorts','feed-search-filters','function feedVideos()','function firstReactionDatesByReactor()','function compareFirstReaction(','const latestByReactor=new Map()','choice.onchange=','followAllReactors'])assert.ok(dashboard.includes(feature),`Missing dashboard feature: ${feature}`);
+ assert.ok(html.includes('<option value="oldest">Oldest Reactor</option>'));
  for(const feature of ['ms-year','ms-playlists-refresh','ms-search-toggle'])assert.ok(ms.includes(feature),`Missing MS Journey feature: ${feature}`);
  assert.ok(assets['/about.html'].body.includes('public-youtube'));
  const queries=performerQueries({name:'Missioned Souls',aliases:'["MissionedSoul"]'},['DECODE']);
