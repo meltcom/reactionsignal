@@ -4,7 +4,7 @@ import {reactionEvidence} from './approval-rules.mjs';
 import {automaticMatch,AUTOMATIC_MATCH_POLICY} from './automatic-matches.mjs';
 import {recognizeCandidate,candidateEvidence,CANDIDATE_REVIEW_SOURCE} from './candidate-recognition.mjs';
 import {videoFormat} from './video-format.mjs';
-import {SEARCH_STRATEGY,pacificDay,startSearchPage,reserveSearchAttempt,finishSearchAttempt,finishSearchPage,recordSearchResults,sampleDiscoveryHealth} from './discovery-measurement.mjs';
+import {SEARCH_STRATEGY,pacificDay,startSearchPage,reserveSearchAttempt,finishSearchAttempt,finishSearchPage,recordSearchResults,sampleDiscoveryHealth,discoveryTrialEnv,recordDiscoveryPublications} from './discovery-measurement.mjs';
 
 const normalize = s => String(s||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 export function classify(title,aliases,duration,{description=''}={}) {
@@ -94,6 +94,7 @@ export async function saveVideos(db,items,performers,runTime,source,context={}){
     const work=[...channelStatements,...statements];
     for(let i=0;i<work.length;i+=80)await db.batch(work.slice(i,i+80));
   }
+  await recordDiscoveryPublications(db,items.map(v=>v.id));
   return inserted;
 }
 export async function saveVideo(db,item,performers,runTime,source){return saveVideos(db,[item],performers,runTime,source);}
@@ -110,10 +111,12 @@ export function searchDailyLimit(env){
   const limit=Number(value);return Number.isFinite(limit)?Math.max(0,Math.min(80,Math.floor(limit))):20;
 }
 export function searchInterval(env){return Math.max(15,1440/Math.max(1,searchDailyLimit(env)))*60000;}
-export function performerQueries(p,songs=[],rotation=0,{fresh=false}={}){
+export function searchDue(env,now,touched){const interval=searchInterval(env);return !touched||(env.discoveryTrial?.active?Math.floor(Date.parse(now)/interval)>Math.floor(Date.parse(touched)/interval):Date.parse(now)-Date.parse(touched)>=interval);}
+export function performerQueries(p,songs=[],rotation=0,{fresh=false,reactor=false}={}){
   const quote=s=>'"'+String(s).replace(/["\\]/g,' ').trim()+'"';
   const names=[...new Set([p.name,...JSON.parse(p.aliases)])].filter(Boolean);
   const main=quote(p.name), mainReaction=`${main} reaction`;
+  if(reactor){const aliases=names.filter(n=>normalize(n)!==normalize(p.name)&&normalize(n).length>=8);return [`${main} "first time"`,`${main} reacts`,`${main} reagindo`,...(p.id==='missioned-souls'?['"Missioned Soul" reaction']:[]),...aliases.map(n=>`${quote(n)} reaction`)];}
   if(fresh)return [main,mainReaction,main];
   const aliasQueries=names.filter(name=>normalize(name)!==normalize(p.name)).map(name=>`${quote(name)} reaction`);
   const songQueries=[...new Set(songs.map(song=>String(song).trim()).filter(Boolean))].map(song=>`${quote(song)} reaction`);
@@ -180,6 +183,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
   const id=crypto.randomUUID(),now=new Date().toISOString();
   const lease=await db.prepare("INSERT INTO state(key,value) VALUES('discovery-lease',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(state.value AS INTEGER)<?").bind(String(Date.now()+120000),Date.now()).run();
   if(!lease.meta.changes)return {status:'busy'};
+  env=await discoveryTrialEnv(db,env,now);
   async function unavailable(channel,reason){const failures=(channel.recent_failures||0)+1;const retry=new Date(Date.now()+retryDelay(failures)).toISOString();await db.prepare('UPDATE channels SET uploads=NULL,recent_failures=?,recent_retry_at=?,recent_error=? WHERE id=?').bind(failures,retry,reason,channel.id).run();detail+=`${reason}: ${channel.name} (${channel.id}); retry after ${retry}; `;}
   const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db,env);let added=0,scanned=0,historyPages=0,recentAdded=0,historyAdded=0,final='succeeded',detail='';
   await db.prepare('INSERT INTO runs(id,started_at,status) VALUES(?,?,?)').bind(id,now,'running').run();
@@ -192,16 +196,17 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
     if(!performers.length)return {id,status:'succeeded',calls:0,channels:0,added:0,detail:'No discovery-enabled performers.'};
     const officialFeedVideos=await refreshOfficialSearchFeed(db,fetcher);
     // Fresh uploads get the first allocation. Historical cursors are independent.
-    const batchSize=Math.max(1,Math.min(14,Number.parseInt(env.DISCOVERY_RECENT_BATCH_SIZE,10)||7));
+    const batchSize=Math.max(1,Math.min(14,Number.parseInt(env.DISCOVERY_RECENT_BATCH_SIZE,10)||(env.discoveryTrial?.active?10:7)));
     const historyLimit=Math.max(0,Math.min(2,Number.parseInt(env.DISCOVERY_HISTORY_PAGES??'1',10)||0));
     // Active reactors have reserved capacity even while daily coverage is overdue.
     // At least half the batch remains available for oldest-first daily coverage.
     const overdue=options.performerId?[]:(await db.prepare("SELECT * FROM channels WHERE discovery_scope='eligible' AND (recent_retry_at IS NULL OR recent_retry_at<=?) AND (recent_checked_at IS NULL OR recent_checked_at<?) ORDER BY recent_attempted_at ASC,recent_checked_at ASC,id LIMIT ?").bind(now,new Date(Date.now()-86400000).toISOString(),batchSize).all()).results;
-    const prioritySlots=Math.min(Math.floor(batchSize/2),batchSize-overdue.length);
-    const priority=options.performerId||!prioritySlots?[]:(await db.prepare("SELECT c.* FROM channels c WHERE c.discovery_scope='eligible' AND (c.recent_retry_at IS NULL OR c.recent_retry_at<=?) AND (c.recent_checked_at IS NULL OR c.recent_checked_at<?) AND c.id IN (SELECT DISTINCT v.channel_id FROM videos v INDEXED BY journey_videos_published_channel JOIN matches m ON m.video_id=v.id WHERE v.published_at>? AND m.performer_id='missioned-souls' AND m.status='CONFIRMED') ORDER BY c.recent_attempted_at ASC,c.recent_checked_at ASC,c.id LIMIT ?").bind(now,new Date(Date.now()-3600000).toISOString(),new Date(Date.now()-14*86400000).toISOString(),prioritySlots).all()).results;
+    const daily=overdue.slice(0,Math.ceil(batchSize/2));
+    const prioritySlots=env.discoveryTrial?.active?Math.floor(batchSize/2):Math.min(Math.floor(batchSize/2),batchSize-overdue.length);
+    const priority=options.performerId||!prioritySlots?[]:(await db.prepare(`SELECT c.* FROM channels c LEFT JOIN rss_checks r ON r.channel_id=c.id WHERE c.discovery_scope='eligible' AND (c.recent_retry_at IS NULL OR c.recent_retry_at<=?) AND (c.recent_checked_at IS NULL OR c.recent_checked_at<? OR (?=1 AND r.error IS NOT NULL AND c.recent_checked_at<?)) AND c.id NOT IN (SELECT value FROM json_each(?)) AND c.id IN (SELECT DISTINCT v.channel_id FROM videos v INDEXED BY journey_videos_published_channel JOIN matches m ON m.video_id=v.id WHERE v.published_at>? AND m.performer_id='missioned-souls' AND m.status='CONFIRMED') ORDER BY CASE WHEN ?=1 AND r.error IS NOT NULL THEN 0 ELSE 1 END,c.recent_attempted_at ASC,c.recent_checked_at ASC,c.id LIMIT ?`).bind(now,new Date(Date.now()-3600000).toISOString(),env.discoveryTrial?.active?1:0,new Date(Date.now()-30*60000).toISOString(),JSON.stringify(env.discoveryTrial?.active?daily.map(c=>c.id):[]),new Date(Date.now()-14*86400000).toISOString(),env.discoveryTrial?.active?1:0,prioritySlots).all()).results;
     const exclude=priority.length?` AND id NOT IN (${priority.map(()=>'?').join(',')})`:'';
     const regular=options.performerId||overdue.length?[]:(await db.prepare("SELECT * FROM channels WHERE discovery_scope='eligible' AND (recent_retry_at IS NULL OR recent_retry_at<=?) AND (recent_checked_at IS NULL OR recent_checked_at<?)"+exclude+" ORDER BY recent_attempted_at ASC,recent_checked_at ASC,id LIMIT ?").bind(now,new Date(Date.now()-86400000).toISOString(),...priority.map(c=>c.id),batchSize-priority.length).all()).results;
-    const due=overdue.length? [...overdue,...priority].slice(0,batchSize):[...priority,...regular];
+    const due=env.discoveryTrial?.active?[...new Map([...daily,...priority,...overdue,...regular].map(c=>[c.id,c])).values()].slice(0,batchSize):overdue.length?[...overdue,...priority].slice(0,batchSize):[...priority,...regular];
 
     if(due.length)await db.batch(due.map(c=>db.prepare('UPDATE channels SET recent_attempted_at=? WHERE id=?').bind(now,c.id)));
     const missing=due.filter(c=>!c.uploads);
@@ -264,10 +269,11 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
       const stateKeys=[legacyKey,legacyProgressKey,quotaKey,rotationKey,touchKey,turnKey,freshRotationKey,`search-fresh-progress:${p.id}`,`search-fresh:${p.id}`];
       const searchState=new Map((await db.prepare('SELECT key,value FROM state WHERE key IN ('+stateKeys.map(()=>'?').join(',')+')').bind(...stateKeys).all()).results.map(r=>[r.key,r]));
       const turn=Number(searchState.get(turnKey)?.value||0);
-      const fresh=!options.performerId&&turn%4!==3;
-      const lane=fresh?'fresh':'catchup';
-      const key=fresh?`search-fresh:${p.id}`:legacyKey,progressKey=fresh?`search-fresh-progress:${p.id}`:legacyProgressKey;
-      const selectedRotationKey=fresh?freshRotationKey:rotationKey;
+      const lane=!options.performerId?(env.discoveryTrial?.active?['fresh','fresh','fresh','reactor','catchup','fresh','fresh','fresh','fresh','catchup'][turn%10]:turn%4!==3?'fresh':'catchup'):'catchup';
+      const fresh=lane!=='catchup';
+      const key=fresh?`search-${lane}:${p.id}`:legacyKey,progressKey=fresh?`search-${lane}-progress:${p.id}`:legacyProgressKey;
+      const selectedRotationKey=lane==='reactor'?`search-reactor-rotation:${p.id}`:fresh?freshRotationKey:rotationKey;
+      if(lane==='reactor')for(const k of [key,progressKey,selectedRotationKey]){const value=await db.prepare('SELECT key,value FROM state WHERE key=?').bind(k).first();if(value)searchState.set(k,value);}
       const prev=searchState.get(key)||(fresh?searchState.get(legacyKey):null),pending=searchState.get(progressKey);
       const dailyLimit=searchDailyLimit(env);
       if(!dailyLimit){await recordSearch({status:'disabled',reason:'Daily search limit is zero'});continue;}
@@ -275,7 +281,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
       if(used>=dailyLimit){await recordSearch({status:'capped',reason:'Daily search budget reached'});final='partial';detail+='Daily search budget reached; queued searches resume tomorrow. ';break;}
       const interval=searchInterval(env);
       const touched=searchState.get(touchKey);
-      if(touched&&(!options.performerId||!pending||JSON.parse(pending.value).query)&&Date.parse(now)-Date.parse(touched.value)<interval){await recordSearch({status:'waiting',reason:'Budget-paced search interval',nextDueAt:new Date(Date.parse(touched.value)+interval).toISOString()});continue;}
+      if(touched&&(!options.performerId||!pending||JSON.parse(pending.value).query)&&!searchDue(env,now,touched.value)){await recordSearch({status:'waiting',reason:'Budget-paced search interval',nextDueAt:new Date(env.discoveryTrial?.active?(Math.floor(Date.parse(touched.value)/interval)+1)*interval:Date.parse(touched.value)+interval).toISOString()});continue;}
       if(!touched&&!pending&&prev&&Date.parse(now)-Date.parse(prev.value)<interval){await recordSearch({status:'waiting',reason:`${interval/60000}-minute budget-paced interval`,lastCompletedAt:prev.value,nextDueAt:new Date(Date.parse(prev.value)+interval).toISOString()});continue;}
       const terms=JSON.parse(p.aliases);
       const rotation=Number(searchState.get(selectedRotationKey)?.value||0);
@@ -283,7 +289,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
       if(!cursor){
         const official=fresh?[]:(await db.prepare("SELECT value FROM state WHERE key>='ms-video:' AND key<'ms-video;' ORDER BY key").all()).results.map(r=>JSON.parse(r.value));
         const songs=fresh?[]:recentSongTitles([...official,...officialFeedVideos,...(seed.videos||[])]);
-        const queries=performerQueries(p,songs,rotation,{fresh});
+        const queries=performerQueries(p,songs,rotation,{fresh,reactor:lane==='reactor'});
         // First pages are supplemental. They never advance the catch-up
         // watermark or replace its token; that lane still exhausts fixed windows.
         const overlap=fresh?(searchState.get(legacyKey)||prev):prev;
@@ -295,7 +301,7 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
       searched++;
       await db.batch([
         db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(touchKey,now),
-        ...(!options.performerId?[db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(turnKey,String((turn+1)%4))]:[])
+        ...(!options.performerId?[db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(turnKey,String((turn+1)%(env.discoveryTrial?.active?10:4)))]:[])
       ]);
       try{
         if(!pending)await db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(progressKey,JSON.stringify(cursor)).run();

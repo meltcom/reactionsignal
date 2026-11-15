@@ -3,6 +3,7 @@ import {YouTube,seconds} from './discovery.mjs';
 import {reactionEvidence} from './approval-rules.mjs';
 import {CANDIDATE_REVIEW_SOURCE} from './candidate-recognition.mjs';
 import {automaticMatch,AUTOMATIC_MATCH_POLICY} from './automatic-matches.mjs';
+import {recordDiscoveryPublications} from './discovery-measurement.mjs';
 
 export async function resolveAutomaticMatches(env,fetcher=fetch){
  const db=database(env);
@@ -28,6 +29,7 @@ export async function resolveAutomaticMatches(env,fetcher=fetch){
     db.prepare("INSERT OR IGNORE INTO discovery_notifications(performer_id,video_id,created_at,source) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM matches WHERE performer_id=? AND video_id=? AND source=? AND status='CONFIRMED')").bind(row.performer_id,row.video_id,now,AUTOMATIC_MATCH_POLICY,row.performer_id,row.video_id,source)
    ]);
    if(applied[0].meta.changes)result[decision.status==='CONFIRMED'?'published':'rejected']++;
+   await recordDiscoveryPublications(db,[row.video_id]);
   }
  }catch{result={...result,status:'error',message:'Automatic resolution deferred; unprocessed decisions are unchanged.'};}
  finally{
