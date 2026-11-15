@@ -1,13 +1,30 @@
-export const SEARCH_STRATEGY='fresh-v4-core-query-rotation';
+export const SEARCH_STRATEGY='fresh-v5-seven-day-trial';
+export const TRIAL_KEY='discovery-trial:20261114';
+export async function discoveryTrialEnv(db,env,at=new Date().toISOString()){
+ if(env.DISCOVERY_SEARCH_TRIAL!=='20261114'||Number(env.DISCOVERY_DAILY_SEARCH_LIMIT)<=0)return env;
+ await db.prepare('INSERT OR IGNORE INTO state(key,value) VALUES(?,?)').bind(TRIAL_KEY,JSON.stringify({startedAt:at,endsAt:new Date(Date.parse(at)+7*86400000).toISOString(),limit:60,fallback:40})).run();
+ const trial=JSON.parse((await db.prepare('SELECT value FROM state WHERE key=?').bind(TRIAL_KEY).first()).value);
+ return {...env,DISCOVERY_DAILY_SEARCH_LIMIT:Date.parse(at)<Date.parse(trial.endsAt)?60:40,discoveryTrial:{...trial,active:Date.parse(at)<Date.parse(trial.endsAt)}};
+}
+// First catalog-visible timestamp, separate from upstream publication and ingestion.
+// Only new RJ observations are measured; existing catalogs are never backdated.
+export async function recordDiscoveryPublications(db,ids,at=new Date().toISOString()){
+ if(!ids.length)return;
+ await db.prepare(`INSERT OR IGNORE INTO state(key,value) SELECT 'discovery-identity:'||o.video_id,json_object('channelId',v.channel_id,'format',v.format) FROM discovery_observations o JOIN videos v ON v.id=o.video_id WHERE o.video_id IN (SELECT value FROM json_each(?)) AND o.strategy_version=?`).bind(JSON.stringify(ids),SEARCH_STRATEGY).run();
+ await db.prepare(`INSERT OR IGNORE INTO state(key,value) SELECT 'discovery-publication:'||o.video_id,?
+ FROM discovery_observations o JOIN videos v ON v.id=o.video_id JOIN matches m ON m.video_id=v.id AND m.performer_id='missioned-souls'
+ WHERE o.video_id IN (SELECT value FROM json_each(?)) AND o.strategy_version=? AND v.available=1 AND m.status IN ('CONFIRMED','PROBABLE')
+ AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.video_id=v.id AND e.performer_id=m.performer_id)`).bind(at,JSON.stringify(ids),SEARCH_STRATEGY).run();
+}
 export const REPORT_TIMEZONE='America/Los_Angeles';
 const dayFormatter=new Intl.DateTimeFormat('en-US',{timeZone:REPORT_TIMEZONE,year:'numeric',month:'2-digit',day:'2-digit'});
 export function pacificDay(at=new Date()){
  const parts=dayFormatter.formatToParts(new Date(at));
  const value=k=>parts.find(p=>p.type===k).value;return `${value('year')}-${value('month')}-${value('day')}`;
 }
-export function searchSettings(env){const configured=Number(env.DISCOVERY_DAILY_SEARCH_LIMIT??20);return {dailyLimit:Number.isFinite(configured)?Math.max(0,Math.min(80,Math.floor(configured))):20,timezone:REPORT_TIMEZONE,rotation:'12-name/6-reaction/2-experiment',freshRotation:'2-name/1-reaction',windowOverlapDays:7,scheduler:'3-fresh/1-catchup'};}
+export function searchSettings(env){const configured=Number(env.DISCOVERY_DAILY_SEARCH_LIMIT??20);return {dailyLimit:Number.isFinite(configured)?Math.max(0,Math.min(80,Math.floor(configured))):20,timezone:REPORT_TIMEZONE,rotation:'12-name/6-reaction/2-experiment',freshRotation:'2-name/1-reaction',windowOverlapDays:7,scheduler:env.discoveryTrial?.active?'7-fresh/1-reactor/2-catchup':'3-fresh/1-catchup',trial:env.discoveryTrial||null};}
 export async function startSearchPage(db,{runId,performerId,query,cursor,env,at}){
- const id=crypto.randomUUID();await db.prepare('INSERT INTO discovery_search_pages(id,run_id,performer_id,strategy_version,settings_json,query,window_start,window_end,page_depth,started_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,runId,performerId,SEARCH_STRATEGY,JSON.stringify({...searchSettings(env),lane:cursor.lane||'catchup',rotation:cursor.lane==='fresh'?'2-name/1-reaction':'12-name/6-reaction/2-experiment'}),query,cursor.after||null,cursor.startedAt,cursor.depth??(cursor.page?0:1),at).run();return id;
+ const id=crypto.randomUUID();await db.prepare('INSERT INTO discovery_search_pages(id,run_id,performer_id,strategy_version,settings_json,query,window_start,window_end,page_depth,started_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(id,runId,performerId,SEARCH_STRATEGY,JSON.stringify({...searchSettings(env),lane:cursor.lane||'catchup',rotation:cursor.lane==='reactor'?'new-reactor-variants':cursor.lane==='fresh'?'2-name/1-reaction':'12-name/6-reaction/2-experiment'}),query,cursor.after||null,cursor.startedAt,cursor.depth??(cursor.page?0:1),at).run();return id;
 }
 export async function reserveSearchAttempt(db,pageId,limit,at=new Date().toISOString()){
  const day=pacificDay(at),key='search-attempt-budget:'+day;
@@ -59,5 +76,23 @@ export async function discoveryPerformance(db,now=new Date()){
  const pages=tag(p.results,'started_at'),attempts=tag(a.results,'attempted_at'),results=r.results,observations=tag(o.results,'discovered_at'),health=tag(h.results,'sampled_at');
  const period=(days)=>{const pp=pages.filter(x=>days.has(x._day)),aa=attempts.filter(x=>days.has(x._day)),ids=new Set(pp.map(x=>x.id));return summarize(pp,aa,results.filter(x=>ids.has(x.page_id)),observations.filter(x=>days.has(x._day)),health.filter(x=>days.has(x._day)));};
  const days=[];for(let i=0;i<15;i++){const d=new Date(today+'T12:00:00Z');d.setUTCDate(d.getUTCDate()-i);days.push(d.toISOString().slice(0,10));}
- return {timezone:REPORT_TIMEZONE,strategy:SEARCH_STRATEGY,startedAt:health[0]?.sampled_at||null,asOf:end,note:'Today is partial. Weekly comparisons use the last 7 completed Pacific days and the preceding 7; legacy observations have no query attribution. Counts are observed discoveries, not completeness or a controlled experiment.',daily:days.map(day=>({day,partial:day===today,...period(new Set([day]))})),weeks:[{label:'Last 7 completed days',days:days.slice(1,8),...period(new Set(days.slice(1,8)))},{label:'Previous 7 completed days',days:days.slice(8,15),...period(new Set(days.slice(8,15)))}]};
+ return {timezone:REPORT_TIMEZONE,strategy:SEARCH_STRATEGY,trialComparison:await discoveryTrialComparison(db,now),startedAt:health[0]?.sampled_at||null,asOf:end,note:'Today is partial. Weekly comparisons use the last 7 completed Pacific days and the preceding 7; legacy observations have no query attribution. Counts are observed discoveries, not completeness or a controlled experiment.',daily:days.map(day=>({day,partial:day===today,...period(new Set([day]))})),weeks:[{label:'Last 7 completed days',days:days.slice(1,8),...period(new Set(days.slice(1,8)))},{label:'Previous 7 completed days',days:days.slice(8,15),...period(new Set(days.slice(8,15)))}]};
+}
+export async function discoveryTrialComparison(db,now=new Date()){
+ const row=await db.prepare('SELECT value FROM state WHERE key=?').bind(TRIAL_KEY).first();if(!row)return null;
+ const trial=JSON.parse(row.value),start=Date.parse(trial.startedAt),end=Math.min(Date.parse(now),Date.parse(trial.endsAt)),baseline=new Date(start-7*86400000).toISOString();
+ const observations=(await db.prepare(`SELECT o.*,v.channel_id,v.format,m.status match_status,s.value catalog_at,i.value identity_json FROM discovery_observations o JOIN videos v ON v.id=o.video_id LEFT JOIN matches m ON m.video_id=v.id AND m.performer_id='missioned-souls' LEFT JOIN state s ON s.key='discovery-publication:'||o.video_id LEFT JOIN state i ON i.key='discovery-identity:'||o.video_id WHERE o.discovered_at>=? AND o.discovered_at<? AND o.source IN ('Performer discovery search','Recent-upload check','RSS fallback','Historical upload scan')`).bind(baseline,new Date(end).toISOString()).all()).results.map(o=>({...o,...(o.identity_json?{channel_id:JSON.parse(o.identity_json).channelId,format:JSON.parse(o.identity_json).format}:{} )}));
+ const before=observations.filter(o=>Date.parse(o.discovered_at)<start),after=observations.filter(o=>Date.parse(o.discovered_at)>=start),fresh=o=>['CONFIRMED','PROBABLE'].includes(o.match_status)&&o.delay_seconds!=null&&o.delay_seconds>=0&&o.delay_seconds<=86400;
+ const key=o=>JSON.stringify([o.channel_id,o.source,o.format]);const priorKeys=new Set(before.filter(fresh).map(key)),matched=new Set(after.filter(fresh).map(key).filter(k=>priorKeys.has(k)));
+ const summary=rows=>{const rr=rows.filter(fresh),publication=rr.filter(o=>o.catalog_at&&Date.parse(o.catalog_at)>=Date.parse(o.discovered_at)).map(o=>(Date.parse(o.catalog_at)-Date.parse(o.published_at))/1000),processing=rr.filter(o=>o.catalog_at).map(o=>(Date.parse(o.catalog_at)-Date.parse(o.discovered_at))/1000);return {videos:rows.length,channels:new Set(rows.map(o=>o.channel_id)).size,freshSamples:rr.length,medianSeconds:percentile(rr.map(o=>o.delay_seconds),.5),p90Seconds:percentile(rr.map(o=>o.delay_seconds),.9),publicationSamples:publication.length,publicationMedianSeconds:percentile(publication,.5),publicationP90Seconds:percentile(publication,.9),processingMedianSeconds:percentile(processing,.5),processingP90Seconds:percentile(processing,.9)};};
+ const activity=async(from,to)=>{
+  const pages=(await db.prepare('SELECT * FROM discovery_search_pages WHERE started_at>=? AND started_at<?').bind(from,to).all()).results;
+  const attempts=(await db.prepare('SELECT * FROM discovery_search_attempts WHERE attempted_at>=? AND attempted_at<?').bind(from,to).all()).results;
+  const results=(await db.prepare('SELECT r.*,p.started_at FROM discovery_search_results r JOIN discovery_search_pages p ON p.id=r.page_id WHERE p.started_at>=? AND p.started_at<?').bind(from,to).all()).results;
+  const health=(await db.prepare('SELECT * FROM discovery_health_samples WHERE sampled_at>=? AND sampled_at<?').bind(from,to).all()).results;
+  const qualifying=results.filter(r=>r.is_new&&['CONFIRMED','PROBABLE'].includes(r.match_status));const reactors=results.filter(r=>r.new_reactor);
+  const days=[];for(let t=Date.parse(from);t<Date.parse(to);t+=3600000){const day=pacificDay(new Date(t));if(!days.includes(day))days.push(day);}if(Date.parse(to)>Date.parse(from)&&!days.includes(pacificDay(new Date(Date.parse(to)-1))))days.push(pacificDay(new Date(Date.parse(to)-1)));
+  return {attempts:attempts.length,failures:attempts.filter(a=>a.status!=='succeeded').length,qualifyingVideos:new Set(qualifying.map(r=>r.video_id)).size,qualifyingPerAttempt:attempts.length?new Set(qualifying.map(r=>r.video_id)).size/attempts.length:null,newReactors:new Set(reactors.map(r=>r.channel_id)).size,reactorsPerDay:days.map(day=>({day,reactors:new Set(reactors.filter(r=>pacificDay(r.started_at)===day).map(r=>r.channel_id)).size})),minimumCoverage:health.length?Math.min(...health.map(h=>h.eligible?h.checked/h.eligible:1)):null,apiCalls:health.reduce((n,h)=>n+h.api_calls,0),healthSamples:health.length,lanes:[...new Set(pages.map(p=>JSON.parse(p.settings_json).lane||'legacy'))].map(lane=>({lane,pages:pages.filter(p=>(JSON.parse(p.settings_json).lane||'legacy')===lane).length}))};
+ };
+ return {...trial,active:Date.parse(now)<Date.parse(trial.endsAt),asOf:new Date(end).toISOString(),baselineFrom:baseline,baseline:{...summary(before),...await activity(baseline,trial.startedAt)},trial:{...summary(after),...await activity(trial.startedAt,new Date(end).toISOString())},matchedBaseline:summary(before.filter(o=>matched.has(key(o)))),matchedTrial:summary(after.filter(o=>matched.has(key(o)))),note:'Fresh timing uses currently qualifying matches. Matched channel/source/format strata; baseline format uses current catalog values when frozen identity is unavailable. Different uploads, not a controlled experiment. Publication means first observed catalog availability; baseline publication timestamps are unavailable. API calls cover measured RJ discovery runs, not Google project-wide consumption. Python backfill and member contributions excluded.'};
 }

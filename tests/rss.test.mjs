@@ -53,7 +53,7 @@ test('RSS records HTTP and timeout failures separately and recovers after retry'
  await pollRss(env,seed,async()=>new Response('Not found',{status:404}));
  assert.equal(sql.prepare('SELECT error FROM rss_checks').get().error,'Feed HTTP 404; retry scheduled');
  let report=await status(db,env);assert.equal(report.rss.errors[0].channels,1);
- sql.exec('DELETE FROM rss_checks');
+ sql.exec('DELETE FROM rss_checks');sql.exec("DELETE FROM state WHERE key LIKE 'rss-health:%'" );
  const before=Date.now();await pollRss(env,seed,async()=>{throw new DOMException('Timeout','TimeoutError');});
  const row=sql.prepare('SELECT * FROM rss_checks').get();assert.equal(row.error,'Feed timeout; retry scheduled');assert.ok(Date.parse(row.retry_at)-before<=15*60000+1000);
  sql.exec("UPDATE rss_checks SET retry_at='2000-01-01',checked_at='2000-01-01'");
@@ -66,18 +66,33 @@ test('RSS rejects redirects without fetching another host',async()=>{
  await pollRss(env,seed,async()=>{calls++;return new Response(null,{status:302,headers:{Location:'https://untrusted.test'}});});
  assert.equal(calls,1);assert.equal(sql.prepare('SELECT error FROM rss_checks').get().error,'Feed HTTP 302; retry scheduled');
 });
-test('repeated feed 404s limit polling and recover without disabling API channels',async()=>{
+test('repeated feed 404s keep bounded recovery probes without disabling API channels',async()=>{
  const {db,env,sql}=await eligible();
  for(let i=0;i<39;i++)sql.prepare("INSERT INTO channels(id,name,discovery_scope) VALUES(?,?,'eligible')").run('UC'+String(i).padStart(22,'0'),'Reactor '+i);
  let calls=0;const before=Date.now();await pollRss(env,seed,async()=>{calls++;return new Response(null,{status:404});});
- assert.equal(calls,8);const batch=JSON.parse(sql.prepare("SELECT value FROM state WHERE key='rss-last-batch'").get().value);
- assert.equal(batch.serviceStatus,'degraded');assert.equal(batch.deferred,32);
+ assert.equal(calls,40);const batch=JSON.parse(sql.prepare("SELECT value FROM state WHERE key='rss-last-batch'").get().value);
+ assert.equal(batch.serviceStatus,'degraded');assert.equal(batch.deferred,0);
  assert.equal(sql.prepare("SELECT COUNT(*) n FROM channels WHERE discovery_scope='eligible' AND recent_checked_at IS NULL").get().n,40);
  for(const r of sql.prepare('SELECT retry_at FROM rss_checks').all())assert.ok(Date.parse(r.retry_at)-before<=15*60000+1000);
  sql.exec("UPDATE rss_checks SET checked_at='2000-01-01',retry_at='2000-01-01'");
  calls=0;await pollRss(env,seed,async()=>{calls++;return new Response('<feed></feed>');});
  assert.equal(calls,40);assert.equal(sql.prepare('SELECT COUNT(*) n FROM rss_checks WHERE error IS NULL').get().n,40);
  assert.equal(JSON.parse(sql.prepare("SELECT value FROM state WHERE key='rss-last-batch'").get().value).serviceStatus,'available');
+});
+test('RSS preserves last success through repeated errors, respects Retry-After and resets on recovery',async()=>{
+ const {db,env,sql}=await eligible();
+ await pollRss(env,seed,async()=>new Response('<feed></feed>'));
+ const initial=JSON.parse(sql.prepare("SELECT value FROM state WHERE key=?").get('rss-health:'+channel).value);
+ const due=()=>sql.exec("UPDATE rss_checks SET checked_at='2000-01-01',retry_at='2000-01-01'");
+ due();await pollRss(env,seed,async()=>new Response(null,{status:503,headers:{'Retry-After':'3600'}}));
+ let health=JSON.parse(sql.prepare('SELECT value FROM state WHERE key=?').get('rss-health:'+channel).value);
+ assert.equal(health.streak,1);assert.equal(health.lastSuccess,initial.lastSuccess);assert.equal(health.httpStatus,503);
+ let row=sql.prepare('SELECT * FROM rss_checks').get();assert.equal(Date.parse(row.retry_at)-Date.parse(row.checked_at),3600000);
+ due();await pollRss(env,seed,async()=>new Response(null,{status:404}));
+ health=JSON.parse(sql.prepare('SELECT value FROM state WHERE key=?').get('rss-health:'+channel).value);assert.equal(health.streak,2);assert.equal(health.lastSuccess,initial.lastSuccess);
+ row=sql.prepare('SELECT * FROM rss_checks').get();assert.ok(Date.parse(row.retry_at)-Date.parse(row.checked_at)>=30*60000);
+ due();await pollRss(env,seed,async()=>new Response('<feed></feed>'));
+ health=JSON.parse(sql.prepare('SELECT value FROM state WHERE key=?').get('rss-health:'+channel).value);assert.equal(health.streak,0);assert.equal(sql.prepare('SELECT error FROM rss_checks').get().error,null);
 });
 test('API discovery precedes optional RSS and survives feed and notification failures',async()=>{
  const order=[];const result=await discoveryCycle({},seed,{
