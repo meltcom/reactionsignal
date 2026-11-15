@@ -95,12 +95,7 @@ performerVideos=function(){if(state.sort==='discovered'){state.sort='latest';pre
   list=[...latestByReactor.values()];
  }
  if(state.sort==='new-reactor'){
-  const firstReaction=new Map();
-  for(const v of catalog.videos||[]){
-   if(v.performerId!=='missioned-souls'||v.isOfficial)continue;
-   const date=Date.parse(v.publishedAt);
-   if(Number.isFinite(date))firstReaction.set(v.channelId,Math.min(firstReaction.get(v.channelId)??Infinity,date));
-  }
+  const firstReaction=firstReactionDatesByReactor();
   const names=new Map(catalog.channels.map(c=>[c.id,c.name]));
   const latest=new Map();
   for(const v of list){
@@ -108,7 +103,7 @@ performerVideos=function(){if(state.sort==='discovered'){state.sort='latest';pre
    const prior=latest.get(v.channelId);
    if(!prior||(Date.parse(v.publishedAt)||0)>(Date.parse(prior.publishedAt)||0))latest.set(v.channelId,v);
   }
-  return [...latest.values()].sort((a,b)=>(firstReaction.get(b.channelId)||0)-(firstReaction.get(a.channelId)||0)||(names.get(a.channelId)||a.channelName||'').localeCompare(names.get(b.channelId)||b.channelName||''));
+  return [...latest.values()].sort((a,b)=>compareFirstReaction(a.channelId,names.get(a.channelId)||a.channelName,b.channelId,names.get(b.channelId)||b.channelName,firstReaction));
  }
  const dates=new Map(list.map(v=>[v.id,Date.parse(v.publishedAt)||0]));
  const value=v=>{switch(state.sort){case 'reactor-ranked':return reactorRankValue(v.channelId);case 'rated':return communityRank(v.id);case 'views':return v.views??-1;case 'comments':return commentsFor(v.id);case 'subscribers':return channelFor(v).subscribers??-1;case 'discovered':return Date.parse(v.discoveredAt)||0;default:return dates.get(v.id);}};
@@ -133,11 +128,22 @@ async function toggleFollow(kind,target){const remove=follows(kind,target);if(aw
 // Replace the original performer-scroll action with the account-backed follow action.
 $('followButton').replaceWith($('followButton').cloneNode(true));$('followButton').onclick=()=>state.performer==='all'?navigate('following'):toggleFollow('performer',state.performer);
 let reactorPage=0,reactorListKey='',reactorBulkBusy=false,listedReactorIds=[];
+function firstReactionDatesByReactor(){
+ const dates=new Map();
+ // Rebuild from the current catalog so historical backfill uploads move a reactor's first date earlier.
+ for(const video of catalog.videos||[]){if(video.performerId!=='missioned-souls'||video.isOfficial)continue;const date=Date.parse(video.publishedAt);if(Number.isFinite(date))dates.set(video.channelId,Math.min(dates.get(video.channelId)??Infinity,date));}
+ return dates;
+}
+function compareFirstReaction(aId,aName,bId,bName,dates,order='newest'){
+ const aDate=dates.get(aId),bDate=dates.get(bId),names=String(aName||aId).localeCompare(String(bName||bId));
+ if(aDate==null||bDate==null)return aDate==null?(bDate==null?names:1):-1;
+ return (order==='oldest'?aDate-bDate:bDate-aDate)||names;
+}
 renderReactors=function(){
  const query=$('reactorSearch').value.toLowerCase();
- const discovery=new Map();for(const v of catalog.videos||[]){if(v.performerId!=='missioned-souls'||v.isOfficial)continue;const date=Date.parse(v.publishedAt);if(Number.isFinite(date))discovery.set(v.channelId,Math.min(discovery.get(v.channelId)??Infinity,date));}
- const discovered=c=>discovery.get(c.id)??0;
- const rows=catalog.channels.filter(c=>!(dashboard.hiddenReactors||[]).some(h=>h.channel_id===c.id)).filter(c=>(state.performer==='all'||c.performerId===state.performer)&&(!query||c.name.toLowerCase().includes(query))).sort((a,b)=>$('reactorSort').value==='newest'?discovered(b)-discovered(a)||a.name.localeCompare(b.name):$('reactorSort').value==='ranked'?reactorRankValue(b.id)-reactorRankValue(a.id)||(reactorScore(b.id)?.count||0)-(reactorScore(a.id)?.count||0)||a.name.localeCompare(b.name):$('reactorSort').value==='personal'?Number(myReactorRating(b.id)??-1)-Number(myReactorRating(a.id)??-1)||a.name.localeCompare(b.name):$('reactorSort').value==='name'?a.name.localeCompare(b.name):(b.subscribers??-1)-(a.subscribers??-1));
+ const firstReactionDates=firstReactionDatesByReactor(),firstReactionDate=c=>firstReactionDates.get(c.id);
+ const sort=$('reactorSort').value;
+ const rows=catalog.channels.filter(c=>!(dashboard.hiddenReactors||[]).some(h=>h.channel_id===c.id)).filter(c=>(state.performer==='all'||c.performerId===state.performer)&&(!query||c.name.toLowerCase().includes(query))).sort((a,b)=>sort==='newest'||sort==='oldest'?compareFirstReaction(a.id,a.name,b.id,b.name,firstReactionDates,sort):sort==='ranked'?reactorRankValue(b.id)-reactorRankValue(a.id)||(reactorScore(b.id)?.count||0)-(reactorScore(a.id)?.count||0)||a.name.localeCompare(b.name):sort==='personal'?Number(myReactorRating(b.id)??-1)-Number(myReactorRating(a.id)??-1)||a.name.localeCompare(b.name):sort==='name'?a.name.localeCompare(b.name):(b.subscribers??-1)-(a.subscribers??-1));
  listedReactorIds=[...new Set(rows.map(c=>c.id))];
  updateReactorBulkButtons();
  const listKey=JSON.stringify([query,state.performer,$('reactorSort').value,$('reactorPageSize').value]);
@@ -151,7 +157,7 @@ renderReactors=function(){
  $('reactorPageStatusBottom').textContent=$('reactorPageStatus').textContent;
  $('reactorPreviousBottom').disabled=$('reactorPrevious').disabled;
  $('reactorNextBottom').disabled=$('reactorNext').disabled;
- $('reactorGrid').innerHTML=(rows.length?'<div class="table-wrap"><table class="feed-table reactor-manager"><thead><tr><th>Reactor</th><th>Subscribers</th><th>Community score</th><th>Follow</th><th>Your rating</th><th>Actions</th></tr></thead><tbody>'+visibleRows.map(c=>`<tr><td><a href="https://www.youtube.com/channel/${escapeHtml(c.id)}" target="_blank" rel="noopener">${escapeHtml(c.name)} ↗</a><small class="reactor-found">${discovered(c)?`First reaction ${prettyDate(new Date(discovered(c)).toISOString())}`:'Discovery date unknown'}</small></td><td>${c.subscribersHidden?'Hidden':c.subscribers==null?'Unknown':num(c.subscribers)}${c.subscribersUpdatedAt?`<small class="subtle"> · Updated ${prettyDate(c.subscribersUpdatedAt)}</small>`:''}${c.youtubeAvailability==='unavailable'?'<small class="subtle"> · YouTube channel unavailable; last known count</small>':''}</td><td>${reactorRankLabel(c.id)}</td><td><button class="outline-button" data-channel="${escapeHtml(c.id)}">${follows('reactor',c.id)?'✓ Following':'+ Follow'}</button></td><td><form data-reactor-rating="${escapeHtml(c.id)}"><label><span class="sr-only">Rating 1–100</span><input placeholder="1–100" aria-label="Your rating for ${escapeHtml(c.name)}" name="score" type="number" min="1" max="100" step="1" required value="${myReactorRating(c.id)??''}"></label><button class="outline-button">Save</button><button type="button" class="outline-button" data-clear-reactor-rating="${escapeHtml(c.id)}">Clear</button><p role="status"></p></form></td><td class="reactor-actions"><button class="outline-button" data-reactor-discussion="${escapeHtml(c.id)}">Discuss</button><details class="reactor-more"><summary aria-label="More reactor actions">More</summary><button class="outline-button" data-hide-reactor="${escapeHtml(c.id)}">Hide</button><button class="text-button" data-request-remove="${escapeHtml(c.id)}">Recommend removal</button></details></td></tr>`).join('')+'</tbody></table></div>':'<p>No reactors match your search.</p>');
+ $('reactorGrid').innerHTML=(rows.length?'<div class="table-wrap"><table class="feed-table reactor-manager"><thead><tr><th>Reactor</th><th>Subscribers</th><th>Community score</th><th>Follow</th><th>Your rating</th><th>Actions</th></tr></thead><tbody>'+visibleRows.map(c=>`<tr><td><a href="https://www.youtube.com/channel/${escapeHtml(c.id)}" target="_blank" rel="noopener">${escapeHtml(c.name)} ↗</a><small class="reactor-found">${firstReactionDate(c)!=null?`First reaction ${prettyDate(new Date(firstReactionDate(c)).toISOString())}`:'First reaction date unknown'}</small></td><td>${c.subscribersHidden?'Hidden':c.subscribers==null?'Unknown':num(c.subscribers)}${c.subscribersUpdatedAt?`<small class="subtle"> · Updated ${prettyDate(c.subscribersUpdatedAt)}</small>`:''}${c.youtubeAvailability==='unavailable'?'<small class="subtle"> · YouTube channel unavailable; last known count</small>':''}</td><td>${reactorRankLabel(c.id)}</td><td><button class="outline-button" data-channel="${escapeHtml(c.id)}">${follows('reactor',c.id)?'✓ Following':'+ Follow'}</button></td><td><form data-reactor-rating="${escapeHtml(c.id)}"><label><span class="sr-only">Rating 1–100</span><input placeholder="1–100" aria-label="Your rating for ${escapeHtml(c.name)}" name="score" type="number" min="1" max="100" step="1" required value="${myReactorRating(c.id)??''}"></label><button class="outline-button">Save</button><button type="button" class="outline-button" data-clear-reactor-rating="${escapeHtml(c.id)}">Clear</button><p role="status"></p></form></td><td class="reactor-actions"><button class="outline-button" data-reactor-discussion="${escapeHtml(c.id)}">Discuss</button><details class="reactor-more"><summary aria-label="More reactor actions">More</summary><button class="outline-button" data-hide-reactor="${escapeHtml(c.id)}">Hide</button><button class="text-button" data-request-remove="${escapeHtml(c.id)}">Recommend removal</button></details></td></tr>`).join('')+'</tbody></table></div>':'<p>No reactors match your search.</p>');
  $('hiddenReactorSection').innerHTML=hiddenReactorsMarkup();
  $('reactorGrid').querySelectorAll('[data-reactor-discussion]').forEach(b=>b.onclick=()=>openCommunityReactor(b.dataset.reactorDiscussion));bindHiddenReactors($('reactorGrid'));bindHiddenReactors($('hiddenReactorSection'));bindReactorRatings($('reactorGrid'));loadMyReactorRequests();$('reactorGrid').querySelectorAll('[data-request-remove]').forEach(b=>b.onclick=()=>{const f=$('reactorRequestForm'),c=catalog.channels.find(c=>c.id===b.dataset.requestRemove);f.elements.kind.value='remove';f.elements.channelId.value=c.id;f.elements.name.value=c.name;f.elements.body.value='';$('reactorRequests').open=true;f.scrollIntoView({block:'start'});f.elements.body.focus();});$('reactorGrid').querySelectorAll('[data-channel]').forEach(b=>{b.disabled=reactorBulkBusy;b.onclick=()=>toggleFollow('reactor',b.dataset.channel);});
 };$('reactorSearch').oninput=renderReactors;$('reactorSort').onchange=renderReactors;
@@ -386,10 +392,9 @@ function followingRank(f,personal=false){
 }
 function sortFollowingRows(rows,sort){
  if(rows.length&&rows.every(row=>row.kind==='reactor')){
-  const channels=new Map(catalog.channels.map(c=>[c.id,c])),discovery=new Map();
-  for(const video of catalog.videos||[]){if(video.performerId!=='missioned-souls'||video.isOfficial)continue;const date=Date.parse(video.publishedAt);if(Number.isFinite(date))discovery.set(video.channelId,Math.min(discovery.get(video.channelId)??Infinity,date));}
+  const channels=new Map(catalog.channels.map(c=>[c.id,c])),firstReactionDates=firstReactionDatesByReactor();
   return [...rows].sort((a,b)=>{const first=channels.get(a.target)||{id:a.target,name:a.target},second=channels.get(b.target)||{id:b.target,name:b.target},names=first.name.localeCompare(second.name);
-   return sort==='newest'?(discovery.get(second.id)??0)-(discovery.get(first.id)??0)||names:sort==='ranked'?reactorRankValue(second.id)-reactorRankValue(first.id)||(reactorScore(second.id)?.count||0)-(reactorScore(first.id)?.count||0)||names:sort==='personal'?Number(myReactorRating(second.id)??-1)-Number(myReactorRating(first.id)??-1)||names:sort==='subscribers'?(second.subscribers??-1)-(first.subscribers??-1):names;
+   return sort==='newest'||sort==='oldest'?compareFirstReaction(first.id,first.name,second.id,second.name,firstReactionDates,sort):sort==='ranked'?reactorRankValue(second.id)-reactorRankValue(first.id)||(reactorScore(second.id)?.count||0)-(reactorScore(first.id)?.count||0)||names:sort==='personal'?Number(myReactorRating(second.id)??-1)-Number(myReactorRating(first.id)??-1)||names:sort==='subscribers'?(second.subscribers??-1)-(first.subscribers??-1):names;
   });
  }
  return [...rows].sort((a,b)=>{
