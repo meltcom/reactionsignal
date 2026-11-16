@@ -8,3 +8,5 @@ ALTER TABLE channels ADD COLUMN removed_at TEXT;
 ALTER TABLE channels ADD COLUMN removed_by TEXT;
 ALTER TABLE channels ADD COLUMN removal_reason TEXT;
 CREATE INDEX channels_removal_idx ON channels(removed_at,id);
+
+ALTER TABLE channels ADD COLUMN removed_previous_scope TEXT;
