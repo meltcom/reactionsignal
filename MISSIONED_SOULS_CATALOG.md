@@ -4,7 +4,7 @@ All signed-in Reaction Journey members can browse MS Journey. Catalog changes re
 
 The starter has three verified official video links, not a complete catalog. Open Catalog updates and category review, then Refresh official YouTube catalog to start collection. Each invocation scans up to 200 uploads and persists its continuation cursor. The existing 15-minute scheduler resumes initiated scans AFTER reaction discovery and rechecks. After completing a pass, it waits 24 hours before the next daily pass. It does not spend YouTube quota until a moderator starts collection. Configure the existing YOUTUBE_API_KEY server secret; no key is exposed to the browser. No new D1 migrations are required.
 
-Official uploads use channels.list, playlistItems.list and videos.list, keeping the reaction search query unchanged. Refreshes preserve reviewed categories and daily view history. Suggested categories require human review. Facebook-only and other videos need manual links or an import; YouTube cannot collect those sources.
+Official uploads use channels.list, playlistItems.list and videos.list, keeping the reaction search query unchanged. Refreshes preserve reviewed categories and daily view history. Suggested categories require human review. Moderators can add individual YouTube videos through Add Facebook / other video and use Get YouTube details & statistics to fetch the public title, channel, upload date, duration, thumbnail, and available counts. Facebook-only and other-source videos still need manual details or an import.
 
 The optional standard-library script processes saved metadata offline:
     python scripts/seed_missioned_souls.py --input saved-videos.json --output catalog.json
