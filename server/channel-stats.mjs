@@ -11,7 +11,7 @@ export async function refreshChannelStats(env, fetcher=fetch, now=new Date()) {
   const api=new YouTube(env.YOUTUBE_API_KEY,fetcher,db,env);
   try {
     const rows=(await db.prepare(`SELECT c.id,s.value FROM channels c LEFT JOIN state s ON s.key='youtube-channel-stats:'||c.id
-      WHERE c.id GLOB 'UC*' AND length(c.id)=24
+      WHERE c.id GLOB 'UC*' AND length(c.id)=24 AND c.hidden_at IS NULL
       AND (json_extract(s.value,'$.updatedAt') IS NULL OR json_extract(s.value,'$.updatedAt')<=?)
       AND (json_extract(s.value,'$.retryAt') IS NULL OR json_extract(s.value,'$.retryAt')<=?)
       ORDER BY COALESCE(json_extract(s.value,'$.attemptedAt'),'') ASC,c.id LIMIT 50`).bind(cutoff,at).all()).results;
