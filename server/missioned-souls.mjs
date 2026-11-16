@@ -124,6 +124,24 @@ export async function missionedSouls(request,env,seed,user,fetcher=fetch){
    if(!user.moderator&&!await canPublishDirectly(env.DB,user.id))return json({error:'Trusted Member access required to fetch Facebook details.'},403);
    return json(await fetchFacebookMetadata(b.url,fetcher));
   }
+  if(b.action==='fetch-youtube-metadata'){
+   if(!user.moderator)return json({error:'Moderator access required to fetch YouTube details.'},403);
+   if(!env.YOUTUBE_API_KEY)return json({error:'YouTube metadata lookup is not configured.'},503);
+   const parsed=normalizeVideo({title:'YouTube video',url:b.url},[]);
+   if(parsed.platform!=='YouTube')return json({error:'Paste a YouTube video, Shorts, or live URL.'},400);
+   const endpoint=new URL('https://www.googleapis.com/youtube/v3/videos');
+   endpoint.searchParams.set('part','snippet,statistics,contentDetails,status');
+   endpoint.searchParams.set('id',parsed.youtubeId);
+   endpoint.searchParams.set('key',env.YOUTUBE_API_KEY);
+   const response=await quotaFetch(env,fetcher)(endpoint,{signal:AbortSignal.timeout(12000)});
+   if(!response.ok)throw Object.assign(new Error(response.status===403?'YouTube denied the lookup. Check the API key, permissions, or daily quota.':'YouTube metadata lookup failed ('+response.status+').'),{status:response.status===403?503:502});
+   const data=await response.json(),item=data.items?.find(video=>video.id===parsed.youtubeId);
+   if(!item?.snippet||item.status?.privacyStatus!=='public')return json({error:'This YouTube video is not publicly available.'},409);
+   const duration=youtubeSeconds(item.contentDetails?.duration),safeCount=value=>value!=null&&Number.isSafeInteger(Number(value))&&Number(value)>=0?Number(value):null;
+   const counts={views:safeCount(item.statistics?.viewCount),likes:safeCount(item.statistics?.likeCount),comments:safeCount(item.statistics?.commentCount)};
+   const hasCounts=Object.values(counts).some(value=>value!==null);
+   return json({id:item.id,title:item.snippet.title,channelName:item.snippet.channelTitle,channelId:item.snippet.channelId,publishedAt:item.snippet.publishedAt,durationSeconds:duration!==null&&duration<=86400?duration:null,thumbnailUrl:item.snippet.thumbnails?.maxres?.url||item.snippet.thumbnails?.standard?.url||item.snippet.thumbnails?.high?.url||item.snippet.thumbnails?.medium?.url||item.snippet.thumbnails?.default?.url||null,...counts,statsAt:hasCounts?new Date().toISOString():null,statsPrecision:hasCounts?'exact':'unknown',statsSource:hasCounts?'YouTube Data API':''});
+  }
   if(b.action==='community-add'){
    if(!await canPublishDirectly(env.DB,user.id))return json({error:'Trusted Member access required to add a Facebook video.'},403);
    if(b.publicConfirmed!==true)return json({error:'Confirm the Facebook video is publicly viewable before submitting.'},400);
@@ -186,7 +204,7 @@ export async function missionedSouls(request,env,seed,user,fetcher=fetch){
    const count=await saveVideos(env.DB,items,{manual:true});if(b.action==='import')await upsert(env.DB,'ms-coverage',{message:'Imported catalog records. Completeness depends on the input files; category and source coverage need review.'}).run();return json({ok:true,message:count+' video records saved.'});
   }
   return json({error:'Unknown action'},400);
- }catch(error){return json({error:error.message||'Catalog request failed.'},400);}
+ }catch(error){return json({error:error.message||'Catalog request failed.'},error.status||400);}
 }
 
 // Start only after a moderator initiates collection; then continue bounded batches.
