@@ -30,7 +30,7 @@ export async function managePerformers(request,env,seed,user){try{
   }
   if(path==='/channels'){
    const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0)),q=(url.searchParams.get('q')||'').slice(0,100),unavailable=url.searchParams.get('unavailable')==='1';
-   const items=await all("SELECT id,name,discovery_scope,recent_failures,recent_retry_at,recent_error,recent_checked_at,hidden_at,hidden_by,hidden_reason,removed_at,removed_by,removal_reason FROM channels WHERE instr(lower(name||' '||id),lower(?))>0 "+(unavailable?"AND recent_failures>0 ":"")+"ORDER BY name,id LIMIT 51 OFFSET ?",q,offset);
+   const items=await all("SELECT id,name,discovery_scope,recent_failures,recent_retry_at,recent_error,recent_checked_at,hidden_at,hidden_by,hidden_reason,removed_at,removed_by,removal_reason,removed_previous_scope FROM channels WHERE instr(lower(name||' '||id),lower(?))>0 "+(unavailable?"AND recent_failures>0 ":"")+"ORDER BY name,id LIMIT 51 OFFSET ?",q,offset);
    return json({items:items.slice(0,50),hasMore:items.length>50});
   }
   if(path==='/classification'){
@@ -172,16 +172,32 @@ export async function managePerformers(request,env,seed,user){try{
   const id=String(b.channelId||'').trim();
   if(!/^UC[\w-]{22}$/.test(id))fail('Use a valid YouTube channel ID.');
   const note=text(b.note,5,500,'Reason');
-  const prior=await first('SELECT id,name,removed_at,removed_by,removal_reason FROM channels WHERE id=?',id);
+  const prior=await first('SELECT id,name,discovery_scope,removed_at,removed_by,removal_reason FROM channels WHERE id=?',id);
   if(!prior)fail('Channel not found.',404);
   if(prior.removed_at)return json({ok:true,message:'Channel is already removed from the catalog.'});
   const audit={channelId:id,name:prior.name,actor:user.id,at:now,action:'remove-from-catalog',reason:note,before:{removedAt:null},after:{removedAt:now,removedBy:user.id,removalReason:note}};
   await db.batch([
-   db.prepare("UPDATE channels SET removed_at=?,removed_by=?,removal_reason=?,discovery_scope='retired',scope_locked=1 WHERE id=? AND removed_at IS NULL").bind(now,user.id,note,id),
+   db.prepare("UPDATE channels SET removed_at=?,removed_by=?,removal_reason=?,removed_previous_scope=discovery_scope,discovery_scope='retired',scope_locked=1 WHERE id=? AND removed_at IS NULL").bind(now,user.id,note,id),
    db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('channel-audit:'+crypto.randomUUID(),JSON.stringify(audit)),
    db.prepare("INSERT INTO state(key,value) VALUES('catalog-revision','1') ON CONFLICT(key) DO UPDATE SET value=CAST(state.value AS INTEGER)+1")
   ]);
   return json({ok:true,message:'Channel and its reaction videos are permanently removed from the user catalog and future discovery. Internal records are retained for audit.'});
+ }
+ if(path==='/channels/restore'){
+  const id=String(b.channelId||'').trim();
+  if(!/^UC[\w-]{22}$/.test(id))fail('Use a valid YouTube channel ID.');
+  const note=text(b.note,5,500,'Reason');
+  const prior=await first('SELECT id,name,discovery_scope,removed_at,removed_by,removal_reason,removed_previous_scope FROM channels WHERE id=?',id);
+  if(!prior)fail('Channel not found.',404);
+  if(!prior.removed_at)return json({ok:true,message:'Channel is already in the catalog.'});
+  const restoredScope=prior.removed_previous_scope||'review';
+  const audit={channelId:id,name:prior.name,actor:user.id,at:now,action:'restore-to-catalog',reason:note,before:{removedAt:prior.removed_at,discoveryScope:prior.discovery_scope,removalReason:prior.removal_reason},after:{removedAt:null,discoveryScope:restoredScope}};
+  await db.batch([
+   db.prepare('UPDATE channels SET removed_at=NULL,removed_by=NULL,removal_reason=NULL,discovery_scope=?,removed_previous_scope=NULL WHERE id=? AND removed_at IS NOT NULL').bind(restoredScope,id),
+   db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('channel-audit:'+crypto.randomUUID(),JSON.stringify(audit)),
+   db.prepare("INSERT INTO state(key,value) VALUES('catalog-revision','1') ON CONFLICT(key) DO UPDATE SET value=CAST(state.value AS INTEGER)+1")
+  ]);
+  return json({ok:true,message:'Channel restored to the catalog with its previous status: '+restoredScope+'.'});
  }
  if(path==='/channels/visibility'){
   const id=String(b.channelId||'').trim();
