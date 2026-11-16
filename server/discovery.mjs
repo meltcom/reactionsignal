@@ -43,7 +43,7 @@ export async function saveVideos(db,items,performers,runTime,source,context={}){
   items=items.filter(item=>item.snippet?.channelId!=='UCeTfwcnUVurw7Qrk_KF5Idw');
   const unique=[...new Map(items.filter(item=>/^[\w-]{11}$/.test(item.id)&&item.snippet&&item.status?.privacyStatus==='public').map(item=>[item.id,item])).values()];
   let inserted=0;
-  const hiddenChannelIds=new Set((await db.prepare('SELECT id FROM channels WHERE hidden_at IS NOT NULL').all()).results.map(c=>c.id));
+  const hiddenChannelIds=new Set((await db.prepare('SELECT id FROM channels WHERE hidden_at IS NOT NULL OR removed_at IS NOT NULL').all()).results.map(c=>c.id));
   for(let offset=0;offset<unique.length;offset+=50){
     const chunk=unique.slice(offset,offset+50),ids=chunk.map(x=>x.id);
     // One lookup round trip per 50-video chunk; two JSON bindings stay below D1's bind limit.
@@ -51,7 +51,7 @@ export async function saveVideos(db,items,performers,runTime,source,context={}){
       (SELECT json_group_array(json_object('id',id,'channel_id',channel_id,'title',title,'published_at',published_at,'available',available,'checked_at',checked_at)) FROM videos WHERE id IN (SELECT value FROM ids)) old_json,
       (SELECT json_group_array(json_object('performer_id',performer_id,'video_id',video_id)) FROM matches WHERE video_id IN (SELECT value FROM ids)) matches_json,
       (SELECT json_group_array(json_object('performer_id',performer_id,'video_id',video_id)) FROM exclusions WHERE video_id IN (SELECT value FROM ids)) excluded_json,
-      (SELECT json_group_array(json_object('id',id,'scope',discovery_scope)) FROM channels WHERE hidden_at IS NULL AND id IN (SELECT value FROM reactors)) channel_scopes_json`).bind(JSON.stringify(ids),JSON.stringify([...new Set(chunk.map(item=>item.snippet.channelId))])).first();
+      (SELECT json_group_array(json_object('id',id,'scope',discovery_scope)) FROM channels WHERE hidden_at IS NULL AND removed_at IS NULL AND id IN (SELECT value FROM reactors)) channel_scopes_json`).bind(JSON.stringify(ids),JSON.stringify([...new Set(chunk.map(item=>item.snippet.channelId))])).first();
     const old=new Map(JSON.parse(snapshot.old_json).map(v=>[v.id,v]));
     const matches=new Set(JSON.parse(snapshot.matches_json).map(v=>v.performer_id+':'+v.video_id));
     const excluded=new Set(JSON.parse(snapshot.excluded_json).map(v=>v.performer_id+':'+v.video_id));
@@ -202,12 +202,12 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
     const historyLimit=Math.max(0,Math.min(2,Number.parseInt(env.DISCOVERY_HISTORY_PAGES??'1',10)||0));
     // Active reactors have reserved capacity even while daily coverage is overdue.
     // At least half the batch remains available for oldest-first daily coverage.
-    const overdue=options.performerId?[]:(await db.prepare("SELECT * FROM channels WHERE discovery_scope='eligible' AND hidden_at IS NULL AND (recent_retry_at IS NULL OR recent_retry_at<=?) AND (recent_checked_at IS NULL OR recent_checked_at<?) ORDER BY recent_attempted_at ASC,recent_checked_at ASC,id LIMIT ?").bind(now,new Date(Date.now()-86400000).toISOString(),batchSize).all()).results;
+    const overdue=options.performerId?[]:(await db.prepare("SELECT * FROM channels WHERE discovery_scope='eligible' AND hidden_at IS NULL AND removed_at IS NULL AND (recent_retry_at IS NULL OR recent_retry_at<=?) AND (recent_checked_at IS NULL OR recent_checked_at<?) ORDER BY recent_attempted_at ASC,recent_checked_at ASC,id LIMIT ?").bind(now,new Date(Date.now()-86400000).toISOString(),batchSize).all()).results;
     const daily=overdue.slice(0,Math.ceil(batchSize/2));
     const prioritySlots=env.discoveryTrial?.active?Math.floor(batchSize/2):Math.min(Math.floor(batchSize/2),batchSize-overdue.length);
-    const priority=options.performerId||!prioritySlots?[]:(await db.prepare(`SELECT c.* FROM channels c LEFT JOIN rss_checks r ON r.channel_id=c.id WHERE c.discovery_scope='eligible' AND c.hidden_at IS NULL AND (c.recent_retry_at IS NULL OR c.recent_retry_at<=?) AND (c.recent_checked_at IS NULL OR c.recent_checked_at<? OR (?=1 AND r.error IS NOT NULL AND c.recent_checked_at<?)) AND c.id NOT IN (SELECT value FROM json_each(?)) AND c.id IN (SELECT DISTINCT v.channel_id FROM videos v INDEXED BY journey_videos_published_channel JOIN matches m ON m.video_id=v.id WHERE v.published_at>? AND m.performer_id='missioned-souls' AND m.status='CONFIRMED') ORDER BY CASE WHEN ?=1 AND r.error IS NOT NULL THEN 0 ELSE 1 END,c.recent_attempted_at ASC,c.recent_checked_at ASC,c.id LIMIT ?`).bind(now,new Date(Date.now()-3600000).toISOString(),env.discoveryTrial?.active?1:0,new Date(Date.now()-30*60000).toISOString(),JSON.stringify(env.discoveryTrial?.active?daily.map(c=>c.id):[]),new Date(Date.now()-14*86400000).toISOString(),env.discoveryTrial?.active?1:0,prioritySlots).all()).results;
+    const priority=options.performerId||!prioritySlots?[]:(await db.prepare(`SELECT c.* FROM channels c LEFT JOIN rss_checks r ON r.channel_id=c.id WHERE c.discovery_scope='eligible' AND c.hidden_at IS NULL AND removed_at IS NULL AND (c.recent_retry_at IS NULL OR c.recent_retry_at<=?) AND (c.recent_checked_at IS NULL OR c.recent_checked_at<? OR (?=1 AND r.error IS NOT NULL AND c.recent_checked_at<?)) AND c.id NOT IN (SELECT value FROM json_each(?)) AND c.id IN (SELECT DISTINCT v.channel_id FROM videos v INDEXED BY journey_videos_published_channel JOIN matches m ON m.video_id=v.id WHERE v.published_at>? AND m.performer_id='missioned-souls' AND m.status='CONFIRMED') ORDER BY CASE WHEN ?=1 AND r.error IS NOT NULL THEN 0 ELSE 1 END,c.recent_attempted_at ASC,c.recent_checked_at ASC,c.id LIMIT ?`).bind(now,new Date(Date.now()-3600000).toISOString(),env.discoveryTrial?.active?1:0,new Date(Date.now()-30*60000).toISOString(),JSON.stringify(env.discoveryTrial?.active?daily.map(c=>c.id):[]),new Date(Date.now()-14*86400000).toISOString(),env.discoveryTrial?.active?1:0,prioritySlots).all()).results;
     const exclude=priority.length?` AND id NOT IN (${priority.map(()=>'?').join(',')})`:'';
-    const regular=options.performerId||overdue.length?[]:(await db.prepare("SELECT * FROM channels WHERE discovery_scope='eligible' AND hidden_at IS NULL AND (recent_retry_at IS NULL OR recent_retry_at<=?) AND (recent_checked_at IS NULL OR recent_checked_at<?)"+exclude+" ORDER BY recent_attempted_at ASC,recent_checked_at ASC,id LIMIT ?").bind(now,new Date(Date.now()-86400000).toISOString(),...priority.map(c=>c.id),batchSize-priority.length).all()).results;
+    const regular=options.performerId||overdue.length?[]:(await db.prepare("SELECT * FROM channels WHERE discovery_scope='eligible' AND hidden_at IS NULL AND removed_at IS NULL AND (recent_retry_at IS NULL OR recent_retry_at<=?) AND (recent_checked_at IS NULL OR recent_checked_at<?)"+exclude+" ORDER BY recent_attempted_at ASC,recent_checked_at ASC,id LIMIT ?").bind(now,new Date(Date.now()-86400000).toISOString(),...priority.map(c=>c.id),batchSize-priority.length).all()).results;
     const due=env.discoveryTrial?.active?[...new Map([...daily,...priority,...overdue,...regular].map(c=>[c.id,c])).values()].slice(0,batchSize):overdue.length?[...overdue,...priority].slice(0,batchSize):[...priority,...regular];
 
     if(due.length)await db.batch(due.map(c=>db.prepare('UPDATE channels SET recent_attempted_at=? WHERE id=?').bind(now,c.id)));
@@ -312,15 +312,15 @@ export async function runDiscovery(env,seed,fetcher=fetch,options={}){
         const ids=(result.items||[]).map(x=>x.id?.videoId).filter(Boolean);
         let uniqueAdded=0,newReactors=0,delaySamples=0,delayTotal=0,maxDelay=0;
         const beforeMatches=new Set((await db.prepare('SELECT video_id FROM matches WHERE performer_id=? AND video_id IN (SELECT value FROM json_each(?))').bind(p.id,JSON.stringify(ids)).all()).results.map(r=>r.video_id));
-        const eligibleBeforePage=new Set((await db.prepare("SELECT id FROM channels WHERE discovery_scope='eligible' AND hidden_at IS NULL").all()).results.map(c=>c.id));
+        const eligibleBeforePage=new Set((await db.prepare("SELECT id FROM channels WHERE discovery_scope='eligible' AND hidden_at IS NULL AND removed_at IS NULL").all()).results.map(c=>c.id));
         if(ids.length){const data=await api.get('videos',{part:'snippet,contentDetails,statistics,status',id:ids.join(',')});
           const before=(await db.prepare('SELECT video_id FROM discovery_observations WHERE video_id IN ('+ids.map(()=>'?').join(',')+')').bind(...ids).all()).results;
           const known=new Set(before.map(v=>v.video_id));
-          const eligibleBefore=new Set((await db.prepare("SELECT id FROM channels WHERE discovery_scope='eligible' AND hidden_at IS NULL").all()).results.map(c=>c.id));
+          const eligibleBefore=new Set((await db.prepare("SELECT id FROM channels WHERE discovery_scope='eligible' AND hidden_at IS NULL AND removed_at IS NULL").all()).results.map(c=>c.id));
           uniqueAdded=await saveVideos(db,data.items||[],[p],now,'Performer discovery search',{pageId});added+=uniqueAdded;metrics.examined+=ids.length;
           const observations=(await db.prepare('SELECT video_id,delay_seconds FROM discovery_observations WHERE source=\'Performer discovery search\' AND discovered_at=? AND video_id IN ('+ids.map(()=>'?').join(',')+')').bind(now,...ids).all()).results.filter(v=>!known.has(v.video_id));
           const found=new Set(observations.map(v=>v.video_id));
-          const eligibleAfter=new Set((await db.prepare("SELECT id FROM channels WHERE discovery_scope='eligible' AND hidden_at IS NULL").all()).results.map(c=>c.id));
+          const eligibleAfter=new Set((await db.prepare("SELECT id FROM channels WHERE discovery_scope='eligible' AND hidden_at IS NULL AND removed_at IS NULL").all()).results.map(c=>c.id));
           newReactors=new Set((data.items||[]).filter(v=>found.has(v.id)&&!eligibleBefore.has(v.snippet.channelId)&&eligibleAfter.has(v.snippet.channelId)).map(v=>v.snippet.channelId)).size;
           for(const v of observations)if(v.delay_seconds!==null&&v.delay_seconds>=0&&v.delay_seconds<=604800){delaySamples++;delayTotal+=v.delay_seconds;maxDelay=Math.max(maxDelay,v.delay_seconds);}
         }
