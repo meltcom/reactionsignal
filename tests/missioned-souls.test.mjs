@@ -137,7 +137,7 @@ test('Facebook metadata fetch rejects a generic error page without video evidenc
  const db=database(),env={DB:db},seed={videos:[]},trusted={id:'trusted-member'};db.sql.exec("INSERT INTO members(id,trusted) VALUES('trusted-member',1)");
  const request=new Request('https://reactionjourney.com/api/missioned-souls',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fetch-facebook-metadata',url:'https://www.facebook.com/reel/private-or-blocked-123/'})});
  const response=await missionedSouls(request,env,seed,trusted,async()=>new Response('<html><head><title>Facebook</title></head><body>Something went wrong</body></html>',{headers:{'Content-Type':'text/html'}}));
- assert.equal(response.status,400,await response.clone().text());assert.match((await response.json()).error,/continue with manual details/i);
+ assert.equal(response.status,422,await response.clone().text());assert.match((await response.json()).error,/continue with manual details/i);
 });
 test('category lifecycle preserves assignments and rejects stale updates and member writes',async()=>{
  const db=database(),seed={videos:[video(undefined,{tags:['OPM']})]},env={DB:db};
