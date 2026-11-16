@@ -47,7 +47,7 @@ async function videoDecision(db,id){
  const row=await db.prepare("SELECT m.status,m.source,p.status performerStatus,e.reason exclusionReason FROM matches m JOIN performers p ON p.id=m.performer_id LEFT JOIN exclusions e ON e.performer_id=m.performer_id AND e.video_id=m.video_id WHERE m.performer_id='missioned-souls' AND m.video_id=?").bind(id).first();
  return row||{status:null,exclusionReason:null};
 }
-async function known(db,performer,video){if(!await db.prepare("SELECT 1 FROM matches m JOIN videos v ON v.id=m.video_id WHERE m.performer_id=? AND m.video_id=? AND m.status='CONFIRMED' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id)").bind(performer,video).first())fail('This video is not currently in the confirmed catalog.',404);}
+async function known(db,performer,video){if(!await db.prepare("SELECT 1 FROM matches m JOIN videos v ON v.id=m.video_id WHERE m.performer_id=? AND m.video_id=? AND m.status='CONFIRMED' AND v.available=1 AND NOT EXISTS(SELECT 1 FROM channels c WHERE c.id=v.channel_id AND c.hidden_at IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM exclusions e WHERE e.performer_id=m.performer_id AND e.video_id=m.video_id)").bind(performer,video).first())fail('This video is not currently in the confirmed catalog.',404);}
 export async function community(request,env,seed,user){
   try {
     if(!user)return json({error:'Sign in to participate.'},401);
