@@ -30,7 +30,7 @@ export async function managePerformers(request,env,seed,user){try{
   }
   if(path==='/channels'){
    const offset=Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0)),q=(url.searchParams.get('q')||'').slice(0,100),unavailable=url.searchParams.get('unavailable')==='1';
-   const items=await all("SELECT id,name,discovery_scope,recent_failures,recent_retry_at,recent_error,recent_checked_at FROM channels WHERE instr(lower(name||' '||id),lower(?))>0 "+(unavailable?"AND recent_failures>0 ":"")+"ORDER BY name,id LIMIT 51 OFFSET ?",q,offset);
+   const items=await all("SELECT id,name,discovery_scope,recent_failures,recent_retry_at,recent_error,recent_checked_at,hidden_at,hidden_by,hidden_reason FROM channels WHERE instr(lower(name||' '||id),lower(?))>0 "+(unavailable?"AND recent_failures>0 ":"")+"ORDER BY name,id LIMIT 51 OFFSET ?",q,offset);
    return json({items:items.slice(0,50),hasMore:items.length>50});
   }
   if(path==='/classification'){
@@ -166,6 +166,24 @@ export async function managePerformers(request,env,seed,user){try{
   ops.push(db.prepare(`INSERT INTO state(key,value) SELECT ?,? WHERE ${guard}`).bind('reactor-request-audit:'+crypto.randomUUID(),JSON.stringify({actor:user.id,request:id,channel:r.channel_id,decision:b.decision,note,at:now}),id));
   ops.push(db.prepare("UPDATE reactor_requests SET status=?,review_note=?,reviewed_at=?,reviewed_by=? WHERE id=? AND status='pending'").bind(b.decision==='accept'?'accepted':'rejected',note,now,user.id,id));
   await db.batch(ops);return json({ok:true,message:b.decision==='reject'?'Request declined.':r.kind==='remove'?'Channel retired from monitoring. Existing videos remain.':'Channel request accepted. Saved with the chosen status.'});
+ }
+ if(path==='/channels/visibility'){
+  const id=String(b.channelId||'').trim();
+  if(!/^UC[\\w-]{22}$/.test(id))fail('Use a valid YouTube channel ID.');
+  if(typeof b.hidden!=='boolean')fail('Choose whether the channel should be hidden.');
+  const note=text(b.note,5,500,'Reason');
+  const prior=await first('SELECT id,name,hidden_at,hidden_by,hidden_reason FROM channels WHERE id=?',id);
+  if(!prior)fail('Channel not found.',404);
+  const wasHidden=Boolean(prior.hidden_at);
+  if(wasHidden===b.hidden)return json({ok:true,message:b.hidden?'Channel is already hidden from all users.':'Channel is already visible to users.'});
+  const hiddenAt=b.hidden?now:null,hiddenBy=b.hidden?user.id:null,hiddenReason=b.hidden?note:null;
+  const audit={channelId:id,name:prior.name,actor:user.id,at:now,action:b.hidden?'hide-from-all-users':'restore-for-all-users',reason:note,before:{hiddenAt:prior.hidden_at,hiddenBy:prior.hidden_by,hiddenReason:prior.hidden_reason},after:{hiddenAt,hiddenBy,hiddenReason}};
+  await db.batch([
+   db.prepare('UPDATE channels SET hidden_at=?,hidden_by=?,hidden_reason=? WHERE id=?').bind(hiddenAt,hiddenBy,hiddenReason,id),
+   db.prepare('INSERT INTO state(key,value) VALUES(?,?)').bind('channel-audit:'+crypto.randomUUID(),JSON.stringify(audit)),
+   db.prepare("INSERT INTO state(key,value) VALUES('catalog-revision','1') ON CONFLICT(key) DO UPDATE SET value=CAST(state.value AS INTEGER)+1")
+  ]);
+  return json({ok:true,message:b.hidden?'Channel and its reaction videos are hidden from all users. Existing records remain available to moderators.':'Channel and its reaction videos are visible to all users again.'});
  }
  if(path==='/channels/save'||path==='/channels/retry'){
   const channel=text(b.channelId,24,200,'Channel ID or URL');
