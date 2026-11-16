@@ -31,7 +31,7 @@ export async function pollRss(env,seed,fetcher=fetch){
   const performers=(await db.prepare("SELECT aliases FROM performers WHERE discovery_enabled=1 AND id='missioned-souls'").all()).results;
   const aliases=performers.flatMap(p=>JSON.parse(p.aliases));
   if(!aliases.length)return {status:'idle',checked,queued,failed};
-  const rows=(await db.prepare("SELECT c.id,h.value health FROM channels c LEFT JOIN rss_checks r ON r.channel_id=c.id LEFT JOIN state h ON h.key='rss-health:'||c.id WHERE c.discovery_scope='eligible' AND c.hidden_at IS NULL AND (r.retry_at IS NULL OR r.retry_at<=?) AND (r.checked_at IS NULL OR r.checked_at<?) ORDER BY COALESCE(r.checked_at,''),c.id LIMIT 40").bind(at,new Date(now-30*60000).toISOString()).all()).results;
+  const rows=(await db.prepare("SELECT c.id,h.value health FROM channels c LEFT JOIN rss_checks r ON r.channel_id=c.id LEFT JOIN state h ON h.key='rss-health:'||c.id WHERE c.discovery_scope='eligible' AND c.hidden_at IS NULL AND c.removed_at IS NULL AND (r.retry_at IS NULL OR r.retry_at<=?) AND (r.checked_at IS NULL OR r.checked_at<?) ORDER BY COALESCE(r.checked_at,''),c.id LIMIT 40").bind(at,new Date(now-30*60000).toISOString()).all()).results;
   for(let offset=0;offset<rows.length&&Date.now()<deadline;offset+=4){
    await Promise.all(rows.slice(offset,offset+4).map(async c=>{
     if(!/^UC[\w-]{22}$/.test(c.id))return;
