@@ -1,10 +1,12 @@
 // Shared validation for account-scoped views. No schema changes are required.
 export const viewScope=value=>value==='ms-journey'?'ms-journey':'reactions';
 export const normalizedViewName=value=>String(value||'').normalize('NFKC').trim().replace(/\s+/gu,' ').toLowerCase();
-export const protectedViewName=value=>['small','default','large'].includes(normalizedViewName(value));
+export const protectedViewName=value=>['small','default','large','cell phone'].includes(normalizedViewName(value));
 export const builtinViewId=value=>typeof value==='string'&&value.startsWith('builtin:');
 export function builtinViews(scope='reactions'){
- return Object.freeze([['Small','small',4],['Default','medium',3],['Large','large',2]].map(([name,thumbnail,columns])=>Object.freeze({id:`builtin:${viewScope(scope)}:${name.toLowerCase()}`,name,builtin:true,settings:Object.freeze({scope:viewScope(scope),layout:'cards',thumbnail,columns,density:'standard'})})));
+ const target=viewScope(scope),presets=[['Small','small',4],['Default','medium',3],['Large','large',2]];
+ if(target==='reactions')presets.push(['Cell Phone','large',2,'dark']);
+ return Object.freeze(presets.map(([name,thumbnail,columns,theme])=>Object.freeze({id:`builtin:${target}:${name.toLowerCase().replace(/\s+/g,'-')}`,name,builtin:true,settings:Object.freeze({scope:target,layout:'cards',thumbnail,columns,density:'standard',...(theme?{theme}:{})})})));
 }
 export function archiveSettings(input={}){
  if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Invalid MS Journey settings.');
