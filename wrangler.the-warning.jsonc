@@ -1,0 +1,19 @@
+{
+  "name": "reactionjourney-the-warning",
+  "main": "sites/band-site/worker.mjs",
+  "compatibility_date": "2026-11-17",
+  "workers_dev": true,
+  "preview_urls": true,
+  "vars": {
+    "SITE_KEY": "the-warning"
+  },
+  "assets": {
+    "directory": "./sites/band-site/public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "not_found_handling": "none"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
