@@ -75,6 +75,8 @@ if(member){
   if(detail.page==='countdown-settings'&&!opened){
    opened=true;
    stopSettings=await mountCountdownSettings(document.getElementById('countdown-settings'),{load:()=>api('/api/moderator/countdown'),save:value=>api('/api/moderator/countdown',value),afterSave:refresh});
+   // Settings renders its panel contents from scratch; restore the shared banner afterward.
+   placeOnCurrentPage();
   }
  });
  window.addEventListener('reaction-auth-change',()=>{
