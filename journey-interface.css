@@ -22,9 +22,9 @@ body[data-journey=ms-journey] #submitOpen{display:none!important}
 
 .journey-space-switch{display:none;color:var(--teal);font-size:13px;text-decoration:underline;min-height:44px;align-items:center;justify-content:flex-end;margin:0 24px}html[data-interface=app] .journey-space-switch{display:flex}@media(max-width:760px){.journey-space-switch{display:flex;margin:0 16px}}
 
-/* Normalize the visible header logos despite the MS asset’s square padding. */
-.ms-header-link{width:128px;height:88px;justify-content:center;overflow:hidden}.ms-header-link img{width:128px;height:128px;max-width:none;object-fit:contain;flex-shrink:0}
-@media(max-width:600px){.ms-header-link{width:96px;height:66px}.ms-header-link img{width:96px;height:96px}}
+/* The circular full-color journey marks keep their square aspect ratio. */
+.ms-header-link{width:72px;height:72px;justify-content:center;overflow:hidden}.ms-header-link img{width:100%;height:100%;max-width:none;aspect-ratio:1;object-fit:contain;flex-shrink:0}
+@media(max-width:600px){.ms-header-link{width:56px;height:56px}.ms-header-link img{width:100%;height:100%}}
 
 /* Phone presets: compact rows, generous default rows, then full-width cards.
    Shared by the website and installed app; wider layouts retain their sizing. */

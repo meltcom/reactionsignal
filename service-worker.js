@@ -1,6 +1,6 @@
 /* Only public presentation assets are cached. Never cache member data or auth. */
 const CACHE='reaction-journey-static-__APP_VERSION__';
-const PUBLIC=new Set(['/offline.html','/app.webmanifest','/images/app-192.png','/images/app-512.png','/images/app-maskable.png','/images/app-apple.png']);
+const PUBLIC=new Set(['/offline.html','/app.webmanifest','/images/app-192.png','/images/app-512.png','/images/app-maskable.png','/images/app-apple.png','/images/ms-journey-mobile-256.webp','/images/ms-journey-mobile-512.webp','/images/reaction-journey-mobile-256.webp','/images/reaction-journey-mobile-512.webp']);
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll([...PUBLIC]))));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{for(const key of await caches.keys())if(key.startsWith('reaction-journey-static-')&&key!==CACHE)await caches.delete(key);await self.clients.claim();})()));
 self.addEventListener('message',event=>{if(event.data?.type==='ACTIVATE_UPDATE')self.skipWaiting();});
