@@ -16,7 +16,7 @@ async function setup(){
 
 test('built-ins are API protected; personal views remain owned, scoped and preserve legacy names',async()=>{
  const {call,sql}=await setup();
- for(const name of ['Small',' default ','Ｌａｒｇｅ'])assert.equal((await call('/view',{name,settings:{layout:'cards'}})).status,400);
+ for(const name of ['Small',' default ','Ｌａｒｇｅ','Cell Phone'])assert.equal((await call('/view',{name,settings:{layout:'cards'}})).status,400);
  for(const body of [{id:'builtin:reactions:small',remove:true},{id:'builtin:ms-journey:large',name:'Other',settings:{}},{builtin:true,name:'Copy',settings:{}}])assert.equal((await call('/view',body)).status,400);
  sql.prepare('INSERT INTO saved_views VALUES(?,?,?,?,?)').run('legacy-small','fan','small',JSON.stringify({layout:'compact'}),new Date().toISOString());
  await call('/view',{name:'My reading view',settings:{scope:'reactions',thumbnail:'large'}});

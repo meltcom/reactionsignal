@@ -5,10 +5,10 @@ import {ratingMarkup} from '../journey-rating.mjs';
 import {selectVideos} from '../missioned-souls-core.mjs';
 
 test('protected presets have immutable, scoped identities and restore original presentation',()=>{
- const rj=builtinViews(),ms=builtinViews('ms-journey');assert.deepEqual(rj.map(v=>v.name),['Small','Default','Large']);
- assert.deepEqual(rj.map(v=>v.settings.columns),[4,3,2]);assert.equal(ms[1].settings.thumbnail,'medium');assert.notEqual(rj[0].id,ms[0].id);
+ const rj=builtinViews(),ms=builtinViews('ms-journey');assert.deepEqual(rj.map(v=>v.name),['Small','Default','Large','Cell Phone']);
+ assert.deepEqual(rj.map(v=>v.settings.columns),[4,3,2,2]);assert.equal(rj[3].settings.thumbnail,'large');assert.equal(rj[3].settings.theme,'dark');assert.equal(ms.length,3);assert.equal(ms[1].settings.thumbnail,'medium');assert.notEqual(rj[0].id,ms[0].id);
  assert.throws(()=>{ms[1].settings.columns=5;});assert.equal('query' in ms[1].settings,false);
- for(const value of [' Small ','DEFAULT','large','Ｓｍａｌｌ','\u2003Large\u2003'])assert.equal(protectedViewName(value),true);assert.equal(protectedViewName('My Large view'),false);
+ for(const value of [' Small ','DEFAULT','large','Ｓｍａｌｌ','\u2003Large\u2003','Cell Phone',' cell   phone '])assert.equal(protectedViewName(value),true);assert.equal(protectedViewName('My Large view'),false);
 });
 test('MS settings validate their own filters and cannot inject appearance or account identity',()=>{
  assert.deepEqual(archiveSettings({theme:'dark',user_id:'other',query:'My video',format:'shorts',columns:4}),{scope:'ms-journey',format:'shorts',columns:4,query:'My video'});

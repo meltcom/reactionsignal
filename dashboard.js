@@ -427,7 +427,7 @@ window.journeyAccount={
  async saveView(body){await socialApi('/view',body);await refreshDashboard();},
  async savePreferences(value){await socialApi('/preferences',value);prefs={...defaults,...value};await refreshDashboard();applyAppearance();},
  previewReactionView(value){const ms=prefs.msJourney;prefs={...prefs,...value,msJourney:ms};state.performer=prefs.performer;state.query=prefs.query;state.sort=prefs.sort;feedMode=prefs.landing;applyAppearance();syncControls();renderAll();},
- applyReactionView(value,presentationOnly=false){const keys=['layout','thumbnail','columns','density'];const settings=presentationOnly?Object.fromEntries(keys.map(k=>[k,value[k]])):value;this.previewReactionView(settings);navigate('feed');}
+ applyReactionView(value,presentationOnly=false){const keys=['layout','thumbnail','columns','density'];const settings=presentationOnly?{...Object.fromEntries(keys.map(k=>[k,value[k]])),...(value.theme?{theme:value.theme}:{})}:value;this.previewReactionView(settings);navigate('feed');}
 };
 
 
