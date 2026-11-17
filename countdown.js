@@ -21,7 +21,7 @@ export function displayCountdown(root,settings,{now=Date.now}={}){
 }
 
 export async function mountCountdownSettings(root,{load,save,afterSave=()=>{}}){
- root.innerHTML=`<h1>Countdown setup</h1><p>Show a countdown inside the My Feed banner. Members see the start time in their own time zone.</p><div class="countdown-settings"><form class="panel countdown-form"><label class="countdown-check"><input name="enabled" type="checkbox"> Show countdown in My Feed</label><label>Event title<input name="title" maxlength="100" placeholder="Missioned Souls Livestream YouTube Hangout"></label><label>Event date and time <small class="countdown-zone"></small><input name="start" type="datetime-local" step="60"></label><label>Website link <small>Optional</small><input name="link" type="url" maxlength="1000" placeholder="https://www.youtube.com/…"></label><label>Message at zero<textarea name="message" maxlength="200" rows="2" placeholder="The hangout is live! Click here to join."></textarea></label><div><button class="primary-button" type="submit">Save countdown</button></div><p class="countdown-status" role="status"></p></form><section class="panel countdown-preview"><h2>Member preview</h2><p>See how the banner looks before and after the event starts.</p><label>Preview state <select class="countdown-preview-state"><option value="before">Counting down</option><option value="after">At zero</option></select></label><div class="countdown-preview-banner"><strong>Your feed. Your rhythm.</strong><div class="countdown-example" hidden></div></div><p class="countdown-off">The countdown is off. Members see the original banner.</p></section></div>`;
+ root.innerHTML=`<h1>Countdown setup</h1><p>Show a countdown in the banner on every member page. Members see the start time in their own time zone.</p><div class="countdown-settings"><form class="panel countdown-form"><label class="countdown-check"><input name="enabled" type="checkbox"> Show countdown on all page banners</label><label>Event title<input name="title" maxlength="100" placeholder="Missioned Souls Livestream YouTube Hangout"></label><label>Event date and time <small class="countdown-zone"></small><input name="start" type="datetime-local" step="60"></label><label>Website link <small>Optional</small><input name="link" type="url" maxlength="1000" placeholder="https://www.youtube.com/…"></label><label>Message at zero<textarea name="message" maxlength="200" rows="2" placeholder="The hangout is live! Click here to join."></textarea></label><div><button class="primary-button" type="submit">Save countdown</button></div><p class="countdown-status" role="status"></p></form><section class="panel countdown-preview"><h2>Member preview</h2><p>See how the banner looks before and after the event starts.</p><label>Preview state <select class="countdown-preview-state"><option value="before">Counting down</option><option value="after">At zero</option></select></label><div class="countdown-preview-banner"><strong>All page banners</strong><div class="countdown-example" hidden></div></div><p class="countdown-off">The countdown is off. Members see the original banner.</p></section></div>`;
  const form=root.querySelector('form'),fields=form.elements,status=root.querySelector('.countdown-status'),preview=root.querySelector('.countdown-example'),off=root.querySelector('.countdown-off'),mode=root.querySelector('.countdown-preview-state');
  root.querySelector('.countdown-zone').textContent=`(${Intl.DateTimeFormat().resolvedOptions().timeZone})`;
  let stop=()=>{};
@@ -36,10 +36,52 @@ export async function mountCountdownSettings(root,{load,save,afterSave=()=>{}}){
 
 const member=document.getElementById('feed-countdown');
 if(member){
- let stop=()=>{},stopSettings=()=>{},opened=false,generation=0;
+ let stop=()=>{},stopSettings=()=>{},opened=false,generation=0,settingsCache=null;
  const api=async(path,settings)=>{const response=await window.reactionAuth.fetch(path,{cache:'no-store',...(settings?{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(settings)}:{})});const result=await response.json();if(!response.ok)throw Error(result.error||'Countdown unavailable.');return result;};
- const refresh=async()=>{const request=++generation;try{const data=await api('/api/countdown');if(request===generation){stop();stop=displayCountdown(member,data);}}catch{}};
- window.addEventListener('reaction-page-change',async({detail})=>{if(detail.page==='feed')void refresh();if(detail.page==='countdown-settings'&&!opened){opened=true;stopSettings=await mountCountdownSettings(document.getElementById('countdown-settings'),{load:()=>api('/api/moderator/countdown'),save:value=>api('/api/moderator/countdown',value),afterSave:refresh});}});
- window.addEventListener('reaction-auth-change',()=>{generation++;stop();stopSettings();opened=false;member.hidden=true;member.replaceChildren();document.getElementById('countdown-settings').replaceChildren();});
+
+ // Reuse one countdown (and one clock interval) as page navigation changes.
+ // Pages without a preexisting banner get a modest coastal banner above their content.
+ function placeOnCurrentPage(){
+  const panel=document.querySelector('#memberApp main > .page-panel:not([hidden])');
+  if(!panel)return;
+  let banner=panel.querySelector(':scope > .ms-hero, :scope > .page-heading, :scope > .section-heading');
+  if(!banner){
+   banner=panel.querySelector(':scope > .countdown-page-banner');
+   if(!banner){
+    banner=document.createElement('div');banner.className='countdown-page-banner journey-coastal-header';
+    panel.prepend(banner);
+   }
+  }
+  member.parentElement?.classList.remove('countdown-banner-active');
+  banner.append(member);
+  banner.classList.toggle('countdown-banner-active',!member.hidden);
+ }
+ const refresh=async()=>{
+  const request=++generation;
+  placeOnCurrentPage();
+  try{
+   const data=await api('/api/countdown');
+   if(request!==generation)return;
+   settingsCache=data;
+   stop();stop=displayCountdown(member,data);placeOnCurrentPage();
+  }catch{
+   // Network interruption must not leave a stale active clock visible after sign-out.
+   if(request===generation&&!settingsCache){stop();member.hidden=true;placeOnCurrentPage();}
+  }
+ };
+ window.addEventListener('reaction-page-change',async({detail})=>{
+  placeOnCurrentPage();
+  if(window.reactionAuth?.account)void refresh();
+  if(detail.page==='countdown-settings'&&!opened){
+   opened=true;
+   stopSettings=await mountCountdownSettings(document.getElementById('countdown-settings'),{load:()=>api('/api/moderator/countdown'),save:value=>api('/api/moderator/countdown',value),afterSave:refresh});
+  }
+ });
+ window.addEventListener('reaction-auth-change',()=>{
+  generation++;stop();stopSettings();opened=false;settingsCache=null;
+  member.hidden=true;member.replaceChildren();placeOnCurrentPage();
+  document.getElementById('countdown-settings').replaceChildren();
+  if(window.reactionAuth?.account)void refresh();
+ });
  if(window.reactionAuth?.account)void refresh();
 }
