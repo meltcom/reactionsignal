@@ -65,3 +65,27 @@ body[data-theme=dark] .countdown-card{background-color:#081824a8;border-color:#a
     min-width:0;
   }
 }
+
+/* My Feed previously used its own grid rule; use the same shared banner layout. */
+#memberApp main > #feed > .page-heading.countdown-banner-active:has(>#feed-countdown:not([hidden])){
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+}
+#memberApp main > #feed > .page-heading.countdown-banner-active > #feed-countdown{
+  flex:0 1 250px;
+  max-width:270px;
+  margin-left:auto;
+}
+@media(max-width:760px){
+  #memberApp main > #feed > .page-heading.countdown-banner-active:has(>#feed-countdown:not([hidden])){
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+  }
+  #memberApp main > #feed > .page-heading.countdown-banner-active > #feed-countdown{
+    margin-left:0;
+    width:100%;
+    max-width:100%;
+  }
+}
