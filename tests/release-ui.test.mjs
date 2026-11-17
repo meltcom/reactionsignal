@@ -89,3 +89,19 @@ test('release describes dedicated YouTube membership while keeping import matchi
  assert.ok(imports.includes('youtubeImports')&&imports.includes('dedicated YouTube imports group'));
  assert.ok(dashboard.includes("active?.kind==='youtube'"));
 });
+
+test('countdown follows every active page banner without replacing the logo links',()=>{
+ const html=assets['/index.html'].body;
+ const js=assets['/countdown.js'].body;
+ const css=assets['/countdown.css'].body;
+ assert.ok(html.includes('class="brand" href="#feed"'));
+ assert.ok(html.includes('class="ms-header-link" href="#missioned-souls"'));
+ assert.ok(html.includes('class="ms-logo-title"><a href="#missioned-souls"'));
+ assert.ok(html.includes('src="/images/ms-moon-logo-optimized.webp"'));
+ assert.ok(assets['/images/ms-moon-logo-optimized.webp'],'optimized moon logo bundled');
+ assert.ok(js.includes("document.querySelector('#memberApp main > .page-panel:not([hidden])')"));
+ assert.ok(js.includes(':scope > .ms-hero, :scope > .page-heading, :scope > .section-heading'));
+ assert.ok(js.includes("banner.append(member)"),'a single countdown moves into each banner');
+ assert.ok(js.includes("if(window.reactionAuth?.account)void refresh()"),'refresh on page navigation');
+ assert.ok(css.includes('.countdown-banner-active'),'responsive countdown banner styling');
+});
