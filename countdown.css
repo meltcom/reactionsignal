@@ -9,3 +9,83 @@ body[data-theme=dark] .countdown-card{background-color:#081824a8;border-color:#a
 .countdown-settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}.countdown-form{display:grid;gap:12px}.countdown-form .countdown-check{display:flex;align-items:center;gap:8px}.countdown-form .countdown-check input{width:auto;min-height:auto;margin:0}.countdown-form small{color:var(--muted)}.countdown-status:empty{display:none}
 .countdown-preview-banner{display:grid;grid-template-columns:minmax(0,1fr) minmax(110px,45%);align-items:center;gap:10px;min-height:100px;margin-top:12px;padding:12px;border-radius:10px;background:linear-gradient(90deg,#ffffffdf,#ffffff66),url('images/reaction-journey-coastal-header.webp') center 55%/cover;color:#172d32}.countdown-preview-banner>strong{font-size:clamp(17px,3vw,25px)}
 @media(max-width:760px){.countdown-settings{grid-template-columns:1fr}#memberApp main > #feed > .page-heading:has(>#feed-countdown:not([hidden])){grid-template-columns:minmax(0,1fr) minmax(110px,40%);gap:8px}#memberApp main > #feed > .page-heading > #feed-countdown{max-width:100%}.countdown-card{padding-inline:5px}.countdown-digits{font-size:12px}}
+
+/* The enabled countdown belongs to the active page's coastal banner, not just My Feed. */
+#memberApp main > .page-panel > .countdown-banner-active > #feed-countdown{
+  flex:0 1 250px;
+  max-width:270px;
+  min-width:125px;
+  margin-left:auto;
+  position:relative;
+  z-index:2;
+}
+#memberApp main > .page-panel > .page-heading.countdown-banner-active{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+}
+#memberApp main > .page-panel > .ms-hero.countdown-banner-active{
+  align-items:center;
+  flex-wrap:wrap;
+}
+#memberApp main > .page-panel > .countdown-page-banner{
+  display:none;
+}
+#memberApp main > .page-panel > .countdown-page-banner.countdown-banner-active{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  min-height:102px;
+  padding:10px 16px;
+  margin-bottom:22px;
+  border-radius:12px;
+  background:linear-gradient(90deg,#18363d90,#18363dcc),url('/images/reaction-journey-coastal-header.webp') center/cover;
+}
+#memberApp main > .page-panel > .countdown-banner-active #feed-countdown[hidden]{display:none!important}
+@media(max-width:760px){
+  #memberApp main > .page-panel > .page-heading.countdown-banner-active{
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:12px;
+  }
+  #memberApp main > .page-panel > .page-heading.countdown-banner-active > div:not(#feed-countdown){
+    width:100%;
+  }
+  #memberApp main > .page-panel > .ms-hero.countdown-banner-active{
+    flex-direction:column;
+    align-items:stretch;
+    gap:12px;
+  }
+  #memberApp main > .page-panel > .countdown-banner-active > #feed-countdown{
+    align-self:stretch;
+    margin-left:0;
+    width:100%;
+    max-width:100%;
+    min-width:0;
+  }
+}
+
+/* My Feed previously used its own grid rule; use the same shared banner layout. */
+#memberApp main > #feed > .page-heading.countdown-banner-active:has(>#feed-countdown:not([hidden])){
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+}
+#memberApp main > #feed > .page-heading.countdown-banner-active > #feed-countdown{
+  flex:0 1 250px;
+  max-width:270px;
+  margin-left:auto;
+}
+@media(max-width:760px){
+  #memberApp main > #feed > .page-heading.countdown-banner-active:has(>#feed-countdown:not([hidden])){
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+  }
+  #memberApp main > #feed > .page-heading.countdown-banner-active > #feed-countdown{
+    margin-left:0;
+    width:100%;
+    max-width:100%;
+  }
+}

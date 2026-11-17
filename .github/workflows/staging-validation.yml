@@ -1,0 +1,37 @@
+name: Staging validation — logos and countdown
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      staging_url:
+        description: "Optional deployed reactionsignal-staging workers.dev URL for read-only smoke test"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify isolated staging target
+        run: node scripts/check-staging-config.mjs
+      - name: Build and run full test suite
+        run: npm test
+      - name: Check built release fingerprint
+        run: node scripts/check-build.mjs
+      - name: Read-only smoke check of separately deployed staging
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.staging_url != '' }}
+        env:
+          STAGING_URL: ${{ inputs.staging_url }}
+        run: node scripts/smoke-staging-branding.mjs "$STAGING_URL"

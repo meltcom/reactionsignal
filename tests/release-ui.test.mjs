@@ -62,7 +62,7 @@ test('release packages MS Journey visibility controls with matching help and exi
  assert.ok(html.includes('Visibility decisions survive official-channel refreshes and repeated imports.'));
 });
 
-test('release retains compact cards, app navigation and optimized branding',()=>{
+test('release retains compact cards, app navigation and the supplied full-color branding',()=>{
  assert.ok(assets['/journey-interface.js']?.body.length>1000,'shared journey interface bundle');
  assert.ok(assets['/journey-interface.css']?.body.includes('rgba(255,255,255,.88)'),'original coastal translucence');
  assert.ok(assets['/index.html'].body.includes('src="/journey-interface.js"'),'shared interface loaded');
@@ -70,11 +70,17 @@ test('release retains compact cards, app navigation and optimized branding',()=>
  for(const feature of ['card-watch-status','card-watch-link','video-play-link','videoDiscussionActionsMarkup','lastFeedMarkup','dataIndexes'])assert.ok(dashboard.includes(feature),feature);
  assert.ok(css.includes('.card-heading')&&css.includes('.card-watch-link'));
  assert.ok(mobile.includes('reaction-journey-interface-')&&mobile.includes('Customize feed'));
- for(const name of ['reaction-journey-logo-small','reaction-journey-app-logo-small','ms-journey-logo-small','sunset-coastal-highway-badge-small']){
+ for(const name of ['reaction-journey-logo-small','reaction-journey-app-logo-small','ms-journey-logo-small','sunset-coastal-highway-badge-small','reaction-journey-mobile-256','reaction-journey-mobile-512','ms-journey-mobile-256','ms-journey-mobile-512']){
   const image=assets['/images/'+name+'.webp'];assert.ok(image,name);
   const bytes=Buffer.from(image.base64,'base64');assert.equal(bytes.toString('ascii',8,12),'WEBP');assert.ok(bytes.length<100000,name+' must remain optimized');
  }
- assert.ok(assets['/index.html'].body.includes('images/reaction-journey-logo-small.webp'));
+ const html=assets['/index.html'].body;
+ assert.ok(html.includes('images/reaction-journey-mobile-256.webp'));
+ assert.ok(html.includes('images/ms-journey-mobile-256.webp'));
+ assert.ok(dashboard.includes("headerBrand.href=onMsPage?'#feed':'#missioned-souls'"));
+ assert.ok(dashboard.includes("headerImage.src=onMsPage?'/images/reaction-journey-mobile-256.webp':'/images/ms-journey-mobile-256.webp'"));
+ assert.ok(assets['/app.webmanifest'].body.includes('reaction-journey-mobile-512.webp'));
+ assert.ok(html.includes('ms-moon-logo-optimized.webp'));
 });
 
 test('Facebook archive cards preserve the complete thumbnail inside the card frame',()=>{
@@ -88,4 +94,20 @@ test('release describes dedicated YouTube membership while keeping import matchi
  assert.ok(html.includes('separate system-managed Following group named YouTube imports'));
  assert.ok(imports.includes('youtubeImports')&&imports.includes('dedicated YouTube imports group'));
  assert.ok(dashboard.includes("active?.kind==='youtube'"));
+});
+
+test('countdown follows every active page banner without replacing the logo links',()=>{
+ const html=assets['/index.html'].body;
+ const js=assets['/countdown.js'].body;
+ const css=assets['/countdown.css'].body;
+ assert.ok(html.includes('class="brand" href="#feed"'));
+ assert.ok(html.includes('class="ms-header-link" href="#missioned-souls"'));
+ assert.ok(html.includes('class="ms-logo-title"><a href="#missioned-souls"'));
+ assert.ok(html.includes('src="/images/ms-moon-logo-optimized.webp"'));
+ assert.ok(assets['/images/ms-moon-logo-optimized.webp'],'optimized moon logo bundled');
+ assert.ok(js.includes("document.querySelector('#memberApp main > .page-panel:not([hidden])')"));
+ assert.ok(js.includes(':scope > .ms-hero, :scope > .page-heading, :scope > .section-heading'));
+ assert.ok(js.includes("banner.append(member)"),'a single countdown moves into each banner');
+ assert.ok(js.includes("if(window.reactionAuth?.account)void refresh()"),'refresh on page navigation');
+ assert.ok(css.includes('.countdown-banner-active'),'responsive countdown banner styling');
 });
