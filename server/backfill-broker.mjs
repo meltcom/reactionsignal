@@ -1,6 +1,6 @@
 import {quotaPolicy,quotaStatus,reserveGeneral,finishReservation,QuotaBlocked,QUOTA_PROTOCOL} from './youtube-quota.mjs';
 import {automaticMatch} from './automatic-matches.mjs';
-import {mentionsPerformer,reactionWording} from './approval-rules.mjs';
+import {mentionsPerformer,reactionWording,narrativeReactionEvidence} from './approval-rules.mjs';
 import {EXCLUDED} from './db.mjs';
 import {seconds} from './discovery.mjs';
 import {videoFormat} from './video-format.mjs';
@@ -17,8 +17,7 @@ export function historicalReaction(performer,item,channelId,cutoff){
  const published=Date.parse(snippet?.publishedAt);
  if(!snippet?.title||!Number.isFinite(published)||published>cutoff||EXCLUDED.includes(item.id)||nonReaction.test(snippet.title))return false;
  const aliases=JSON.parse(performer.aliases);
- const narrative=String(snippet.description||'').split(/[\n.!?]+/).some(sentence=>
-  !/https?:\/\/|^\s*#|\boriginal\s+(?:video|link)\b/i.test(sentence)&&mentionsPerformer(sentence,aliases)&&reactionWording(sentence));
+ const narrative=narrativeReactionEvidence(aliases,snippet.description);
  if(!narrative&&!(mentionsPerformer(snippet.title,aliases)&&reactionWording(snippet.title)))return false;
  return automaticMatch({...performer,performer_id:'missioned-souls',channel_id:channelId,discovery_scope:'eligible'},item).status==='CONFIRMED';
 }
