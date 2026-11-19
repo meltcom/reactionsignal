@@ -21,15 +21,15 @@ for(const required of [
  'class="ms-header-link" href="#missioned-souls"',
  'class="ms-logo-title"><a href="#missioned-souls"',
  'src="/images/ms-moon-logo-optimized.webp"',
- 'src="/images/reaction-journey-logo-small.webp"',
+ 'src="/images/reaction-journey-coastal-desktop.webp"',
  'id="feed-countdown"'
 ])assert.ok(html.includes(required),'Missing navigation or branding markup: '+required);
-for(const asset of ['/images/ms-moon-logo-optimized.webp','/images/ms-journey-logo-small.webp','/images/reaction-journey-logo-small.webp']){
+for(const asset of ['/images/ms-moon-logo-optimized.webp','/images/ms-journey-coastal-mobile.webp','/images/reaction-journey-coastal-mobile.webp','/images/ms-journey-coastal-desktop.webp','/images/reaction-journey-coastal-desktop.webp']){
  const response=await read(asset);
  assert.match(response.headers.get('content-type')||'',/image\/webp/i,asset+' must have a WebP content type');
  const bytes=new Uint8Array(await response.arrayBuffer());
  assert.equal(String.fromCharCode(...bytes.slice(8,12)),'WEBP',asset+' must contain WebP image data');
- assert.ok(bytes.length<100000,asset+' exceeds 100 KB');
+ assert.ok(bytes.length<(asset.includes('-desktop')?160000:100000),asset+' exceeds optimized size budget');
 }
 const countdown=await (await read('/countdown.js')).text();
 assert.ok(countdown.includes('placeOnCurrentPage'),'Site-wide countdown behavior missing');

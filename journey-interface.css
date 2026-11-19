@@ -39,3 +39,9 @@ body[data-journey=ms-journey] #submitOpen{display:none!important}
  #ms-grid .ms-thumb{width:100%;max-height:none;aspect-ratio:16/9}
 }
 #ms-grid .ms-card-facebook .ms-thumb img{object-fit:contain;background:#103f38}
+
+/* Preserve the complete coastal wordmarks and their existing navigation targets. */
+.site-logo,.about-heading-logo,.about-page-logo,.app-header-logo img,.web-phone-brand img,.ms-header-link img{border-radius:0;aspect-ratio:auto;object-fit:contain}
+.sidebar-logo{height:auto}.ms-header-link{width:128px;height:72px}.ms-header-link img{width:100%;height:auto}
+html[data-interface=app] .app-header-logo{width:100px;height:56px}
+@media(max-width:600px){.ms-header-link{width:100px;height:56px}}

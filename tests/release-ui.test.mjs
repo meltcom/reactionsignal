@@ -75,10 +75,10 @@ test('release retains compact cards, app navigation and the supplied full-color 
   const bytes=Buffer.from(image.base64,'base64');assert.equal(bytes.toString('ascii',8,12),'WEBP');assert.ok(bytes.length<100000,name+' must remain optimized');
  }
  const html=assets['/index.html'].body;
- assert.ok(html.includes('images/reaction-journey-mobile-256.webp'));
- assert.ok(html.includes('images/ms-journey-mobile-256.webp'));
+ assert.ok(html.includes('images/reaction-journey-coastal-mobile.webp'));
+ assert.ok(html.includes('images/ms-journey-coastal-mobile.webp'));
  assert.ok(dashboard.includes("headerBrand.href=onMsPage?'#feed':'#missioned-souls'"));
- assert.ok(dashboard.includes("headerImage.src=onMsPage?'/images/reaction-journey-mobile-256.webp':'/images/ms-journey-mobile-256.webp'"));
+ assert.ok(dashboard.includes("headerImage.src=onMsPage?'/images/reaction-journey-coastal-mobile.webp':'/images/ms-journey-coastal-mobile.webp'"));
  assert.ok(assets['/app.webmanifest'].body.includes('reaction-journey-mobile-512.webp'));
  assert.ok(html.includes('ms-moon-logo-optimized.webp'));
 });
