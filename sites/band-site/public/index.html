@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#12121b">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="description" content="An independent, unofficial fan-created directory of reactions to The Warning.">
+  <title>The Warning | Reaction Journey</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <a class="skip" href="#catalog">Skip to the reaction catalog</a>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Reaction Journey home">
+      <span class="mark" aria-hidden="true">RJ</span>
+      <span>REACTION <strong>JOURNEY</strong></span>
+    </a>
+    <span class="pilot">FREE EARLY PREVIEW</span>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="heroTitle">
+      <div class="hero-copy">
+        <p class="eyebrow">A FAN COMMUNITY · REACTION JOURNEY</p>
+        <h1 id="heroTitle">The <span>Warning</span></h1>
+        <p id="tagline" class="lede">Explore reactions and discover the people listening.</p>
+        <div class="hero-actions">
+          <a href="#catalog" class="action action-primary">Browse reactions <span aria-hidden="true">↗</span></a>
+          <a id="officialChannel" class="action action-secondary" target="_blank" rel="noopener noreferrer" href="https://www.youtube.com/@TheWarning">Official YouTube channel</a>
+        </div>
+      </div>
+      <div class="soundmark" aria-hidden="true">
+        <div class="stripes"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <span>TURN IT UP.</span>
+      </div>
+    </section>
+    <section class="intro">
+      <div><span class="mini-kicker">THE COMMUNITY</span><h2>Discover more voices.</h2></div>
+      <p>Browse reactions, find new channels, and follow the creators who share your enthusiasm. Each link takes you directly to the original YouTube creator.</p>
+    </section>
+    <section class="library" id="catalog" aria-labelledby="catalogTitle">
+      <div class="section-head">
+        <div>
+          <span class="mini-kicker">DISCOVER</span>
+          <h2 id="catalogTitle">Reaction library <span id="count" class="count"></span></h2>
+        </div>
+        <p class="catalog-note">Curated starter catalog. Availability and metrics are not continuously verified yet.</p>
+      </div>
+      <div class="toolbar">
+        <label class="searchfield"><span class="sr-only">Search reactions</span><input id="query" type="search" placeholder="Search reactions, songs or creators…" autocomplete="off"></label>
+        <label class="selectfield">Creator <select id="reactor"><option value="">All creators</option></select></label>
+        <label class="selectfield">Sort <select id="sort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="title">Title A–Z</option></select></label>
+      </div>
+      <p id="message" class="message" role="status" aria-live="polite">Loading catalog…</p>
+      <div id="results" class="cards" aria-live="polite"></div>
+      <div class="discover-more">
+        <div><strong>Looking for more reactions?</strong><p>Search YouTube for additional creators while the full discovery catalog is being built.</p></div>
+        <a id="youtubeSearch" class="action action-secondary" target="_blank" rel="noopener noreferrer" href="https://www.youtube.com/results?search_query=The+Warning+reaction">Search YouTube ↗</a>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <div><strong>Reaction Journey</strong><p>Independent fan-created discovery site. Not affiliated with or endorsed by The Warning or YouTube.</p></div>
+    <a href="https://reactionjourney.com/" target="_blank" rel="noopener noreferrer">ReactionJourney.com ↗</a>
+  </footer>
+</body>
+</html>
