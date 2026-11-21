@@ -12,7 +12,7 @@ function fixture(){
  follows:(kind,target)=>dashboard.follows.some(f=>f.kind===kind&&f.target===target),
  $:()=>select,feedVideos:()=>videos,channelFor:()=>({}),scoreMap:new Map(),reactorRankValue:()=>0,communityRank:()=>0,commentsFor:()=>0,
  escapeHtml:s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'),
- syncControls:()=>{},renderPerformers:()=>{},renderVideos:()=>{},notice:message=>c.message=message});
+ syncFeedMenus:()=>{},syncControls:()=>{},renderPerformers:()=>{},renderVideos:()=>{},notice:message=>c.message=message});
  vm.runInContext(source.slice(source.indexOf('function normalizeFollowSong('),source.indexOf('const followingControls=')),c);
  vm.runInContext(source.slice(source.indexOf('performerVideos=function()'),source.indexOf('function metadata(')),c);
  vm.runInContext(source.slice(source.indexOf('function clearFeedFilters()'),source.indexOf('function navigate(')),c);
@@ -85,4 +85,12 @@ test('cards, compact lists and tables render the matching reason for reactions a
   c.renderVideos();assert.equal(writes,0,'unchanged refresh must preserve existing card nodes');
   c.feedMode='all';c.renderVideos();assert.doesNotMatch(elements.get('videoGrid').innerHTML,/following-match/);c.feedMode='following';
  }
+});
+
+
+test('Unwatched excludes both watching and watched videos without changing watch history',()=>{
+ const {c,dashboard,ids}=fixture();c.feedMode='unwatched';
+ dashboard.watch=[{video_id:'reaction',status:'watching'},{video_id:'unfollowed',status:'watched'}];
+ c.watchFor=id=>dashboard.watch.find(w=>w.video_id===id)||{status:'unwatched'};
+ const before=JSON.stringify(dashboard.watch);assert.deepEqual(ids(),['official']);assert.equal(JSON.stringify(dashboard.watch),before);
 });
